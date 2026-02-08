@@ -10,648 +10,824 @@
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 :root {
-  --brick-dark: #8B4513;
-  --brick-med: #A0522D;
-  --brick-light: #CD853F;
-  --brick-grout: #D2B48C;
-  --desk-top: #8B6914;
-  --desk-front: #6B4F12;
-  --desk-shadow: #4A360D;
-  --wall-top: #2c2c3a;
-  --wall-bottom: #1a1a28;
-  --pixel: 4px;
+  --gold: #f5c842;
+  --gold-dark: #8B6914;
+  --bg-dark: #1a1a28;
+  --bg-darker: #111118;
+  --bg-panel: #14141f;
+  --border: #333;
+  --border-subtle: #2a2a3a;
+  --text: #e0e0e0;
+  --text-dim: #888;
+  --text-muted: #555;
+  --scout-color: #e74c3c;
+  --courier-color: #3498db;
+  --reader-color: #2ecc71;
+  --detective-color: #9b59b6;
 }
 
 body {
   font-family: 'Press Start 2P', monospace;
-  background: var(--wall-top);
-  color: #e0e0e0;
-  overflow-x: hidden;
-  min-height: 100vh;
+  background: var(--bg-dark);
+  color: var(--text);
+  overflow: hidden;
+  height: 100vh;
   image-rendering: pixelated;
 }
 
-/* ── Brick Floor ── */
-.brick-floor {
-  position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 120px;
-  z-index: 0;
-  background:
-    repeating-linear-gradient(
-      90deg,
-      var(--brick-grout) 0px,
-      var(--brick-grout) 2px,
-      transparent 2px,
-      transparent 62px
-    ),
-    repeating-linear-gradient(
-      0deg,
-      var(--brick-grout) 0px,
-      var(--brick-grout) 2px,
-      var(--brick-med) 2px,
-      var(--brick-dark) 15px,
-      var(--brick-med) 30px,
-      var(--brick-grout) 30px,
-      var(--brick-grout) 32px,
-      var(--brick-light) 32px,
-      var(--brick-med) 45px,
-      var(--brick-dark) 60px
-    );
-  background-size: 124px 60px;
-  border-top: 4px solid #5a3a1a;
-}
-.brick-floor::before {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(to bottom, rgba(0,0,0,0.3), rgba(0,0,0,0.1));
-}
-
-/* ── Wall ── */
-.wall {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 120px;
-  background: linear-gradient(180deg, var(--wall-top) 0%, var(--wall-bottom) 100%);
-  z-index: 0;
-}
-.wall::after {
-  content: '';
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  height: 8px;
-  background: #3a2a1a;
-}
-
-/* ── Content Container ── */
-.container {
-  position: relative;
-  z-index: 1;
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  padding-bottom: 140px;
-}
-
-/* ── Title Banner ── */
-.title-banner {
-  text-align: center;
-  padding: 20px;
-  margin-bottom: 16px;
-  position: relative;
-}
-.title-banner h1 {
-  font-size: 18px;
-  color: #f5c842;
-  text-shadow: 2px 2px 0 #8B6914, 4px 4px 0 rgba(0,0,0,0.3);
-  letter-spacing: 2px;
-  line-height: 1.6;
-}
-.title-banner .subtitle {
-  font-size: 8px;
-  color: #aaa;
-  margin-top: 8px;
-  letter-spacing: 1px;
-}
-.sparkle {
-  position: absolute;
-  width: 8px;
-  height: 8px;
-  background: #f5c842;
-  animation: sparkle 1.5s ease-in-out infinite;
-}
-.sparkle:nth-child(1) { top: 10px; left: 15%; animation-delay: 0s; }
-.sparkle:nth-child(2) { top: 25px; right: 15%; animation-delay: 0.5s; }
-.sparkle:nth-child(3) { bottom: 10px; left: 25%; animation-delay: 1s; }
-.sparkle:nth-child(4) { bottom: 5px; right: 25%; animation-delay: 0.3s; }
-
-@keyframes sparkle {
-  0%, 100% { opacity: 0; transform: scale(0.5); }
-  50% { opacity: 1; transform: scale(1); }
-}
-
-/* ── Stats Bar ── */
-.stats-bar {
-  display: flex;
-  justify-content: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 24px;
-  padding: 12px;
-  background: rgba(0,0,0,0.4);
-  border: 2px solid #444;
-  border-radius: 2px;
-}
-.stat-item {
-  text-align: center;
-  padding: 8px 16px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid #555;
-  min-width: 120px;
-}
-.stat-value {
-  font-size: 20px;
-  color: #f5c842;
-  display: block;
-  margin-bottom: 4px;
-}
-.stat-label {
-  font-size: 7px;
-  color: #999;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-/* ── Agent Grid ── */
-.agent-grid {
+/* ══════════════════════════════════════
+   3-COLUMN DASHBOARD GRID
+   ══════════════════════════════════════ */
+.dashboard {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-  gap: 20px;
-  margin-bottom: 24px;
+  grid-template-columns: 1.2fr 2fr 1.3fr;
+  grid-template-rows: auto 1fr;
+  grid-template-areas:
+    "top    top    top"
+    "left   center right";
+  width: 1920px;
+  height: 1080px;
+  gap: 0;
+  transform-origin: top left;
 }
 
-/* ── Agent Station ── */
-.agent-station {
-  background: rgba(0,0,0,0.35);
-  border: 2px solid #444;
-  border-radius: 2px;
+/* ── Top Bar ── */
+.top-bar {
+  grid-area: top;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  background: linear-gradient(180deg, rgba(245,200,66,0.08) 0%, transparent 100%);
+  border-bottom: 2px solid var(--border);
+}
+.top-bar-title {
+  font-size: 11px;
+  color: var(--gold);
+  text-shadow: 1px 1px 0 var(--gold-dark);
+  letter-spacing: 1px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.top-bar-stats {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+  flex-wrap: nowrap;
+}
+.top-stat {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid var(--border-subtle);
+}
+.top-stat-value {
+  font-size: 11px;
+  color: var(--gold);
+}
+.top-stat-label {
+  font-size: 6px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+/* ── Left Panel ── */
+.panel-left {
+  grid-area: left;
+  background: var(--bg-panel);
+  border-right: 2px solid var(--border);
+  overflow-y: auto;
   padding: 16px;
-  position: relative;
   display: flex;
   flex-direction: column;
-  align-items: center;
-  min-height: 280px;
+  gap: 18px;
 }
 
-/* ── Speech Bubble ── */
-.speech-bubble {
-  background: #fff;
-  color: #222;
-  font-size: 7px;
-  line-height: 1.5;
-  padding: 8px 10px;
-  border-radius: 2px;
-  position: relative;
-  margin-bottom: 12px;
-  max-width: 220px;
-  text-align: center;
-  animation: bubble-in 0.3s ease-out;
-  word-break: break-word;
-}
-.speech-bubble::after {
-  content: '';
-  position: absolute;
-  bottom: -8px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 0;
-  height: 0;
-  border-left: 6px solid transparent;
-  border-right: 6px solid transparent;
-  border-top: 8px solid #fff;
-}
-
-@keyframes bubble-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-/* ── Pixel Character ── */
-.character-container {
-  position: relative;
-  width: 80px;
-  height: 96px;
-  margin-bottom: 8px;
-}
-.character {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 1px;
-  height: 1px;
-}
-.character.idle { animation: idle-bob 2s ease-in-out infinite; }
-.character.working { animation: working-type 0.4s steps(2) infinite; }
-.character.error { animation: error-shake 0.5s ease-in-out infinite; }
-
-@keyframes idle-bob {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-3px); }
-}
-@keyframes working-type {
-  0% { transform: translateX(-50%) translateY(0); }
-  50% { transform: translateX(-50%) translateY(-2px); }
-}
-@keyframes error-shake {
-  0%, 100% { transform: translateX(-50%) translateY(0); }
-  25% { transform: translateX(calc(-50% + 2px)) translateY(0); }
-  75% { transform: translateX(calc(-50% - 2px)) translateY(0); }
-}
-
-/* ── Desk ── */
-.desk {
-  width: 100%;
-  max-width: 200px;
-  position: relative;
-  margin-bottom: 8px;
-}
-.desk-surface {
-  height: 12px;
-  background: var(--desk-top);
-  border: 2px solid var(--desk-shadow);
-  border-bottom: none;
-  border-radius: 2px 2px 0 0;
-  position: relative;
-}
-.desk-front {
-  height: 20px;
-  background: var(--desk-front);
-  border: 2px solid var(--desk-shadow);
-  border-top: none;
-}
-.desk-items {
-  position: absolute;
-  top: -14px;
-  left: 8px;
-  right: 8px;
+/* ── Center (Office Scene) ── */
+.center-scene {
+  grid-area: center;
+  overflow: hidden;
   display: flex;
+  align-items: flex-start;
   justify-content: center;
-  gap: 12px;
+  background: var(--bg-darker);
 }
 
-/* ── Desk Item Pixel Icons ── */
-.desk-icon {
-  width: 12px;
-  height: 12px;
-  position: relative;
-  image-rendering: pixelated;
-}
-.desk-icon::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 0;
-}
-
-/* Magnifier */
-.icon-magnifier { color: #5dade2; }
-.icon-magnifier::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    2px 0 0 #5dade2, 4px 0 0 #5dade2, 6px 0 0 #5dade2,
-    0 2px 0 #5dade2, 8px 2px 0 #5dade2,
-    0 4px 0 #5dade2, 8px 4px 0 #5dade2,
-    0 6px 0 #5dade2, 8px 6px 0 #5dade2,
-    2px 8px 0 #5dade2, 4px 8px 0 #5dade2, 6px 8px 0 #5dade2,
-    8px 8px 0 #8B6914, 10px 10px 0 #8B6914, 12px 12px 0 #8B6914;
+/* ── Right Panel ── */
+.panel-right {
+  grid-area: right;
+  background: var(--bg-panel);
+  border-left: 2px solid var(--border);
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
 }
 
-/* Document */
-.icon-document { color: #ecf0f1; }
-.icon-document::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    0 0 0 #ecf0f1, 2px 0 0 #ecf0f1, 4px 0 0 #ecf0f1, 6px 0 0 #ecf0f1,
-    0 2px 0 #ecf0f1, 2px 2px 0 #bdc3c7, 4px 2px 0 #bdc3c7, 6px 2px 0 #ecf0f1, 8px 2px 0 #ecf0f1,
-    0 4px 0 #ecf0f1, 2px 4px 0 #bdc3c7, 4px 4px 0 #bdc3c7, 6px 4px 0 #ecf0f1, 8px 4px 0 #ecf0f1,
-    0 6px 0 #ecf0f1, 2px 6px 0 #bdc3c7, 4px 6px 0 #bdc3c7, 6px 6px 0 #ecf0f1, 8px 6px 0 #ecf0f1,
-    0 8px 0 #ecf0f1, 2px 8px 0 #ecf0f1, 4px 8px 0 #ecf0f1, 6px 8px 0 #ecf0f1, 8px 8px 0 #ecf0f1,
-    0 10px 0 #ecf0f1, 2px 10px 0 #ecf0f1, 4px 10px 0 #ecf0f1, 6px 10px 0 #ecf0f1, 8px 10px 0 #ecf0f1;
-}
-
-/* Folder */
-.icon-folder { color: #f39c12; }
-.icon-folder::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    0 0 0 #f39c12, 2px 0 0 #f39c12, 4px 0 0 #f39c12,
-    0 2px 0 #f39c12, 2px 2px 0 #f39c12, 4px 2px 0 #f39c12, 6px 2px 0 #f39c12, 8px 2px 0 #f39c12, 10px 2px 0 #f39c12,
-    0 4px 0 #e67e22, 2px 4px 0 #e67e22, 4px 4px 0 #e67e22, 6px 4px 0 #e67e22, 8px 4px 0 #e67e22, 10px 4px 0 #e67e22,
-    0 6px 0 #e67e22, 2px 6px 0 #e67e22, 4px 6px 0 #e67e22, 6px 6px 0 #e67e22, 8px 6px 0 #e67e22, 10px 6px 0 #e67e22,
-    0 8px 0 #f39c12, 2px 8px 0 #f39c12, 4px 8px 0 #f39c12, 6px 8px 0 #f39c12, 8px 8px 0 #f39c12, 10px 8px 0 #f39c12;
-}
-
-/* Database */
-.icon-database { color: #1abc9c; }
-.icon-database::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    2px 0 0 #1abc9c, 4px 0 0 #1abc9c, 6px 0 0 #1abc9c, 8px 0 0 #1abc9c,
-    0 2px 0 #16a085, 2px 2px 0 #1abc9c, 4px 2px 0 #1abc9c, 6px 2px 0 #1abc9c, 8px 2px 0 #1abc9c, 10px 2px 0 #16a085,
-    0 4px 0 #16a085, 10px 4px 0 #16a085,
-    0 6px 0 #16a085, 2px 6px 0 #1abc9c, 4px 6px 0 #1abc9c, 6px 6px 0 #1abc9c, 8px 6px 0 #1abc9c, 10px 6px 0 #16a085,
-    0 8px 0 #16a085, 10px 8px 0 #16a085,
-    2px 10px 0 #1abc9c, 4px 10px 0 #1abc9c, 6px 10px 0 #1abc9c, 8px 10px 0 #1abc9c;
-}
-
-/* Globe */
-.icon-globe { color: #3498db; }
-.icon-globe::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    4px 0 0 #3498db, 6px 0 0 #3498db,
-    2px 2px 0 #2ecc71, 4px 2px 0 #3498db, 6px 2px 0 #2ecc71, 8px 2px 0 #3498db,
-    0 4px 0 #3498db, 2px 4px 0 #3498db, 4px 4px 0 #2ecc71, 6px 4px 0 #3498db, 8px 4px 0 #2ecc71, 10px 4px 0 #3498db,
-    0 6px 0 #3498db, 2px 6px 0 #2ecc71, 4px 6px 0 #3498db, 6px 6px 0 #2ecc71, 8px 6px 0 #3498db, 10px 6px 0 #3498db,
-    2px 8px 0 #3498db, 4px 8px 0 #3498db, 6px 8px 0 #2ecc71, 8px 8px 0 #3498db,
-    4px 10px 0 #3498db, 6px 10px 0 #3498db;
-}
-
-/* Book */
-.icon-book { color: #e74c3c; }
-.icon-book::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    0 0 0 #c0392b, 2px 0 0 #e74c3c, 4px 0 0 #e74c3c, 6px 0 0 #e74c3c, 8px 0 0 #e74c3c,
-    0 2px 0 #c0392b, 2px 2px 0 #ecf0f1, 4px 2px 0 #bdc3c7, 6px 2px 0 #ecf0f1, 8px 2px 0 #e74c3c,
-    0 4px 0 #c0392b, 2px 4px 0 #ecf0f1, 4px 4px 0 #bdc3c7, 6px 4px 0 #ecf0f1, 8px 4px 0 #e74c3c,
-    0 6px 0 #c0392b, 2px 6px 0 #ecf0f1, 4px 6px 0 #bdc3c7, 6px 6px 0 #ecf0f1, 8px 6px 0 #e74c3c,
-    0 8px 0 #c0392b, 2px 8px 0 #ecf0f1, 4px 8px 0 #bdc3c7, 6px 8px 0 #ecf0f1, 8px 8px 0 #e74c3c,
-    0 10px 0 #c0392b, 2px 10px 0 #e74c3c, 4px 10px 0 #e74c3c, 6px 10px 0 #e74c3c, 8px 10px 0 #e74c3c;
-}
-
-/* Pencil */
-.icon-pencil { color: #f1c40f; }
-.icon-pencil::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    10px 0 0 #e67e22,
-    8px 2px 0 #f1c40f, 10px 2px 0 #e67e22,
-    6px 4px 0 #f1c40f, 8px 4px 0 #f1c40f,
-    4px 6px 0 #f1c40f, 6px 6px 0 #f1c40f,
-    2px 8px 0 #f1c40f, 4px 8px 0 #f1c40f,
-    0 10px 0 #95a5a6, 2px 10px 0 #f1c40f;
-}
-
-/* Clipboard */
-.icon-clipboard { color: #8B6914; }
-.icon-clipboard::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    4px 0 0 #8B6914, 6px 0 0 #8B6914,
-    2px 2px 0 #8B6914, 4px 2px 0 #CD853F, 6px 2px 0 #CD853F, 8px 2px 0 #8B6914,
-    2px 4px 0 #8B6914, 4px 4px 0 #ecf0f1, 6px 4px 0 #bdc3c7, 8px 4px 0 #8B6914,
-    2px 6px 0 #8B6914, 4px 6px 0 #ecf0f1, 6px 6px 0 #bdc3c7, 8px 6px 0 #8B6914,
-    2px 8px 0 #8B6914, 4px 8px 0 #ecf0f1, 6px 8px 0 #bdc3c7, 8px 8px 0 #8B6914,
-    2px 10px 0 #8B6914, 4px 10px 0 #8B6914, 6px 10px 0 #8B6914, 8px 10px 0 #8B6914;
-}
-
-/* Gear */
-.icon-gear { color: #95a5a6; }
-.icon-gear::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    4px 0 0 #95a5a6, 6px 0 0 #95a5a6,
-    2px 2px 0 #7f8c8d, 4px 2px 0 #95a5a6, 6px 2px 0 #95a5a6, 8px 2px 0 #7f8c8d,
-    0 4px 0 #95a5a6, 2px 4px 0 #95a5a6, 4px 4px 0 #7f8c8d, 6px 4px 0 #7f8c8d, 8px 4px 0 #95a5a6, 10px 4px 0 #95a5a6,
-    0 6px 0 #95a5a6, 2px 6px 0 #95a5a6, 4px 6px 0 #7f8c8d, 6px 6px 0 #7f8c8d, 8px 6px 0 #95a5a6, 10px 6px 0 #95a5a6,
-    2px 8px 0 #7f8c8d, 4px 8px 0 #95a5a6, 6px 8px 0 #95a5a6, 8px 8px 0 #7f8c8d,
-    4px 10px 0 #95a5a6, 6px 10px 0 #95a5a6;
-}
-
-/* Eye */
-.icon-eye { color: #3498db; }
-.icon-eye::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    4px 2px 0 #ecf0f1, 6px 2px 0 #ecf0f1,
-    2px 4px 0 #ecf0f1, 4px 4px 0 #3498db, 6px 4px 0 #2c3e50, 8px 4px 0 #ecf0f1,
-    0 6px 0 #ecf0f1, 2px 6px 0 #3498db, 4px 6px 0 #2c3e50, 6px 6px 0 #3498db, 8px 6px 0 #ecf0f1, 10px 6px 0 #ecf0f1,
-    2px 8px 0 #ecf0f1, 4px 8px 0 #ecf0f1, 6px 8px 0 #ecf0f1, 8px 8px 0 #ecf0f1;
-}
-
-/* Detective Hat */
-.icon-detective-hat { color: #2c3e50; }
-.icon-detective-hat::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    4px 2px 0 #2c3e50, 6px 2px 0 #2c3e50,
-    2px 4px 0 #2c3e50, 4px 4px 0 #34495e, 6px 4px 0 #34495e, 8px 4px 0 #2c3e50,
-    2px 6px 0 #2c3e50, 4px 6px 0 #34495e, 6px 6px 0 #34495e, 8px 6px 0 #2c3e50,
-    0 8px 0 #2c3e50, 2px 8px 0 #2c3e50, 4px 8px 0 #2c3e50, 6px 8px 0 #2c3e50, 8px 8px 0 #2c3e50, 10px 8px 0 #2c3e50;
-}
-
-/* Map */
-.icon-map { color: #f0e6d2; }
-.icon-map::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    0 0 0 #f0e6d2, 2px 0 0 #f0e6d2, 4px 0 0 #d4c5a9, 6px 0 0 #f0e6d2, 8px 0 0 #f0e6d2, 10px 0 0 #f0e6d2,
-    0 2px 0 #f0e6d2, 2px 2px 0 #e74c3c, 4px 2px 0 #f0e6d2, 6px 2px 0 #d4c5a9, 8px 2px 0 #f0e6d2, 10px 2px 0 #f0e6d2,
-    0 4px 0 #f0e6d2, 2px 4px 0 #f0e6d2, 4px 4px 0 #d4c5a9, 6px 4px 0 #f0e6d2, 8px 4px 0 #e74c3c, 10px 4px 0 #f0e6d2,
-    0 6px 0 #d4c5a9, 2px 6px 0 #f0e6d2, 4px 6px 0 #f0e6d2, 6px 6px 0 #d4c5a9, 8px 6px 0 #f0e6d2, 10px 6px 0 #f0e6d2,
-    0 8px 0 #f0e6d2, 2px 8px 0 #d4c5a9, 4px 8px 0 #f0e6d2, 6px 8px 0 #f0e6d2, 8px 8px 0 #d4c5a9, 10px 8px 0 #f0e6d2;
-}
-
-/* Phone */
-.icon-phone { color: #2c3e50; }
-.icon-phone::before {
-  width: 12px; height: 12px;
-  box-shadow:
-    2px 0 0 #2c3e50, 4px 0 0 #2c3e50,
-    2px 2px 0 #34495e, 4px 2px 0 #34495e,
-    2px 4px 0 #2c3e50, 4px 4px 0 #2c3e50,
-    4px 6px 0 #2c3e50,
-    6px 6px 0 #2c3e50, 6px 8px 0 #2c3e50,
-    6px 10px 0 #2c3e50, 8px 10px 0 #2c3e50;
-}
-
-/* ── Nameplate ── */
-.nameplate {
-  background: #1a1a2e;
-  border: 2px solid #333;
-  padding: 4px 12px;
-  text-align: center;
-  margin-bottom: 6px;
-  width: 100%;
-  max-width: 200px;
-}
-.nameplate .agent-name {
+/* ── Panel Section ── */
+.panel-section h3 {
   font-size: 9px;
-  color: #f5c842;
+  color: var(--gold);
   letter-spacing: 1px;
-}
-.nameplate .agent-role {
-  font-size: 6px;
-  color: #888;
-  margin-top: 2px;
+  margin-bottom: 10px;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: 6px;
 }
 
-/* ── Status Badge ── */
-.status-badge {
-  font-size: 7px;
-  padding: 3px 8px;
-  border-radius: 2px;
-  letter-spacing: 1px;
-  text-transform: uppercase;
+/* ══════════════════════════════════════
+   LEFT PANEL — PIPELINE FUNNEL
+   ══════════════════════════════════════ */
+.pipeline-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
 }
-.status-working {
-  background: #27ae60;
-  color: #fff;
-  animation: status-pulse 1.5s ease-in-out infinite;
-}
-.status-idle {
-  background: #555;
-  color: #aaa;
-}
-.status-done {
-  background: #f39c12;
-  color: #fff;
-}
-.status-error {
-  background: #c0392b;
-  color: #fff;
-  animation: status-pulse 0.8s ease-in-out infinite;
-}
-@keyframes status-pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-/* ── Progress Bar ── */
-.progress-container {
-  width: 100%;
-  max-width: 200px;
-  margin-top: 4px;
-}
-.progress-bar {
-  height: 8px;
-  background: #222;
-  border: 1px solid #555;
-  position: relative;
+.pipeline-bar-wrap {
+  flex: 1;
+  height: 12px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-subtle);
   overflow: hidden;
 }
-.progress-fill {
+.pipeline-bar {
   height: 100%;
-  background: #27ae60;
-  transition: width 0.5s ease;
+  transition: width 0.6s ease;
 }
-.progress-text {
-  font-size: 6px;
-  color: #888;
-  text-align: center;
-  margin-top: 2px;
+.pipeline-count {
+  font-size: 9px;
+  color: var(--text);
+  min-width: 32px;
+  text-align: right;
+}
+.pipeline-label {
+  font-size: 7px;
+  color: var(--text-dim);
+  min-width: 72px;
 }
 
-/* ── Activity Log ── */
-.activity-log {
-  background: rgba(0,0,0,0.5);
-  border: 2px solid #444;
-  border-radius: 2px;
-  padding: 12px;
+/* ══════════════════════════════════════
+   LEFT PANEL — QUEUE DEPTHS
+   ══════════════════════════════════════ */
+.queue-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 7px;
+}
+.queue-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 0;
+  flex-shrink: 0;
+}
+.queue-count {
+  color: var(--text);
+  min-width: 24px;
+  text-align: right;
+  font-size: 9px;
+}
+.queue-label {
+  color: var(--text-dim);
+  font-size: 7px;
+}
+
+/* ══════════════════════════════════════
+   LEFT PANEL — NOW PROCESSING
+   ══════════════════════════════════════ */
+.now-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 7px;
+  line-height: 1.6;
+}
+.now-dot {
+  width: 8px;
+  height: 8px;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+.now-dot.active {
+  animation: dot-pulse 1s infinite;
+}
+.now-agent {
+  color: var(--text);
+  font-size: 8px;
+  min-width: 60px;
+  flex-shrink: 0;
+}
+.now-task {
+  color: var(--text-dim);
+  font-size: 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ══════════════════════════════════════
+   RIGHT PANEL — ACTIVITY LOG
+   ══════════════════════════════════════ */
+.log-filters {
+  display: flex;
+  gap: 3px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+.log-filter-btn {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-subtle);
+  color: var(--text-dim);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.log-filter-btn:hover { color: var(--text); border-color: var(--text-dim); }
+.log-filter-btn.active { color: var(--gold); border-color: var(--gold-dark); background: rgba(245,200,66,0.08); }
+
+.log-scroll {
   max-height: 200px;
   overflow-y: auto;
-}
-.activity-log h3 {
-  font-size: 9px;
-  color: #f5c842;
-  margin-bottom: 10px;
-  letter-spacing: 1px;
 }
 .log-entry {
   font-size: 7px;
   padding: 4px 0;
-  border-bottom: 1px solid #333;
+  border-bottom: 1px solid #1e1e2e;
   display: flex;
   gap: 8px;
-  line-height: 1.5;
+  line-height: 1.6;
 }
 .log-entry:last-child { border-bottom: none; }
-.log-time {
-  color: #666;
-  flex-shrink: 0;
+.log-time { color: var(--text-muted); flex-shrink: 0; width: 38px; }
+.log-agent { flex-shrink: 0; width: 68px; }
+.log-event { color: #aaa; }
+
+/* ══════════════════════════════════════
+   RIGHT PANEL — NOTABLE FINDS
+   ══════════════════════════════════════ */
+.find-card {
+  padding: 6px 8px;
+  margin-bottom: 5px;
+  background: rgba(255,255,255,0.02);
+  border-left: 3px solid #555;
+}
+.find-card.celebrity { border-left-color: var(--gold); }
+.find-card.epstein_match { border-left-color: #e74c3c; }
+.find-name {
+  font-size: 8px;
+  color: var(--text);
+  margin-bottom: 3px;
+}
+.find-card.celebrity .find-name::before { content: '\2605 '; color: var(--gold); }
+.find-card.epstein_match .find-name::before { content: '\26A0 '; color: #e74c3c; }
+.find-meta {
+  font-size: 7px;
+  color: var(--text-dim);
+}
+
+/* ══════════════════════════════════════
+   RIGHT PANEL — DATA QUALITY
+   ══════════════════════════════════════ */
+.quality-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 5px;
+}
+.quality-label {
+  font-size: 7px;
+  color: var(--text-dim);
+  min-width: 70px;
+}
+.quality-bar-wrap {
+  flex: 1;
+  height: 10px;
+  background: rgba(255,255,255,0.05);
+  border: 1px solid var(--border-subtle);
+  overflow: hidden;
+}
+.quality-bar {
+  height: 100%;
+  background: var(--gold);
+  transition: width 0.6s ease;
+}
+.quality-pct {
+  font-size: 8px;
+  color: var(--text);
+  min-width: 32px;
+  text-align: right;
+}
+
+/* ══════════════════════════════════════
+   OFFICE SCENE — LAYERED SYSTEM
+   ══════════════════════════════════════ */
+
+.office-scene-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.office-scene {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 1792 / 2110;
+  background: var(--bg-darker);
+  overflow: hidden;
+}
+
+/* Layer 0: Room background */
+.office-scene .layer-bg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  image-rendering: pixelated;
+}
+
+/* ── Overlay layers (positioned over the scene) ── */
+.overlay-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  overflow: visible;
+}
+
+/* Layer 1: Back-row desks (behind agents) */
+#desks-layer { z-index: 1; overflow: hidden; }
+
+/* Layer 2: Agent characters (above back desks) */
+#agents-layer { z-index: 2; }
+#agents-layer .agent-char { pointer-events: auto; }
+
+/* Layer 3: Front-row desks (overlap back-row agents for depth) */
+#desks-front-layer { z-index: 3; overflow: hidden; }
+
+/* Layer 4: Collaboration lines */
+#collab-layer { z-index: 4; }
+
+/* Layer 5: Front-row agents (Reader, Detective — above their desks) */
+#agents-front-layer { z-index: 5; }
+#agents-front-layer .agent-char { pointer-events: auto; }
+
+/* Layer 6: Collaboration lines */
+#collab-layer { z-index: 6; }
+
+/* Layer 7: UI elements (speech bubbles, nametags) */
+#ui-layer { z-index: 7; }
+
+/* ── CSS Fallback Floor (no bg image) ── */
+.office-floor {
+  position: absolute;
+  inset: 0;
+}
+.office-floor::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    repeating-linear-gradient(90deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 48px),
+    repeating-linear-gradient(0deg, rgba(255,255,255,0.03) 0px, rgba(255,255,255,0.03) 1px, transparent 1px, transparent 48px);
+  background-color: #1e1e2e;
+}
+.corridor {
+  position: absolute;
+  left: 38%; width: 24%;
+  top: 0; bottom: 0;
+  background: rgba(255,255,255,0.02);
+  border-left: 1px dashed rgba(255,255,255,0.06);
+  border-right: 1px dashed rgba(255,255,255,0.06);
+}
+.door {
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 48px; height: 8px;
+  background: #5a3a1a;
+  border-bottom: 2px solid #3a2510;
+}
+.door::after {
+  content: 'DOOR';
+  position: absolute;
+  bottom: -14px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 5px;
+  color: rgba(255,255,255,0.15);
+  font-family: 'Press Start 2P', monospace;
+  white-space: nowrap;
+}
+
+/* ── Desk Overlay Images ── */
+.desk-overlay {
+  position: absolute;
+  image-rendering: pixelated;
+  pointer-events: none;
+}
+.desk-overlay[data-desk="scout"] {
+  width: 31%;
+  left: 8%;
+  top: 35%;
+}
+.desk-overlay[data-desk="courier"] {
+  width: 31%;
+  right: 8%;
+  top: 35%;
+}
+.desk-overlay[data-desk="reader"] {
+  width: 29%;
+  left: 10%;
+  top: 57%;
+}
+.desk-overlay[data-desk="detective"] {
+  width: 30%;
+  right: 8%;
+  top: 55%;
+}
+
+/* ── Agent Character ── */
+.agent-char {
+  position: absolute;
+  transition: left 1.5s ease-in-out, top 1.5s ease-in-out;
+  cursor: pointer;
+}
+/* Ground shadow under each agent */
+.agent-char::after {
+  content: '';
+  position: absolute;
+  bottom: -4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 12%;
+  background: radial-gradient(ellipse, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.35) 50%, transparent 70%);
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* Character images */
+.char-img {
+  height: 100%;
+  width: auto;
+  image-rendering: pixelated;
+  display: block;
+  margin: 0 auto;
+}
+.char-img.char-front { display: none; }
+.char-img.char-back { display: block; }
+
+/* When collaborating, show front */
+.agent-char.show-front .char-front { display: block; }
+.agent-char.show-front .char-back { display: none; }
+
+/* ── Status Animations ── */
+.agent-char.anim-idle .char-img {
+  animation: idle-bob 2.5s ease-in-out infinite;
+}
+.agent-char.anim-working .char-img {
+  animation: working-bounce 0.5s steps(2) infinite;
+}
+.agent-char.anim-done .char-img {
+  animation: done-relax 3s ease-in-out infinite;
+}
+.agent-char.anim-error .char-img {
+  animation: error-shake 0.4s ease-in-out infinite;
+}
+
+@keyframes idle-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+@keyframes working-bounce {
+  0% { transform: translateY(0); }
+  50% { transform: translateY(-5px); }
+}
+@keyframes done-relax {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-1px); }
+}
+@keyframes error-shake {
+  0%, 100% { transform: translateY(0); }
+  25% { transform: translateX(3px); }
+  75% { transform: translateX(-3px); }
+}
+
+/* ── Particles ── */
+.particle-container {
+  position: absolute;
+  top: -8px;
+  left: 50%;
+  transform: translateX(-50%);
   width: 40px;
+  height: 20px;
+  pointer-events: none;
+  overflow: visible;
 }
-.log-agent {
-  color: #f5c842;
-  flex-shrink: 0;
-  width: 70px;
+.particle {
+  position: absolute;
+  width: 4px; height: 4px;
+  animation: particle-float 1.5s ease-out infinite;
 }
-.log-event {
-  color: #ccc;
+.particle:nth-child(1) { left: 25%; animation-delay: 0s; }
+.particle:nth-child(2) { left: 50%; animation-delay: 0.4s; }
+.particle:nth-child(3) { left: 75%; animation-delay: 0.8s; }
+.agent-char.anim-working .particle { background: rgba(255,255,255,0.5); }
+.agent-char.anim-done .particle { background: #2ecc71; animation-duration: 2.5s; }
+.agent-char.anim-error .particle { background: #e74c3c; animation-duration: 0.8s; }
+.agent-char.anim-idle .particle { display: none; }
+
+@keyframes particle-float {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(-16px) scale(0.5); }
 }
+
+/* ── UI Elements (Speech Bubble + Nametag) ── */
+.agent-ui {
+  position: absolute;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Speech Bubble */
+.speech-bubble {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  background: #fff;
+  color: #222;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px;
+  line-height: 1.6;
+  padding: 6px 10px;
+  white-space: nowrap;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border: 2px solid #333;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  box-shadow: -2px 0 0 #333, 2px 0 0 #333, 0 -2px 0 #333, 0 2px 0 #333;
+}
+.speech-bubble::after {
+  content: '';
+  position: absolute;
+  top: 100%; left: 50%;
+  transform: translateX(-50%);
+  width: 0; height: 0;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-top: 6px solid #fff;
+  filter: drop-shadow(0 2px 0 #333);
+}
+.speech-bubble.visible {
+  opacity: 1;
+  animation: bubble-pop 0.25s ease-out;
+}
+
+@keyframes bubble-pop {
+  0% { transform: translateX(-50%) scale(0.7); opacity: 0; }
+  100% { transform: translateX(-50%) scale(1); opacity: 1; }
+}
+
+/* Agent Name Tag */
+.agent-nametag {
+  position: absolute;
+  top: calc(100% + 2px);
+  left: 50%;
+  transform: translateX(-50%);
+  font-family: 'Press Start 2P', monospace;
+  font-size: 6px;
+  white-space: nowrap;
+  padding: 2px 6px;
+  background: rgba(0,0,0,0.8);
+  border: 1px solid;
+  pointer-events: none;
+}
+
+/* Status Indicator Dot */
+.status-dot {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 8px; height: 8px;
+  border: 1px solid rgba(0,0,0,0.5);
+}
+.status-dot.working { background: #27ae60; animation: dot-pulse 1s infinite; }
+.status-dot.idle    { background: #555; }
+.status-dot.done    { background: #f5c842; }
+.status-dot.error   { background: #e74c3c; animation: dot-pulse 0.5s infinite; }
+
+@keyframes dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
+}
+
+/* ── Collaboration Line ── */
+.collab-line {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.collab-line.active { opacity: 1; }
+.collab-line svg { overflow: visible; }
+.collab-line line {
+  stroke: var(--gold);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  animation: dash-march 0.8s linear infinite;
+}
+@keyframes dash-march { to { stroke-dashoffset: -10; } }
+
+.collab-label {
+  position: absolute;
+  font-size: 5px;
+  font-family: 'Press Start 2P', monospace;
+  color: var(--gold);
+  background: rgba(0,0,0,0.8);
+  padding: 2px 6px;
+  border: 1px solid var(--gold-dark);
+  white-space: nowrap;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.5s ease;
+}
+.collab-label.active { opacity: 1; }
 
 /* ── Sound Toggle ── */
 .sound-toggle {
   position: fixed;
-  bottom: 130px;
-  right: 16px;
-  z-index: 10;
-  background: rgba(0,0,0,0.6);
-  border: 2px solid #444;
-  color: #888;
+  bottom: 16px; right: 16px;
+  z-index: 50;
+  background: rgba(0,0,0,0.7);
+  border: 2px solid var(--border);
+  color: var(--text-dim);
   font-family: 'Press Start 2P', monospace;
-  font-size: 7px;
-  padding: 6px 10px;
+  font-size: 6px;
+  padding: 5px 8px;
   cursor: pointer;
-  border-radius: 2px;
   transition: color 0.2s;
 }
-.sound-toggle:hover { color: #f5c842; }
+.sound-toggle:hover { color: var(--gold); }
 .sound-toggle.active { color: #27ae60; border-color: #27ae60; }
 
-/* ── Scrollbar ── */
-.activity-log::-webkit-scrollbar { width: 6px; }
-.activity-log::-webkit-scrollbar-track { background: #111; }
-.activity-log::-webkit-scrollbar-thumb { background: #444; border-radius: 2px; }
+/* ── Scrollbars ── */
+.panel-left::-webkit-scrollbar,
+.panel-right::-webkit-scrollbar,
+.log-scroll::-webkit-scrollbar { width: 4px; }
+.panel-left::-webkit-scrollbar-track,
+.panel-right::-webkit-scrollbar-track,
+.log-scroll::-webkit-scrollbar-track { background: transparent; }
+.panel-left::-webkit-scrollbar-thumb,
+.panel-right::-webkit-scrollbar-thumb,
+.log-scroll::-webkit-scrollbar-thumb { background: #333; }
 
 /* ── Loading ── */
 .loading {
   text-align: center;
-  padding: 40px;
-  font-size: 10px;
-  color: #888;
+  padding: 30px;
+  font-size: 9px;
+  color: var(--text-dim);
   animation: blink 1s steps(2) infinite;
 }
-@keyframes blink {
-  50% { opacity: 0; }
-}
+@keyframes blink { 50% { opacity: 0; } }
 
-/* ── Responsive ── */
-@media (max-width: 600px) {
-  .title-banner h1 { font-size: 12px; }
-  .agent-grid { grid-template-columns: 1fr; }
-  .stats-bar { gap: 4px; }
-  .stat-item { min-width: 80px; padding: 6px 8px; }
-  .stat-value { font-size: 14px; }
+/* ══════════════════════════════════════
+   RESPONSIVE — Collapse to single column
+   ══════════════════════════════════════ */
+@media (max-width: 1024px) {
+  .dashboard {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto auto auto;
+    grid-template-areas:
+      "top"
+      "center"
+      "left"
+      "right";
+    height: auto;
+    overflow: auto;
+  }
+  body { overflow: auto; }
+  .panel-left, .panel-right {
+    border: none;
+    border-top: 2px solid var(--border);
+  }
+  .center-scene {
+    max-height: 60vh;
+  }
+  .top-bar { flex-wrap: wrap; }
+  .top-bar-stats { flex-wrap: wrap; }
+}
+@media (max-width: 640px) {
+  .top-bar-title { font-size: 8px; }
+  .top-stat { padding: 3px 6px; }
+  .top-stat-value { font-size: 9px; }
+  .speech-bubble { font-size: 4px; max-width: 120px; }
 }
 </style>
 </head>
 <body>
 
-<div class="wall"></div>
-<div class="brick-floor"></div>
-
-<div class="container">
-  <div class="title-banner" id="title-banner">
-    <div class="sparkle"></div>
-    <div class="sparkle"></div>
-    <div class="sparkle"></div>
-    <div class="sparkle"></div>
-    <h1 id="main-title">AGENT OFFICE</h1>
-    <div class="subtitle" id="main-subtitle">loading...</div>
+<div class="dashboard">
+  <!-- ── Top Bar ── -->
+  <div class="top-bar">
+    <span class="top-bar-title" id="main-title">AGENT OFFICE</span>
+    <div class="top-bar-stats" id="top-stats"></div>
   </div>
 
-  <div class="stats-bar" id="stats-bar">
-    <div class="loading">LOADING STATUS...</div>
+  <!-- ── Left Panel ── -->
+  <div class="panel-left">
+    <div class="panel-section" id="pipeline-section">
+      <h3>PIPELINE</h3>
+      <div id="pipeline-content"></div>
+    </div>
+    <div class="panel-section" id="queues-section">
+      <h3>QUEUES</h3>
+      <div id="queues-content"></div>
+    </div>
+    <div class="panel-section" id="now-section">
+      <h3>NOW PROCESSING</h3>
+      <div id="now-content"></div>
+    </div>
   </div>
 
-  <div class="agent-grid" id="agent-grid"></div>
+  <!-- ── Center — Office Scene ── -->
+  <div class="center-scene">
+    <div class="office-scene-wrapper">
+      <div class="office-scene" id="office-scene">
+        <!-- Layer 0: Room background -->
+        <img class="layer-bg" id="room-bg" src="bg-office-clear-new.png"
+             onerror="this.style.display='none'">
+        <!-- CSS fallback floor (hidden when bg loads) -->
+        <div class="office-floor" id="fallback-floor">
+          <div class="corridor"></div>
+          <div class="door"></div>
+        </div>
+      </div>
 
-  <div class="activity-log" id="activity-log">
-    <h3>ACTIVITY LOG</h3>
-    <div id="log-entries"></div>
+      <!-- Layer 1: Back-row desks (behind agents) -->
+      <div class="overlay-layer" id="desks-layer">
+        <img class="desk-overlay" data-desk="scout" src="scout_desk_trans.png"
+             onerror="this.style.display='none'">
+        <img class="desk-overlay" data-desk="courier" src="courier_desk_trans.png"
+             onerror="this.style.display='none'">
+      </div>
+
+      <!-- Layer 2: Agent character sprites -->
+      <div class="overlay-layer" id="agents-layer"></div>
+
+      <!-- Layer 3: Front-row desks (overlap top-row agents for depth) -->
+      <div class="overlay-layer" id="desks-front-layer">
+        <img class="desk-overlay" data-desk="reader" src="reader_desk_trans.png"
+             onerror="this.style.display='none'">
+        <img class="desk-overlay" data-desk="detective" src="detective_desk_trans.png"
+             onerror="this.style.display='none'">
+      </div>
+
+      <!-- Layer 5: Front-row agent sprites (Reader, Detective — above their desks) -->
+      <div class="overlay-layer" id="agents-front-layer"></div>
+
+      <!-- Layer 6: Collaboration lines -->
+      <div class="overlay-layer" id="collab-layer"></div>
+
+      <!-- Layer 7: UI (speech bubbles + nametags) -->
+      <div class="overlay-layer" id="ui-layer"></div>
+    </div>
+  </div>
+
+  <!-- ── Right Panel ── -->
+  <div class="panel-right">
+    <div class="panel-section" id="log-section">
+      <h3>ACTIVITY LOG</h3>
+      <div class="log-filters" id="log-filters"></div>
+      <div class="log-scroll" id="log-scroll">
+        <div id="log-entries"></div>
+      </div>
+    </div>
+    <div class="panel-section" id="finds-section">
+      <h3>NOTABLE FINDS</h3>
+      <div id="finds-content"></div>
+    </div>
+    <div class="panel-section" id="quality-section">
+      <h3>DATA QUALITY</h3>
+      <div id="quality-content"></div>
+    </div>
   </div>
 </div>
 
@@ -664,152 +840,494 @@ const STATUS_URL = params.get('status') || 'status.json';
 const POLL_MS = parseInt(params.get('poll') || '5000', 10);
 const FORCE_DEMO = params.get('demo') === 'true';
 
-// ── Pixel Character Generator ──
-// Generates box-shadow CSS for a 10x16 pixel character with configurable shirt color
-function generateCharacterShadow(shirtColor) {
-  const P = 4; // pixel size
-  const skin = '#f5cba7';
-  const skinDark = '#e0ac69';
-  const hair = '#4a3728';
-  const eye = '#2c3e50';
-  const pants = '#34495e';
-  const shoe = '#2c3e50';
-  const shirt = shirtColor || '#e74c3c';
-  const shirtDark = darkenColor(shirt, 30);
-
-  // 10 wide x 16 tall pixel grid — each entry is [x, y, color]
-  const pixels = [
-    // Hair (row 0-1)
-    [3,0,hair],[4,0,hair],[5,0,hair],[6,0,hair],
-    [2,1,hair],[3,1,hair],[4,1,hair],[5,1,hair],[6,1,hair],[7,1,hair],
-    // Face (row 2-4)
-    [2,2,skin],[3,2,skin],[4,2,skin],[5,2,skin],[6,2,skin],[7,2,skin],
-    [2,3,skin],[3,3,eye],[4,3,skin],[5,3,skin],[6,3,eye],[7,3,skin],
-    [2,4,skin],[3,4,skin],[4,4,skin],[5,4,skinDark],[6,4,skin],[7,4,skin],
-    // Neck (row 5)
-    [4,5,skin],[5,5,skin],
-    // Shirt (row 6-9)
-    [2,6,shirt],[3,6,shirt],[4,6,shirt],[5,6,shirt],[6,6,shirt],[7,6,shirt],
-    [1,7,shirt],[2,7,shirt],[3,7,shirt],[4,7,shirtDark],[5,7,shirtDark],[6,7,shirt],[7,7,shirt],[8,7,shirt],
-    [1,8,shirt],[2,8,shirtDark],[3,8,shirt],[4,8,shirtDark],[5,8,shirtDark],[6,8,shirt],[7,8,shirtDark],[8,8,shirt],
-    [2,9,shirt],[3,9,shirtDark],[4,9,shirt],[5,9,shirt],[6,9,shirtDark],[7,9,shirt],
-    // Arms (hands at sides)
-    [0,7,skin],[9,7,skin],
-    [0,8,skin],[9,8,skin],
-    // Pants (row 10-12)
-    [3,10,pants],[4,10,pants],[5,10,pants],[6,10,pants],
-    [3,11,pants],[4,11,pants],[5,11,pants],[6,11,pants],
-    [3,12,pants],[4,12,pants],[6,12,pants],[7,12,pants],
-    // Shoes (row 13)
-    [2,13,shoe],[3,13,shoe],[4,13,shoe],[6,13,shoe],[7,13,shoe],[8,13,shoe],
-  ];
-
-  return pixels.map(([x, y, c]) => `${x * P}px ${y * P}px 0 ${c}`).join(',');
-}
-
-function darkenColor(hex, amount) {
-  const num = parseInt(hex.replace('#', ''), 16);
-  const r = Math.max(0, (num >> 16) - amount);
-  const g = Math.max(0, ((num >> 8) & 0x00FF) - amount);
-  const b = Math.max(0, (num & 0x0000FF) - amount);
-  return `#${(r << 16 | g << 8 | b).toString(16).padStart(6, '0')}`;
-}
+// ── Agent Config ──
+const AGENT_CONFIG = {
+  scout: {
+    homeX: 22, homeY: 47, exitX: 44,
+    charHeight: 18,
+    color: '#e74c3c',
+  },
+  courier: {
+    homeX: 74, homeY: 47, exitX: 56,
+    charHeight: 18,
+    color: '#3498db',
+  },
+  reader: {
+    homeX: 22, homeY: 72, exitX: 44,
+    charHeight: 18,
+    color: '#2ecc71',
+  },
+  detective: {
+    homeX: 74, homeY: 72, exitX: 56,
+    charHeight: 18,
+    color: '#9b59b6',
+  },
+};
+const CORRIDOR_MEET_Y = 55;
 
 // ── State ──
 let currentState = null;
+let previousState = null;
+let agentCharElements = {};
+let agentUIElements = {};
+let imagesLoaded = { bg: false, chars: {} };
+let activeCollaborations = [];
+let typewriterTimers = {};
 let audioCtx = null;
 let soundOn = false;
 let ambientOsc = null;
+let activeLogFilter = 'All';
 
-// ── Rendering ──
+// ── Image Asset Paths ──
+const ASSETS = {
+  bg: 'bg-office-clear-new.png',
+  chars: {
+    scout:     { front: 'scout_front_trans.png',     back: 'scout_back_trans.png' },
+    courier:   { front: 'courier_front_trans.png',   back: 'courier_back_trans.png' },
+    reader:    { front: 'reader_front_trans.png',     back: 'reader_back_trans.png' },
+    detective: { front: 'detective_front_trans.png',   back: 'detective_back_trans.png' },
+  },
+};
+
+// ── Initialize ──
+function init() {
+  initAgents();
+  initBackground();
+  initLogFilters();
+  fetchStatus();
+  setInterval(fetchStatus, POLL_MS);
+  document.getElementById('sound-toggle').addEventListener('click', toggleSound);
+}
+
+function initBackground() {
+  const bg = document.getElementById('room-bg');
+  bg.onload = () => {
+    imagesLoaded.bg = true;
+    document.getElementById('fallback-floor').style.display = 'none';
+  };
+  bg.onerror = () => {
+    bg.style.display = 'none';
+  };
+}
+
+function initAgents() {
+  const charsLayer = document.getElementById('agents-layer');
+  const charsFrontLayer = document.getElementById('agents-front-layer');
+  const uiLayer = document.getElementById('ui-layer');
+  const FRONT_ROW = ['reader', 'detective'];
+
+  for (const [id, cfg] of Object.entries(AGENT_CONFIG)) {
+    // ── Character element ──
+    const charEl = document.createElement('div');
+    charEl.className = 'agent-char anim-idle';
+    charEl.dataset.agent = id;
+    charEl.style.left = cfg.homeX + '%';
+    charEl.style.top = cfg.homeY + '%';
+    charEl.style.height = cfg.charHeight + '%';
+    charEl.style.transform = 'translate(-50%, -50%)';
+
+    const backImg = document.createElement('img');
+    backImg.className = 'char-img char-back';
+    backImg.src = ASSETS.chars[id].back;
+    backImg.alt = '';
+    backImg.draggable = false;
+    backImg.onerror = () => { backImg.style.display = 'none'; };
+    charEl.appendChild(backImg);
+
+    const frontImg = document.createElement('img');
+    frontImg.className = 'char-img char-front';
+    frontImg.src = ASSETS.chars[id].front;
+    frontImg.alt = '';
+    frontImg.draggable = false;
+    frontImg.onerror = () => { frontImg.style.display = 'none'; };
+    charEl.appendChild(frontImg);
+
+    const particles = document.createElement('div');
+    particles.className = 'particle-container';
+    particles.innerHTML = '<div class="particle"></div><div class="particle"></div><div class="particle"></div>';
+    charEl.appendChild(particles);
+
+    // Front-row agents (reader, detective) go to higher z-index layer
+    (FRONT_ROW.includes(id) ? charsFrontLayer : charsLayer).appendChild(charEl);
+    agentCharElements[id] = charEl;
+
+    // ── UI element (Layer 4) ──
+    const uiEl = document.createElement('div');
+    uiEl.className = 'agent-ui';
+    uiEl.dataset.agent = id;
+    uiEl.style.left = cfg.homeX + '%';
+    uiEl.style.top = cfg.homeY + '%';
+    uiEl.style.height = cfg.charHeight + '%';
+    uiEl.style.transform = 'translate(-50%, -50%)';
+    uiEl.style.transition = 'left 1.5s ease-in-out, top 1.5s ease-in-out';
+
+    const bubble = document.createElement('div');
+    bubble.className = 'speech-bubble';
+    bubble.id = `bubble-${id}`;
+    uiEl.appendChild(bubble);
+
+    const tag = document.createElement('div');
+    tag.className = 'agent-nametag';
+    tag.style.color = cfg.color;
+    tag.style.borderColor = cfg.color;
+    tag.textContent = id.toUpperCase();
+    tag.id = `tag-${id}`;
+    uiEl.appendChild(tag);
+
+    const dot = document.createElement('div');
+    dot.className = 'status-dot idle';
+    dot.id = `dot-${id}`;
+    uiEl.appendChild(dot);
+
+    uiLayer.appendChild(uiEl);
+    agentUIElements[id] = uiEl;
+
+    charEl.addEventListener('click', () => {
+      const b = document.getElementById(`bubble-${id}`);
+      if (b) b.classList.toggle('visible');
+    });
+  }
+}
+
+// ── Log Filter Buttons ──
+function initLogFilters() {
+  const container = document.getElementById('log-filters');
+  const filters = ['All', 'Scout', 'Courier', 'Reader', 'Detective'];
+  filters.forEach(f => {
+    const btn = document.createElement('button');
+    btn.className = 'log-filter-btn' + (f === 'All' ? ' active' : '');
+    btn.textContent = f;
+    btn.addEventListener('click', () => {
+      activeLogFilter = f;
+      container.querySelectorAll('.log-filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      renderLogFiltered();
+    });
+    container.appendChild(btn);
+  });
+}
+
+// ── Update Agent Visuals ──
+function updateAgent(agentData) {
+  const charEl = agentCharElements[agentData.id];
+  const uiEl = agentUIElements[agentData.id];
+  if (!charEl || !uiEl) return;
+
+  const status = agentData.status || 'idle';
+
+  charEl.className = charEl.className.replace(/\banim-\w+/g, '');
+  charEl.classList.add(`anim-${status}`);
+
+  const dot = document.getElementById(`dot-${agentData.id}`);
+  if (dot) dot.className = 'status-dot ' + status;
+
+  const tag = document.getElementById(`tag-${agentData.id}`);
+  if (tag && agentData.name) tag.textContent = agentData.name.toUpperCase();
+
+  updateSpeechBubble(agentData.id, agentData.message || '...');
+}
+
+// ── Speech Bubble Typewriter ──
+function updateSpeechBubble(agentId, text) {
+  const bubble = document.getElementById(`bubble-${agentId}`);
+  if (!bubble) return;
+  if (bubble.dataset.fullText === text) return;
+  bubble.dataset.fullText = text;
+
+  if (typewriterTimers[agentId]) {
+    clearInterval(typewriterTimers[agentId]);
+    typewriterTimers[agentId] = null;
+  }
+
+  bubble.classList.add('visible');
+  bubble.textContent = '';
+
+  let i = 0;
+  const truncated = text.length > 40 ? text.substring(0, 37) + '...' : text;
+  typewriterTimers[agentId] = setInterval(() => {
+    if (i < truncated.length) {
+      bubble.textContent = truncated.substring(0, i + 1);
+      i++;
+    } else {
+      clearInterval(typewriterTimers[agentId]);
+      typewriterTimers[agentId] = null;
+      setTimeout(() => {
+        if (bubble.dataset.fullText === text) {
+          bubble.classList.remove('visible');
+        }
+      }, 8000);
+    }
+  }, 35);
+}
+
+// ── Agent Movement ──
+function moveAgentTo(agentId, xPct, yPct, showFront = false) {
+  const charEl = agentCharElements[agentId];
+  const uiEl = agentUIElements[agentId];
+  if (!charEl || !uiEl) return;
+
+  if (showFront) {
+    charEl.classList.add('show-front');
+  } else {
+    charEl.classList.remove('show-front');
+  }
+
+  charEl.style.left = xPct + '%';
+  charEl.style.top = yPct + '%';
+  uiEl.style.left = xPct + '%';
+  uiEl.style.top = yPct + '%';
+}
+
+function moveAgentHome(agentId) {
+  const cfg = AGENT_CONFIG[agentId];
+  if (cfg) moveAgentTo(agentId, cfg.homeX, cfg.homeY, false);
+}
+
+// ── Collaboration System ──
+function triggerCollaboration(fromId, toId, label) {
+  const fromCfg = AGENT_CONFIG[fromId];
+  const toCfg = AGENT_CONFIG[toId];
+  if (!fromCfg || !toCfg) return;
+
+  const sameRow = Math.abs(fromCfg.homeY - toCfg.homeY) < 15;
+  const meetY = sameRow ? fromCfg.homeY : CORRIDOR_MEET_Y;
+
+  const fromMeetX = fromCfg.exitX;
+  const toMeetX = toCfg.exitX;
+
+  if (soundOn) playCollabSound();
+
+  moveAgentTo(fromId, fromCfg.exitX, fromCfg.homeY, true);
+  moveAgentTo(toId, toCfg.exitX, toCfg.homeY, true);
+
+  if (sameRow) {
+    setTimeout(() => {
+      showCollabLine(fromMeetX, meetY, toMeetX, meetY, label);
+    }, 1500);
+
+    setTimeout(() => {
+      hideCollabLine();
+      moveAgentHome(fromId);
+      moveAgentHome(toId);
+    }, 5000);
+  } else {
+    setTimeout(() => {
+      moveAgentTo(fromId, fromMeetX, meetY, true);
+      moveAgentTo(toId, toMeetX, meetY, true);
+      showCollabLine(fromMeetX, meetY, toMeetX, meetY, label);
+    }, 1700);
+
+    setTimeout(() => {
+      hideCollabLine();
+      moveAgentTo(fromId, fromCfg.exitX, fromCfg.homeY, true);
+      moveAgentTo(toId, toCfg.exitX, toCfg.homeY, true);
+    }, 5200);
+
+    setTimeout(() => {
+      moveAgentHome(fromId);
+      moveAgentHome(toId);
+    }, 6900);
+  }
+}
+
+function showCollabLine(x1, y1, x2, y2, label) {
+  const layer = document.getElementById('collab-layer');
+
+  layer.querySelectorAll('.collab-line, .collab-label').forEach(el => el.remove());
+
+  const lineDiv = document.createElement('div');
+  lineDiv.className = 'collab-line';
+  lineDiv.style.cssText = 'position:absolute;inset:0;';
+  lineDiv.innerHTML = `<svg width="100%" height="100%" style="position:absolute;inset:0;">
+    <line x1="${x1}%" y1="${y1}%" x2="${x2}%" y2="${y2}%"/>
+  </svg>`;
+  layer.appendChild(lineDiv);
+
+  if (label) {
+    const labelEl = document.createElement('div');
+    labelEl.className = 'collab-label';
+    labelEl.textContent = label;
+    labelEl.style.left = ((x1 + x2) / 2) + '%';
+    labelEl.style.top = ((y1 + y2) / 2 - 4) + '%';
+    labelEl.style.transform = 'translate(-50%, -50%)';
+    layer.appendChild(labelEl);
+    requestAnimationFrame(() => labelEl.classList.add('active'));
+  }
+
+  requestAnimationFrame(() => lineDiv.classList.add('active'));
+}
+
+function hideCollabLine() {
+  const layer = document.getElementById('collab-layer');
+  layer.querySelectorAll('.collab-line, .collab-label').forEach(el => {
+    el.classList.remove('active');
+    setTimeout(() => el.remove(), 600);
+  });
+}
+
+// ══════════════════════════════════════
+// RENDERING — Top Bar
+// ══════════════════════════════════════
 function renderTitle(data) {
   document.getElementById('main-title').textContent = data.title || 'AGENT OFFICE';
-  document.getElementById('main-subtitle').textContent = data.subtitle || '';
   document.title = data.title || 'Agent Office';
 }
 
-function renderStats(stats) {
-  const bar = document.getElementById('stats-bar');
+function renderTopStats(stats) {
+  const container = document.getElementById('top-stats');
   if (!stats || !stats.length) {
-    bar.innerHTML = '<div class="stat-item"><span class="stat-value">--</span><span class="stat-label">No data</span></div>';
+    container.innerHTML = '';
     return;
   }
-  bar.innerHTML = stats.map(s =>
-    `<div class="stat-item">
-      <span class="stat-value">${s.value}</span>
-      <span class="stat-label">${s.label}</span>
+  container.innerHTML = stats.map(s =>
+    `<div class="top-stat">
+      <span class="top-stat-value">${escHtml(String(s.value))}</span>
+      <span class="top-stat-label">${escHtml(s.label)}</span>
     </div>`
   ).join('');
 }
 
-function renderAgents(agents) {
-  const grid = document.getElementById('agent-grid');
-  if (!agents || !agents.length) {
-    grid.innerHTML = '<div class="loading">NO AGENTS FOUND</div>';
+// ══════════════════════════════════════
+// RENDERING — Left Panel
+// ══════════════════════════════════════
+function renderPipeline(pipeline) {
+  const container = document.getElementById('pipeline-content');
+  if (!pipeline || !pipeline.length) {
+    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No data</div>';
     return;
   }
-  grid.innerHTML = agents.map(a => {
-    const statusClass = `status-${a.status || 'idle'}`;
-    const animClass = a.status === 'working' ? 'working' : a.status === 'error' ? 'error' : 'idle';
-    const charShadow = generateCharacterShadow(a.color || '#e74c3c');
-    const statusLabel = {
-      working: 'WORKING...',
-      idle: 'IDLE',
-      done: 'DONE',
-      error: 'ERROR'
-    }[a.status] || 'IDLE';
-
-    const deskItemsHtml = (a.deskItems || []).map(item =>
-      `<div class="desk-icon icon-${item}" title="${item}"></div>`
-    ).join('');
-
-    let progressHtml = '';
-    if (a.progress) {
-      const pct = a.progress.total > 0
-        ? Math.round((a.progress.current / a.progress.total) * 100)
-        : 0;
-      progressHtml = `
-        <div class="progress-container">
-          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%"></div></div>
-          <div class="progress-text">${a.progress.current} / ${a.progress.total}</div>
-        </div>`;
-    }
-
-    return `
-      <div class="agent-station" data-agent-id="${a.id}">
-        <div class="speech-bubble">${escHtml(a.message || '...')}</div>
-        <div class="character-container">
-          <div class="character ${animClass}" style="box-shadow:${charShadow};"></div>
-        </div>
-        <div class="desk">
-          <div class="desk-surface">
-            <div class="desk-items">${deskItemsHtml}</div>
-          </div>
-          <div class="desk-front"></div>
-        </div>
-        <div class="nameplate">
-          <div class="agent-name">${escHtml(a.name || 'AGENT')}</div>
-          <div class="agent-role">${escHtml(a.role || '')}</div>
-        </div>
-        <div class="status-badge ${statusClass}">${statusLabel}</div>
-        ${progressHtml}
-      </div>`;
+  const maxCount = Math.max(...pipeline.map(p => p.count), 1);
+  container.innerHTML = pipeline.map(p => {
+    const pct = Math.max(2, (p.count / maxCount) * 100);
+    return `<div class="pipeline-row">
+      <span class="pipeline-label">${escHtml(p.stage)}</span>
+      <div class="pipeline-bar-wrap">
+        <div class="pipeline-bar" style="width:${pct}%;background:${p.color}"></div>
+      </div>
+      <span class="pipeline-count">${p.count}</span>
+    </div>`;
   }).join('');
 }
 
-function renderLog(log) {
+function renderQueueDepths(queues) {
+  const container = document.getElementById('queues-content');
+  if (!queues || !queues.length) {
+    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No queues</div>';
+    return;
+  }
+  container.innerHTML = queues.map(q =>
+    `<div class="queue-row">
+      <div class="queue-dot" style="background:${q.color}"></div>
+      <span class="queue-count">${q.count}</span>
+      <span class="queue-label">${escHtml(q.label)}</span>
+    </div>`
+  ).join('');
+}
+
+function renderNowProcessing(now) {
+  const container = document.getElementById('now-content');
+  if (!now || Object.keys(now).length === 0) {
+    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">Idle</div>';
+    return;
+  }
+  const agentColors = { scout: '#e74c3c', courier: '#3498db', reader: '#2ecc71', detective: '#9b59b6' };
+  container.innerHTML = Object.entries(now).map(([id, info]) => {
+    const color = agentColors[id] || '#888';
+    const activeClass = info.active ? ' active' : '';
+    return `<div class="now-row">
+      <div class="now-dot${activeClass}" style="background:${color}"></div>
+      <span class="now-agent" style="color:${color}">${id.charAt(0).toUpperCase() + id.slice(1)}</span>
+      <span class="now-task">${escHtml(info.task)}</span>
+    </div>`;
+  }).join('');
+}
+
+// ══════════════════════════════════════
+// RENDERING — Right Panel
+// ══════════════════════════════════════
+let cachedLog = [];
+
+function renderLogWithFilters(log) {
+  cachedLog = log || [];
+  renderLogFiltered();
+}
+
+function renderLogFiltered() {
   const container = document.getElementById('log-entries');
-  if (!log || !log.length) {
+  const filtered = activeLogFilter === 'All'
+    ? cachedLog
+    : cachedLog.filter(e => e.agent === activeLogFilter);
+
+  if (!filtered.length) {
     container.innerHTML = '<div class="log-entry"><span class="log-event">No activity yet...</span></div>';
     return;
   }
-  container.innerHTML = log.map(entry =>
-    `<div class="log-entry">
+  const agentColors = { Scout: '#e74c3c', Courier: '#3498db', Reader: '#2ecc71', Detective: '#9b59b6' };
+  container.innerHTML = filtered.map(entry => {
+    const color = agentColors[entry.agent] || 'var(--gold)';
+    return `<div class="log-entry">
       <span class="log-time">${escHtml(entry.time || '')}</span>
-      <span class="log-agent">${escHtml(entry.agent || '')}</span>
+      <span class="log-agent" style="color:${color}">${escHtml(entry.agent || '')}</span>
       <span class="log-event">${escHtml(entry.event || '')}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderNotableFinds(finds) {
+  const container = document.getElementById('finds-content');
+  if (!finds || !finds.length) {
+    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No notable finds yet</div>';
+    return;
+  }
+  container.innerHTML = finds.map(f => {
+    const typeClass = f.type || '';
+    const meta = [f.issue, f.location].filter(Boolean).join(' \u00B7 ');
+    return `<div class="find-card ${typeClass}">
+      <div class="find-name">${escHtml(f.name)}</div>
+      ${meta ? `<div class="find-meta">${escHtml(meta)}</div>` : ''}
+    </div>`;
+  }).join('');
+}
+
+function renderQuality(quality) {
+  const container = document.getElementById('quality-content');
+  if (!quality || !quality.fields || !quality.fields.length) {
+    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No extraction data</div>';
+    return;
+  }
+  container.innerHTML = quality.fields.map(f =>
+    `<div class="quality-row">
+      <span class="quality-label">${escHtml(f.label)}</span>
+      <div class="quality-bar-wrap">
+        <div class="quality-bar" style="width:${f.pct}%"></div>
+      </div>
+      <span class="quality-pct">${f.pct}%</span>
     </div>`
   ).join('');
+}
+
+// ══════════════════════════════════════
+// RENDERING — Agents & Collaborations
+// ══════════════════════════════════════
+function renderAgents(agents) {
+  if (!agents || !agents.length) return;
+  agents.forEach(a => updateAgent(a));
+}
+
+function renderCollaborations(collaborations) {
+  if (!collaborations || !collaborations.length) return;
+  const newCollabs = collaborations.filter(c => {
+    const key = `${c.from}-${c.to}-${c.label}`;
+    if (activeCollaborations.includes(key)) return false;
+    activeCollaborations.push(key);
+    if (activeCollaborations.length > 20) activeCollaborations.shift();
+    return true;
+  });
+  if (newCollabs.length > 0) {
+    newCollabs.forEach((c, i) => {
+      setTimeout(() => triggerCollaboration(c.from, c.to, c.label || ''), i * 5000);
+    });
+  }
 }
 
 function escHtml(str) {
@@ -820,78 +1338,131 @@ function escHtml(str) {
 
 function renderAll(data) {
   renderTitle(data);
-  renderStats(data.stats);
+  renderTopStats(data.stats);
   renderAgents(data.agents);
-  renderLog(data.log);
+  renderPipeline(data.pipeline);
+  renderQueueDepths(data.queue_depths);
+  renderNowProcessing(data.now_processing);
+  renderLogWithFilters(data.log);
+  renderNotableFinds(data.notable_finds);
+  renderQuality(data.quality);
+  renderCollaborations(data.collaborations);
+  previousState = data;
 }
 
-// ── Demo Data ──
+// ══════════════════════════════════════
+// DEMO DATA
+// ══════════════════════════════════════
 const DEMO_DATA = {
-  title: "DEMO \u2014 AGENT OFFICE",
-  subtitle: "Sample multi-agent pipeline",
+  title: "AD-EPSTEIN INDEX \u2014 AGENT OFFICE",
+  subtitle: "Architectural Digest research pipeline",
   timestamp: new Date().toISOString(),
   agents: [
-    {
-      id: "researcher",
-      name: "Scout",
-      role: "Discovers items",
-      status: "done",
-      message: "Found 163 items in the archive!",
-      color: "#e74c3c",
-      deskItems: ["magnifier", "globe"],
-      progress: { current: 163, total: 163 }
-    },
-    {
-      id: "courier",
-      name: "Courier",
-      role: "Downloads files",
-      status: "working",
-      message: "Downloading item 31 of 163...",
-      color: "#3498db",
-      deskItems: ["folder", "document"],
-      progress: { current: 31, total: 163 }
-    },
-    {
-      id: "reader",
-      name: "Reader",
-      role: "Extracts data",
-      status: "idle",
-      message: "Waiting for more files...",
-      color: "#2ecc71",
-      deskItems: ["book", "pencil"],
-      progress: { current: 15, total: 31 }
-    },
-    {
-      id: "detective",
-      name: "Detective",
-      role: "Cross-references names",
-      status: "idle",
-      message: "1 match found so far",
-      color: "#9b59b6",
-      deskItems: ["detective-hat", "clipboard"],
-      progress: { current: 1, total: 15 }
-    }
+    { id: "scout", name: "Scout", status: "done", message: "Found 163 issues in the archive!" },
+    { id: "courier", name: "Courier", status: "working", message: "Downloading issue 31 of 163..." },
+    { id: "reader", name: "Reader", status: "working", message: "Extracting features from Nov 2013" },
+    { id: "detective", name: "Detective", status: "idle", message: "1 match found so far" }
   ],
   stats: [
     { label: "Discovered", value: 163 },
-    { label: "Downloaded", value: 31 },
-    { label: "Extracted", value: 15 },
+    { label: "Downloaded", value: 75 },
+    { label: "Extracted", value: 12 },
+    { label: "Features", value: 89 },
     { label: "Matches", value: 1 }
   ],
+  pipeline: [
+    { stage: "Discovered", agent: "scout", count: 163, color: "#e74c3c" },
+    { stage: "Downloaded", agent: "courier", count: 75, color: "#3498db" },
+    { stage: "Extracted", agent: "reader", count: 12, color: "#2ecc71" },
+    { stage: "Cross-Ref'd", agent: "detective", count: 1, color: "#9b59b6" }
+  ],
+  queue_depths: [
+    { label: "awaiting download", count: 87, color: "#3498db" },
+    { label: "awaiting extraction", count: 63, color: "#2ecc71" },
+    { label: "awaiting xref", count: 88, color: "#9b59b6" }
+  ],
+  now_processing: {
+    scout: { task: "Indexed 163 issues", active: false },
+    courier: { task: "Downloading AD Mar 2005", active: true },
+    reader: { task: "Extracting Nov 2013", active: true },
+    detective: { task: "Checking Miranda Brooks", active: true }
+  },
+  notable_finds: [
+    { name: "Miranda Brooks", issue: "AD Nov 2013", location: "Connecticut", type: "epstein_match" },
+    { name: "George Clooney", issue: "AD Nov 2013", location: "Los Cabos, Mexico", type: "celebrity" },
+    { name: "Cindy Crawford", issue: "AD Nov 2013", location: "Los Cabos, Mexico", type: "celebrity" },
+    { name: "Robert Redford", issue: "AD Mar 2005", location: "Sundance, Utah", type: "celebrity" },
+    { name: "Ralph Lauren", issue: "AD Oct 2004", location: "Bedford, NY", type: "celebrity" },
+    { name: "Martha Stewart", issue: "AD Jul 2005", location: "Bedford, NY", type: "celebrity" }
+  ],
+  quality: {
+    total_features: 89,
+    fields: [
+      { label: "Names", filled: 69, total: 89, pct: 77 },
+      { label: "Location", filled: 61, total: 89, pct: 69 },
+      { label: "Designer", filled: 69, total: 89, pct: 77 },
+      { label: "Year Built", filled: 34, total: 89, pct: 38 },
+      { label: "Style", filled: 28, total: 89, pct: 31 },
+      { label: "Sq Footage", filled: 22, total: 89, pct: 25 }
+    ]
+  },
+  collaborations: [
+    { from: "courier", to: "reader", type: "handoff", label: "Delivering 3 PDFs" }
+  ],
   log: [
-    { time: "14:30", agent: "Courier", event: "Downloading issue #31..." },
-    { time: "14:28", agent: "Reader", event: "Extracted 8 features from November 2013" },
-    { time: "14:25", agent: "Detective", event: "Found match: Miranda Brooks" },
-    { time: "14:20", agent: "Reader", event: "Extracted 6 features from October 2013" },
-    { time: "14:15", agent: "Courier", event: "Downloaded issue #30" },
-    { time: "14:10", agent: "Scout", event: "Discovery complete \u2014 163 issues indexed" }
+    { time: "14:32", agent: "Courier", event: "Downloading AD March 2005..." },
+    { time: "14:30", agent: "Reader", event: "Extracted 8 features from November 2013" },
+    { time: "14:28", agent: "Detective", event: "Match found: Miranda Brooks (Black Book)" },
+    { time: "14:25", agent: "Reader", event: "Extracted 6 features from October 2013" },
+    { time: "14:20", agent: "Courier", event: "Downloaded AD issue #31" },
+    { time: "14:15", agent: "Scout", event: "Discovery complete \u2014 163 issues indexed" },
+    { time: "14:10", agent: "Courier", event: "Downloaded AD issue #30" },
+    { time: "14:05", agent: "Reader", event: "Found George Clooney in Nov 2013" },
+    { time: "14:00", agent: "Detective", event: "Checked 45 names, 1 match so far" }
   ]
 };
+
+// ── Demo Animation Loop ──
+let demoStep = 0;
+function runDemoLoop() {
+  if (!FORCE_DEMO) return;
+  demoStep++;
+
+  switch (demoStep % 12) {
+    case 1:
+      triggerCollaboration('courier', 'reader', 'Delivering 3 PDFs');
+      updateSpeechBubble('courier', 'Here are 3 new PDFs!');
+      updateSpeechBubble('reader', 'Thanks, I\'ll start reading!');
+      break;
+    case 4:
+      triggerCollaboration('reader', 'detective', '12 names to check');
+      updateSpeechBubble('reader', 'Found 12 names to check');
+      updateSpeechBubble('detective', 'On it!');
+      break;
+    case 7:
+      updateSpeechBubble('detective', 'Match found: Miranda Brooks!');
+      const el = agentCharElements['detective'];
+      if (el) {
+        el.classList.remove('anim-idle');
+        el.classList.add('anim-working');
+        setTimeout(() => {
+          el.classList.remove('anim-working');
+          el.classList.add('anim-idle');
+        }, 2000);
+      }
+      break;
+    case 10:
+      updateSpeechBubble('scout', 'Checking for new issues...');
+      break;
+  }
+  setTimeout(runDemoLoop, 5000);
+}
 
 // ── Fetch & Poll ──
 async function fetchStatus() {
   if (FORCE_DEMO) {
     renderAll(DEMO_DATA);
+    if (demoStep === 0) setTimeout(runDemoLoop, 3000);
     return;
   }
 
@@ -902,7 +1473,6 @@ async function fetchStatus() {
     currentState = data;
     renderAll(data);
   } catch (e) {
-    // Try demo-status.json as fallback
     try {
       const demoResp = await fetch('demo-status.json?t=' + Date.now());
       if (demoResp.ok) {
@@ -912,22 +1482,16 @@ async function fetchStatus() {
         return;
       }
     } catch (_) {}
-
-    // Final fallback: built-in demo
     console.log('Using built-in demo data:', e.message);
     renderAll(DEMO_DATA);
   }
 }
 
 // ── Sound ──
-function initSound() {
-  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-}
-
+function initSound() { audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
 function toggleSound() {
   const btn = document.getElementById('sound-toggle');
   soundOn = !soundOn;
-
   if (soundOn) {
     if (!audioCtx) initSound();
     btn.textContent = 'SFX ON';
@@ -939,47 +1503,44 @@ function toggleSound() {
     stopAmbient();
   }
 }
-
 function startAmbient() {
   if (!audioCtx || ambientOsc) return;
-
-  // Gentle low-frequency hum (like a retro computer room)
   ambientOsc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
-  ambientOsc.type = 'sine';
-  ambientOsc.frequency.value = 80;
-  gain.gain.value = 0.03;
-  ambientOsc.connect(gain);
-  gain.connect(audioCtx.destination);
+  ambientOsc.type = 'sine'; ambientOsc.frequency.value = 80;
+  gain.gain.value = 0.02;
+  ambientOsc.connect(gain); gain.connect(audioCtx.destination);
   ambientOsc.start();
-
-  // Add a secondary higher tone
-  const osc2 = audioCtx.createOscillator();
-  const gain2 = audioCtx.createGain();
-  osc2.type = 'triangle';
-  osc2.frequency.value = 220;
-  gain2.gain.value = 0.008;
-  osc2.connect(gain2);
-  gain2.connect(audioCtx.destination);
-  osc2.start();
-  ambientOsc._secondary = { osc: osc2, gain: gain2 };
 }
-
 function stopAmbient() {
-  if (ambientOsc) {
-    ambientOsc.stop();
-    if (ambientOsc._secondary) {
-      ambientOsc._secondary.osc.stop();
-    }
-    ambientOsc = null;
-  }
+  if (ambientOsc) { ambientOsc.stop(); ambientOsc = null; }
 }
+function playCollabSound() {
+  if (!audioCtx) return;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.setValueAtTime(330, audioCtx.currentTime);
+  osc.frequency.linearRampToValueAtTime(660, audioCtx.currentTime + 0.15);
+  gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+  gain.gain.linearRampToValueAtTime(0, audioCtx.currentTime + 0.2);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(); osc.stop(audioCtx.currentTime + 0.2);
+}
+
+// ── Scale to fit window ──
+function scaleDashboard() {
+  const el = document.querySelector('.dashboard');
+  const scaleX = window.innerWidth / 1920;
+  const scaleY = window.innerHeight / 1080;
+  const scale = Math.min(scaleX, scaleY);
+  el.style.transform = `scale(${scale})`;
+}
+scaleDashboard();
+window.addEventListener('resize', scaleDashboard);
 
 // ── Init ──
-document.getElementById('sound-toggle').addEventListener('click', toggleSound);
-
-fetchStatus();
-setInterval(fetchStatus, POLL_MS);
+init();
 </script>
 </body>
 </html>

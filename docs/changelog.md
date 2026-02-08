@@ -6,6 +6,36 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-08 (Session 4)
+
+### Added — Agent Office Horizontal Dashboard Redesign
+- Restructured `tools/agent-office/agent-office.html` from vertical layout to 3-column CSS Grid dashboard (left panel, center office scene, right panel)
+- **Left panel:** Pipeline funnel visualization, queue depth indicators, "Now Processing" per-agent status
+- **Right panel:** Activity log with agent filter buttons, Notable Finds (celebrities + Epstein matches), Data Quality progress bars
+- **Top bar:** Horizontal stats strip (Discovered, Downloaded, Extracted, Features, Matches)
+- Fixed 1920x1080 design with JS `transform: scale()` for uniform viewport scaling
+- New rendering functions: `renderPipeline()`, `renderQueueDepths()`, `renderNowProcessing()`, `renderLogWithFilters()`, `renderNotableFinds()`, `renderQuality()`, `renderTopStats()`
+- Extended `DEMO_DATA` with all new dashboard fields
+
+### Added — Agent Status Adapter Expansion (`src/agent_status.py`)
+- 5 new builder functions: `build_pipeline()`, `build_queue_depths()`, `build_now_processing()`, `build_notable_finds()`, `build_quality()`
+- `read_extractions()` now returns `feature_list` with full homeowner details for Notable Finds
+- `CELEBRITY_NAMES` list for tagging celebrity homeowners in extraction data
+
+### Added — Pixel Art Visual Depth System
+- 7-layer z-index system for isometric depth: back desks → back agents → front desks → front agents → collab lines → UI
+- CSS `::after` pseudo-element shadows under each agent (radial gradient ellipse)
+- Reader and Detective agents render above all other layers for front-row depth
+- Swapped office background to `bg-office-clear-new.png` for brighter palette
+- Adjusted Scout/Courier positions down 5% to avoid wall overlap
+
+### Changed
+- Font sizes increased across all dashboard panels (5-7px → 7-9px) for readability
+- Panel padding increased from 12px to 16px
+- Grid proportions: `1.2fr 2fr 1.3fr` for wider side panels
+
+---
+
 ## 2026-02-07 (Session 3)
 
 ### Changed — Extraction Engine: Gemini → Claude Sonnet

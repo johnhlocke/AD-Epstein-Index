@@ -51,14 +51,15 @@ def read_manifest():
 
 
 def read_extractions():
-    """Read extraction results and return summary."""
+    """Read extraction results and return summary + feature list."""
     if not os.path.exists(EXTRACTIONS_DIR):
-        return {"extracted": 0, "skipped": 0, "features": 0, "nulls": 0}
+        return {"extracted": 0, "skipped": 0, "features": 0, "nulls": 0, "feature_list": []}
 
     extracted = 0
     skipped = 0
     features = 0
     nulls = 0
+    feature_list = []
 
     for fname in os.listdir(EXTRACTIONS_DIR):
         if not fname.endswith(".json"):
@@ -69,12 +70,32 @@ def read_extractions():
             skipped += 1
         else:
             extracted += 1
+            issue_label = data.get("title", fname.replace(".json", ""))
+            month = data.get("verified_month") or data.get("month")
+            year = data.get("verified_year") or data.get("year")
             for feat in data.get("features", []):
                 features += 1
                 if not feat.get("homeowner_name"):
                     nulls += 1
+                feature_list.append({
+                    "homeowner_name": feat.get("homeowner_name"),
+                    "designer_name": feat.get("designer_name"),
+                    "location_city": feat.get("location_city"),
+                    "location_state": feat.get("location_state"),
+                    "location_country": feat.get("location_country"),
+                    "design_style": feat.get("design_style"),
+                    "year_built": feat.get("year_built"),
+                    "square_footage": feat.get("square_footage"),
+                    "issue": issue_label,
+                    "month": month,
+                    "year": year,
+                })
 
-    return {"extracted": extracted, "skipped": skipped, "features": features, "nulls": nulls}
+    return {
+        "extracted": extracted, "skipped": skipped,
+        "features": features, "nulls": nulls,
+        "feature_list": feature_list,
+    }
 
 
 def read_xref():
@@ -105,6 +126,43 @@ def determine_agent_status(current, total, has_data):
     if current > 0:
         return "working"
     return "idle"
+
+
+def build_collaborations(manifest_stats, extraction_stats, xref_stats):
+    """Detect handoff events between agents based on pipeline state."""
+    collaborations = []
+
+    # Courier → Reader: when there are downloads that haven't been extracted yet
+    unextracted = manifest_stats["downloaded"] - extraction_stats["extracted"]
+    if unextracted > 0 and extraction_stats["extracted"] > 0:
+        collaborations.append({
+            "from": "courier",
+            "to": "reader",
+            "type": "handoff",
+            "label": f"{unextracted} PDFs to extract"
+        })
+
+    # Reader → Detective: when there are features that haven't been cross-referenced yet
+    unchecked = extraction_stats["features"] - xref_stats["checked"]
+    if unchecked > 0 and xref_stats["checked"] > 0:
+        collaborations.append({
+            "from": "reader",
+            "to": "detective",
+            "type": "handoff",
+            "label": f"{unchecked} names to check"
+        })
+
+    # Scout → Courier: when there are discovered issues not yet downloaded
+    undownloaded = manifest_stats["total"] - manifest_stats["downloaded"] - manifest_stats["skipped"] - manifest_stats["no_pdf"]
+    if undownloaded > 0 and manifest_stats["downloaded"] > 0:
+        collaborations.append({
+            "from": "scout",
+            "to": "courier",
+            "type": "handoff",
+            "label": f"{undownloaded} issues queued"
+        })
+
+    return collaborations
 
 
 def build_log(manifest_stats, extraction_stats, xref_stats):
@@ -155,6 +213,169 @@ def build_log(manifest_stats, extraction_stats, xref_stats):
         })
 
     return log
+
+
+def build_pipeline(manifest_stats, extraction_stats, xref_stats):
+    """Build pipeline funnel: stages with counts for visualization."""
+    return [
+        {
+            "stage": "Discovered",
+            "agent": "scout",
+            "count": manifest_stats["total"],
+            "color": "#e74c3c",
+        },
+        {
+            "stage": "Downloaded",
+            "agent": "courier",
+            "count": manifest_stats["downloaded"],
+            "color": "#3498db",
+        },
+        {
+            "stage": "Extracted",
+            "agent": "reader",
+            "count": extraction_stats["extracted"],
+            "color": "#2ecc71",
+        },
+        {
+            "stage": "Cross-Ref'd",
+            "agent": "detective",
+            "count": xref_stats["checked"],
+            "color": "#9b59b6",
+        },
+    ]
+
+
+def build_queue_depths(manifest_stats, extraction_stats, xref_stats):
+    """Build queue depth between pipeline stages."""
+    awaiting_download = (manifest_stats["total"]
+                         - manifest_stats["downloaded"]
+                         - manifest_stats["skipped"]
+                         - manifest_stats["no_pdf"])
+    awaiting_extraction = manifest_stats["downloaded"] - extraction_stats["extracted"]
+    awaiting_xref = extraction_stats["features"] - xref_stats["checked"]
+
+    return [
+        {"label": "awaiting download", "count": max(0, awaiting_download), "color": "#3498db"},
+        {"label": "awaiting extraction", "count": max(0, awaiting_extraction), "color": "#2ecc71"},
+        {"label": "awaiting xref", "count": max(0, awaiting_xref), "color": "#9b59b6"},
+    ]
+
+
+def build_now_processing(manifest_stats, extraction_stats, xref_stats):
+    """Infer what each agent is currently doing."""
+    now = {}
+    awaiting_download = (manifest_stats["total"]
+                         - manifest_stats["downloaded"]
+                         - manifest_stats["skipped"]
+                         - manifest_stats["no_pdf"])
+    awaiting_extraction = manifest_stats["downloaded"] - extraction_stats["extracted"]
+    awaiting_xref = extraction_stats["features"] - xref_stats["checked"]
+
+    if manifest_stats["total"] == 0:
+        now["scout"] = {"task": "Ready to discover", "active": False}
+    else:
+        now["scout"] = {"task": f"Indexed {manifest_stats['total']} issues", "active": False}
+
+    if awaiting_download > 0:
+        now["courier"] = {"task": f"Downloading ({awaiting_download} remaining)", "active": True}
+    elif manifest_stats["downloaded"] > 0:
+        now["courier"] = {"task": f"All {manifest_stats['downloaded']} downloaded", "active": False}
+    else:
+        now["courier"] = {"task": "Waiting for Scout", "active": False}
+
+    if awaiting_extraction > 0:
+        now["reader"] = {"task": f"Extracting ({awaiting_extraction} remaining)", "active": True}
+    elif extraction_stats["extracted"] > 0:
+        now["reader"] = {"task": f"All {extraction_stats['extracted']} extracted", "active": False}
+    else:
+        now["reader"] = {"task": "Waiting for Courier", "active": False}
+
+    if awaiting_xref > 0:
+        now["detective"] = {"task": f"Checking ({awaiting_xref} remaining)", "active": True}
+    elif xref_stats["checked"] > 0:
+        now["detective"] = {"task": f"All {xref_stats['checked']} checked", "active": False}
+    else:
+        now["detective"] = {"task": "Waiting for Reader", "active": False}
+
+    return now
+
+
+# Notable names to tag as celebrity (case-insensitive partial match on last name)
+CELEBRITY_NAMES = [
+    "clooney", "crawford", "redford", "lauren", "berkus", "stewart",
+    "broad", "systrom", "spielberg", "oprah", "pitt", "jolie",
+    "kardashian", "jenner", "streisand", "cher", "madonna",
+    "degeneres", "hanks", "bono", "bloomberg", "bezos", "musk",
+    "zuckerberg", "gates", "buffett", "walton", "koch", "trump",
+    "clinton", "obama", "bush", "kennedy", "rockefeller", "vanderbilt",
+    "hilton", "winfrey", "gerber", "hirtenstein", "lebedev",
+]
+
+
+def build_notable_finds(extraction_stats, xref_stats):
+    """Scan features for notable/celebrity names and Epstein matches."""
+    finds = []
+    seen = set()
+
+    for feat in extraction_stats.get("feature_list", []):
+        name = feat.get("homeowner_name")
+        if not name:
+            continue
+
+        # Deduplicate by lowercase name
+        key = name.lower().strip()
+        if key in seen:
+            continue
+        seen.add(key)
+
+        location_parts = [
+            feat.get("location_city"),
+            feat.get("location_state"),
+            feat.get("location_country"),
+        ]
+        location = ", ".join(p for p in location_parts if p)
+
+        # Check if celebrity
+        name_lower = name.lower()
+        is_celebrity = any(celeb in name_lower for celeb in CELEBRITY_NAMES)
+
+        if is_celebrity:
+            finds.append({
+                "name": name,
+                "issue": feat.get("issue", ""),
+                "location": location,
+                "type": "celebrity",
+            })
+
+    # Sort: epstein matches first, then celebrities
+    type_order = {"epstein_match": 0, "celebrity": 1, "notable": 2}
+    finds.sort(key=lambda f: type_order.get(f["type"], 3))
+
+    return finds
+
+
+def build_quality(extraction_stats):
+    """Compute field completion rates across all features."""
+    feature_list = extraction_stats.get("feature_list", [])
+    total = len(feature_list)
+    if total == 0:
+        return {"total_features": 0, "fields": []}
+
+    fields = [
+        ("Names", "homeowner_name"),
+        ("Location", "location_city"),
+        ("Designer", "designer_name"),
+        ("Year Built", "year_built"),
+        ("Style", "design_style"),
+        ("Sq Footage", "square_footage"),
+    ]
+    result = []
+    for label, key in fields:
+        filled = sum(1 for f in feature_list if f.get(key))
+        pct = round(100 * filled / total)
+        result.append({"label": label, "filled": filled, "total": total, "pct": pct})
+
+    return {"total_features": total, "fields": result}
 
 
 def generate_status():
@@ -259,7 +480,13 @@ def generate_status():
             {"label": "Features", "value": extraction_stats["features"]},
             {"label": "XRef Matches", "value": xref_stats["matches"]}
         ],
-        "log": build_log(manifest_stats, extraction_stats, xref_stats)
+        "collaborations": build_collaborations(manifest_stats, extraction_stats, xref_stats),
+        "log": build_log(manifest_stats, extraction_stats, xref_stats),
+        "pipeline": build_pipeline(manifest_stats, extraction_stats, xref_stats),
+        "queue_depths": build_queue_depths(manifest_stats, extraction_stats, xref_stats),
+        "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats),
+        "notable_finds": build_notable_finds(extraction_stats, xref_stats),
+        "quality": build_quality(extraction_stats),
     }
 
     return status

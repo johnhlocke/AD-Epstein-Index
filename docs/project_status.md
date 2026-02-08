@@ -26,6 +26,7 @@ This file should be automatically updated when necessary to answer three key que
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
 | Batch cross-reference all extracted names | Phase 2 | In Progress |
+| Build Agent Office dashboard (pixel art + data panels) | Tooling | Done |
 | Build interactive website | Phase 3 | Not Started |
 | Deploy website publicly | Phase 3 | Not Started |
 
@@ -79,6 +80,16 @@ This file should be automatically updated when necessary to answer three key que
 **Database schema updates:**
 - `matches` table: confidence scoring (high/medium/low) with rationale and manual review flags
 - `black_book_matches` table designed (commented out, for Phase 2 activation)
+
+### Tooling: Agent Office Dashboard
+- Built pixel-art Agent Office visualization (`tools/agent-office/agent-office.html`) showing 4 pipeline agents (Scout, Courier, Reader, Detective) working at their desks
+- Redesigned to 3-column horizontal layout: left panel (pipeline funnel, queues, now processing), center (pixel-art office scene), right panel (activity log, notable finds, data quality)
+- `src/agent_status.py` generates `status.json` from live pipeline data (manifest, extractions, cross-references)
+- Fixed 1920x1080 design with JS scaling for any viewport
+- 7-layer depth system with agent shadows for isometric visual depth
+- Activity log with per-agent filter buttons
+- Notable Finds highlights celebrities (George Clooney, Cindy Crawford, Robert Redford) and Epstein matches (Miranda Brooks)
+- Data Quality bars show field completion rates across all extractions
 
 ## 3. What's Next
 

@@ -17,3 +17,10 @@ data/
 
 # OS
 .DS_Store
+
+# Screenshots (dev artifacts)
+*.png
+!tools/agent-office/*.png
+
+# Playwright MCP
+.playwright-mcp/

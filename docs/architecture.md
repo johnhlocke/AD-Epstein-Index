@@ -93,6 +93,8 @@ High-level system architecture, data flow, and component relationships.
 | Black Book Search Agent | Search Epstein's Little Black Book | Grep (`.claude/commands/black-book-search.md`) |
 | Database | Store structured home/person data | Supabase (PostgreSQL) |
 | Image Storage | Article images for matched homeowners only | Supabase Storage (bucket: feature-images) |
+| Agent Office Dashboard | Pixel-art visualization of pipeline agents | HTML/CSS/JS (`tools/agent-office/agent-office.html`) |
+| Agent Status Adapter | Generates status.json from pipeline data | Python (`src/agent_status.py`) |
 | Website | Public-facing visualizations | Next.js, Tailwind, Shadcn UI (Phase 3) |
 
 ## Database Schema
