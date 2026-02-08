@@ -1,0 +1,342 @@
+"""
+Cross-reference AD homeowner names against Epstein data sources.
+
+Searches:
+1. Epstein's Little Black Book (local text file — fast)
+2. DOJ Epstein Library (justice.gov — requires Playwright, queued for manual/agent review)
+
+Designed to run in parallel with the pipeline agent. Queries Supabase for
+features that haven't been cross-referenced yet.
+
+Usage:
+    python3 src/cross_reference.py                # Check all unchecked names
+    python3 src/cross_reference.py --name "John"  # Search a specific name
+    python3 src/cross_reference.py --status        # Show cross-reference progress
+"""
+
+import json
+import os
+import re
+import sys
+from dotenv import load_dotenv
+from supabase import create_client
+
+load_dotenv()
+
+DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+BLACK_BOOK_PATH = os.path.join(DATA_DIR, "black_book.txt")
+XREF_DIR = os.path.join(DATA_DIR, "cross_references")
+
+url = os.getenv("SUPABASE_URL")
+key = os.getenv("SUPABASE_ANON_KEY")
+supabase = create_client(url, key)
+
+# Names to skip (not real people, generic words, or known false positives)
+SKIP_NAMES = {"anonymous", "unknown", "none", "n/a", "", "others", "and others",
+              "the", "brothers", "hotel", "studio", "associates", "group",
+              "house", "estate", "residence", "apartment", "villa", "palace",
+              "design", "modern", "classic", "gallery"}
+
+# Minimum name length to search (avoids matching single first names like "Kevin")
+MIN_NAME_LENGTH = 2  # Must have at least first + last name
+
+
+def load_black_book():
+    """Load the Black Book text file into memory."""
+    if not os.path.exists(BLACK_BOOK_PATH):
+        print("Warning: Black Book text file not found at", BLACK_BOOK_PATH)
+        return ""
+    with open(BLACK_BOOK_PATH) as f:
+        return f.read()
+
+
+def search_black_book(name, book_text):
+    """Search the Black Book for a name. Returns match details or None."""
+    if not book_text or not name:
+        return None
+
+    # Clean the name
+    name = name.strip()
+    if name.lower() in SKIP_NAMES:
+        return None
+
+    # Split into individual names if multiple people listed
+    # e.g., "Jane & Max Gottschalk" → ["Jane Gottschalk", "Max Gottschalk"]
+    individual_names = split_names(name)
+
+    results = []
+    for individual in individual_names:
+        matches = _search_single_name(individual, book_text)
+        if matches:
+            results.extend(matches)
+
+    return results if results else None
+
+
+def split_names(name):
+    """Split compound names into individuals, filtering out non-name words.
+
+    Handles patterns like:
+    - "Jane & Max Gottschalk" → ["Jane Gottschalk", "Max Gottschalk"]
+    - "Kevin and Nicole" → [] (no last name, filtered out)
+    - "Tom Kundig, Jamie Bush" → ["Tom Kundig", "Jamie Bush"]
+    """
+    # Strip leading articles
+    name = re.sub(r"^(The|the)\s+", "", name)
+
+    # Strip trailing qualifiers like "and others", "et al"
+    name = re.sub(r",?\s*(and others|et al\.?)$", "", name, flags=re.IGNORECASE)
+
+    # Handle "First & First Last" pattern
+    name = name.replace(" and ", " & ")
+    if " & " in name:
+        parts = name.split(" & ")
+        if len(parts) == 2:
+            # Get the last name from the second part
+            second_parts = parts[1].strip().split()
+            if len(second_parts) >= 2:
+                last_name = second_parts[-1]
+                first_names = [parts[0].strip(), parts[1].strip()]
+                # Check if first part already has a last name
+                first_parts = parts[0].strip().split()
+                if len(first_parts) == 1:
+                    first_names[0] = f"{first_parts[0]} {last_name}"
+                return _filter_names(first_names)
+            # Both parts are single words (e.g., "Kevin & Nicole") — no last name
+            return _filter_names([parts[0].strip(), parts[1].strip()])
+
+    # Handle comma-separated names
+    if ", " in name and not re.match(r"^[A-Z][a-z]+, [A-Z][a-z]+$", name):
+        # Multiple names separated by commas (but not "Last, First" format)
+        return _filter_names([n.strip() for n in name.split(",") if n.strip()])
+
+    return _filter_names([name])
+
+
+def _filter_names(names):
+    """Remove non-name entries from a list of names."""
+    filtered = []
+    for n in names:
+        if n.lower() in SKIP_NAMES:
+            continue
+        words = n.split()
+        if len(words) < MIN_NAME_LENGTH:
+            continue
+        # Skip if any word in the name is a skip word (e.g., "Danaos brothers")
+        if any(w.lower() in SKIP_NAMES for w in words):
+            continue
+        filtered.append(n)
+    return filtered
+
+
+def _word_boundary_search(term, text):
+    """Check if term appears as a whole word (not substring) in text."""
+    pattern = r'\b' + re.escape(term) + r'\b'
+    return re.search(pattern, text, re.IGNORECASE)
+
+
+def _search_single_name(name, book_text):
+    """Search for a single name in the Black Book.
+
+    Uses word-boundary matching to avoid substring false positives
+    (e.g., "Bush" matching "Bushnell", "Sultana" matching "Sultanate").
+    """
+    parts = name.strip().split()
+    if len(parts) < MIN_NAME_LENGTH:
+        # Skip single-word names (first name only, generic words)
+        return None
+
+    matches = []
+
+    # Strategy 1: Full name search (word boundary)
+    if _word_boundary_search(name, book_text):
+        context = _get_context(name, book_text)
+        matches.append({"query": name, "match_type": "full_name", "context": context})
+
+    # Strategy 2: Last, First format (most reliable for Black Book)
+    if len(parts) >= 2:
+        last_name = parts[-1]
+        first_name = parts[0]
+
+        if len(last_name) > 3:
+            # Check for "Last, First" format (common in the book) — high confidence
+            pattern = f"{last_name}, {first_name}"
+            if _word_boundary_search(pattern, book_text):
+                context = _get_context(pattern, book_text)
+                matches.append({"query": pattern, "match_type": "last_first", "context": context})
+            # Only fall back to last-name-only if the last name is uncommon (5+ chars)
+            # and we haven't found a better match
+            elif not matches and len(last_name) >= 5:
+                if _word_boundary_search(last_name, book_text):
+                    context = _get_context(last_name, book_text)
+                    matches.append({"query": last_name, "match_type": "last_name_only", "context": context})
+
+    return matches if matches else None
+
+
+def _get_context(search_term, text, context_lines=5):
+    """Get surrounding context for a match in the text."""
+    lines = text.split("\n")
+    search_lower = search_term.lower()
+
+    for i, line in enumerate(lines):
+        if search_lower in line.lower():
+            start = max(0, i - 1)
+            end = min(len(lines), i + context_lines)
+            return "\n".join(lines[start:end]).strip()
+
+    return None
+
+
+def get_unchecked_features():
+    """Get features from Supabase that haven't been cross-referenced yet."""
+    # Get all features
+    result = supabase.table("features").select("*").execute()
+    features = result.data
+
+    # Load existing cross-reference results
+    os.makedirs(XREF_DIR, exist_ok=True)
+    checked_path = os.path.join(XREF_DIR, "checked_features.json")
+    if os.path.exists(checked_path):
+        with open(checked_path) as f:
+            checked_ids = set(json.load(f))
+    else:
+        checked_ids = set()
+
+    unchecked = [f for f in features if f["id"] not in checked_ids]
+    return unchecked, checked_ids
+
+
+def save_checked_ids(checked_ids):
+    """Save the set of checked feature IDs."""
+    checked_path = os.path.join(XREF_DIR, "checked_features.json")
+    with open(checked_path, "w") as f:
+        json.dump(sorted(checked_ids), f)
+
+
+def cross_reference_all():
+    """Run cross-reference on all unchecked features."""
+    unchecked, checked_ids = get_unchecked_features()
+
+    if not unchecked:
+        print("All features have been cross-referenced.")
+        return
+
+    print(f"Cross-referencing {len(unchecked)} unchecked features...\n")
+
+    book_text = load_black_book()
+    results_path = os.path.join(XREF_DIR, "results.json")
+
+    # Load existing results
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            all_results = json.load(f)
+    else:
+        all_results = []
+
+    black_book_hits = 0
+    doj_queue = []
+
+    for feature in unchecked:
+        name = feature.get("homeowner_name")
+        feature_id = feature["id"]
+
+        if not name or name.strip().lower() in SKIP_NAMES:
+            checked_ids.add(feature_id)
+            continue
+
+        print(f"  Checking: {name}")
+
+        # Black Book search
+        bb_matches = search_black_book(name, book_text)
+        bb_status = "match" if bb_matches else "no_match"
+        if bb_matches:
+            black_book_hits += 1
+            print(f"    BLACK BOOK MATCH: {bb_matches[0]['query']} ({bb_matches[0]['match_type']})")
+
+        result = {
+            "feature_id": feature_id,
+            "homeowner_name": name,
+            "black_book_status": bb_status,
+            "black_book_matches": bb_matches,
+            "doj_status": "pending",  # Needs Playwright agent
+            "doj_results": None,
+        }
+
+        all_results.append(result)
+        checked_ids.add(feature_id)
+
+        # Queue for DOJ search (to be done by epstein-search agent)
+        doj_queue.append(name)
+
+    # Save results
+    os.makedirs(XREF_DIR, exist_ok=True)
+    with open(results_path, "w") as f:
+        json.dump(all_results, f, indent=2)
+    save_checked_ids(checked_ids)
+
+    # Save DOJ queue for the epstein-search agent
+    queue_path = os.path.join(XREF_DIR, "doj_search_queue.json")
+    with open(queue_path, "w") as f:
+        json.dump(doj_queue, f, indent=2)
+
+    print(f"\nCross-reference complete!")
+    print(f"  Black Book matches: {black_book_hits}")
+    print(f"  DOJ searches queued: {len(doj_queue)} (run /epstein-search for each)")
+    print(f"  Results saved to: {results_path}")
+
+
+def search_single_name(name):
+    """Search a specific name against all sources."""
+    book_text = load_black_book()
+
+    print(f"Searching for: {name}\n")
+
+    # Black Book
+    bb_matches = search_black_book(name, book_text)
+    if bb_matches:
+        print("BLACK BOOK:")
+        for m in bb_matches:
+            print(f"  Match type: {m['match_type']}")
+            print(f"  Query: {m['query']}")
+            if m.get("context"):
+                print(f"  Context:\n    {m['context'][:300]}")
+            print()
+    else:
+        print("BLACK BOOK: No match\n")
+
+    print("DOJ EPSTEIN LIBRARY: Use /epstein-search to check interactively")
+
+
+def show_status():
+    """Show cross-reference progress."""
+    unchecked, checked_ids = get_unchecked_features()
+    total = len(unchecked) + len(checked_ids)
+
+    print("=" * 50)
+    print("Cross-Reference Status")
+    print("=" * 50)
+    print(f"  Total features: {total}")
+    print(f"  Checked: {len(checked_ids)}")
+    print(f"  Unchecked: {len(unchecked)}")
+
+    results_path = os.path.join(XREF_DIR, "results.json")
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            results = json.load(f)
+        bb_matches = sum(1 for r in results if r["black_book_status"] == "match")
+        doj_pending = sum(1 for r in results if r["doj_status"] == "pending")
+        print(f"\n  Black Book matches: {bb_matches}")
+        print(f"  DOJ searches pending: {doj_pending}")
+    print("=" * 50)
+
+
+if __name__ == "__main__":
+    if "--status" in sys.argv:
+        show_status()
+    elif "--name" in sys.argv:
+        idx = sys.argv.index("--name")
+        name = sys.argv[idx + 1]
+        search_single_name(name)
+    else:
+        cross_reference_all()

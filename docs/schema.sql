@@ -19,6 +19,8 @@ CREATE TABLE issues (
 CREATE TABLE features (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   issue_id BIGINT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
+  month INTEGER CHECK (month BETWEEN 1 AND 12),
+  year INTEGER CHECK (year BETWEEN 1920 AND 2100),
   article_title TEXT,
   homeowner_name TEXT,
   designer_name TEXT,

@@ -6,6 +6,46 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-07 (Session 3)
+
+### Changed — Extraction Engine: Gemini → Claude Sonnet
+- Migrated `src/extract_features.py` from Gemini 2.0 Flash to Claude Sonnet (`claude-sonnet-4-5-20250929`) for significantly better extraction quality
+- Replaced `google.genai` SDK with `anthropic` SDK (v0.79.0)
+- New image encoding: base64 content blocks instead of `types.Part.from_bytes()`
+- New API call function: `call_claude_with_retry()` with exponential backoff for rate limits and overloaded errors
+- Updated all callers: `verify_date()`, `find_articles_from_toc()`, `detect_page_offset()`, `_call_extraction()`
+
+### Added — Extraction Quality Improvements
+- **Auto page offset detection** (`detect_page_offset()`): Samples interior pages (20, 30, 50) to auto-detect the offset between PDF page numbers and printed magazine page numbers
+- **Expanded TOC scanning**: Now reads pages 1-20 (was 1-12) to catch TOCs deeper in the magazine
+- **Nearby-page retry**: When homeowner_name comes back NULL, retries with expanded range (±3 pages around target)
+- **3 pages per article** (was 2) for better context
+- **Minimum features threshold**: `MIN_FEATURES_PER_ISSUE = 3` — if fewer features found from TOC, supplements with page scanning (every 8 pages)
+- **`--reextract` CLI flag**: Re-processes issues with NULL homeowners or too few features
+- **`find_issues_needing_reextraction()`**: Replaces `find_issues_with_nulls()`, catches both NULLs and under-extracted issues
+- **TOC prompt improvements**: More inclusive (includes "AD Visits"), notes typical issue has 4-8 features
+- **String "null" cleanup**: Converts "null"/"None" strings to actual None in extracted data
+
+### Added — Cross-Reference Engine (`src/cross_reference.py`)
+- Built automated cross-reference engine for batch processing all extracted names
+- Word-boundary matching (`re.search(r'\b' + re.escape(term) + r'\b', ...)`) prevents false positives (Bush≠Bushnell, Sultana≠Sultanate)
+- Minimum 5-char last name for `last_name_only` matches
+- Strips "and others", "et al" from compound names
+- Individual word checking against SKIP_NAMES list
+- Searches both DOJ Epstein Library (Playwright) and Little Black Book (text grep)
+
+### Fixed
+- NULL extraction results reduced from 9 to 5 across all issues (via expanded TOC, auto offset, nearby-page retry)
+- Cross-reference false positives eliminated: Bush/Bushnell, Sultana/Sultanate, "brothers"/"others", "Kevin and Nicole" (no last name)
+- Under-extracted issues (Oct 2019, Nov 2019, Jul/Aug 2020 had only 1 feature each) — addressed with MIN_FEATURES and supplemental scanning
+
+### Progress
+- 32 PDFs downloaded from archive.org (16 post-1988 usable, 16 pre-1925 skipped)
+- 15 issues extracted with homeowner data
+- Cross-reference results: Miranda Brooks is the only real Black Book match so far
+
+---
+
 ## 2026-02-07 (Session 2)
 
 ### Added — PDF Ingestion Pipeline

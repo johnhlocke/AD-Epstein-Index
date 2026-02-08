@@ -9,7 +9,7 @@ High-level system architecture, data flow, and component relationships.
 │                   Phase 1: Data Ingestion               │
 │                                                         │
 │  archive.org API ──► Download PDFs ──► pdftoppm (PNG)   │
-│                                        ──► Gemini Vision ──► JSON ──► Supabase │
+│                                        ──► Claude Vision ──► JSON ──► Supabase │
 └─────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -48,8 +48,8 @@ High-level system architecture, data flow, and component relationships.
 ┌──────────────┐    ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
 │   Discover   │───►│   Download   │───►│   Extract    │───►│     Load     │
 │              │    │              │    │              │    │              │
-│ archive.org  │    │ PDFs from    │    │ Gemini 2.0   │    │ JSON → Supa- │
-│ search API   │    │ archive.org  │    │ Flash Vision │    │ base tables  │
+│ archive.org  │    │ PDFs from    │    │ Claude       │    │ JSON → Supa- │
+│ search API   │    │ archive.org  │    │ Sonnet Vision│    │ base tables  │
 │              │    │              │    │              │    │              │
 │ Output:      │    │ Output:      │    │ Output:      │    │ Output:      │
 │ manifest.json│    │ data/issues/ │    │ data/extrac- │    │ issues +     │
@@ -60,17 +60,21 @@ High-level system architecture, data flow, and component relationships.
 **Orchestrator:** `python3 src/pipeline.py [discover|download|extract|load|run|status]`
 
 ### Extraction Strategy
-1. Convert first 12 PDF pages to images (covers + table of contents)
-2. Send TOC pages to Gemini Vision → identifies featured home articles with page numbers
-3. For each article: convert opening 2 pages to images
-4. Send article pages to Gemini Vision → extracts structured data (homeowner, designer, location, etc.)
-5. Save results as JSON, then load into Supabase
+1. Verify publication date from cover page (2 pages)
+2. Convert first 20 PDF pages to images (covers + table of contents)
+3. Send TOC pages to Claude Vision → identifies featured home articles with page numbers + calculates page offset
+4. Auto-detect page offset if TOC doesn't provide it (samples pages 20, 30, 50)
+5. For each article: convert opening 3 pages to images
+6. Send article pages to Claude Vision → extracts structured data (homeowner, designer, location, etc.)
+7. If homeowner_name is NULL, retry with expanded page range (±3 pages)
+8. If fewer than 3 features found, supplement with page scanning (every 8 pages)
+9. Save results as JSON, then load into Supabase
 
 ## Data Flow
 
 1. **Discover** — Query archive.org API for AD magazine text items, parse month/year, save manifest
 2. **Download** — Fetch PDFs from archive.org with rate limiting and resume support
-3. **Extract** — Convert PDF pages to PNG (pdftoppm at 150 DPI), send to Gemini 2.0 Flash for structured data extraction
+3. **Extract** — Convert PDF pages to PNG (pdftoppm at 150 DPI), send to Claude Sonnet for structured data extraction
 4. **Load** — Insert issues and features into Supabase with duplicate detection
 5. **Cross-reference** — Match AD homeowner names against DOJ Epstein Library (Playwright) and Little Black Book (text search)
 6. **Serve** — A Next.js website queries the database and renders interactive visualizations
@@ -82,7 +86,8 @@ High-level system architecture, data flow, and component relationships.
 | Pipeline Orchestrator | CLI entry point for all pipeline steps | Python (`src/pipeline.py`) |
 | Archive Discovery | Find AD issues on archive.org | Python, requests (`src/archive_discovery.py`) |
 | Archive Download | Download PDFs with rate limiting | Python, requests (`src/archive_download.py`) |
-| Feature Extraction | Extract homeowner data from PDF pages | Python, Gemini 2.0 Flash, pdftoppm (`src/extract_features.py`) |
+| Feature Extraction | Extract homeowner data from PDF pages | Python, Claude Sonnet (Anthropic SDK), pdftoppm (`src/extract_features.py`) |
+| Cross-Reference Engine | Batch match names against Epstein records | Python, Playwright, grep (`src/cross_reference.py`) |
 | Database Loader | Load JSON extractions into Supabase | Python, supabase-py (`src/load_features.py`) |
 | Epstein Search Agent | Search DOJ Epstein Library | Playwright MCP (`.claude/commands/epstein-search.md`) |
 | Black Book Search Agent | Search Epstein's Little Black Book | Grep (`.claude/commands/black-book-search.md`) |
@@ -109,7 +114,7 @@ See [schema.sql](schema.sql) for full SQL definitions.
 ### Resolved
 - **Database:** Supabase (PostgreSQL) — shared across all phases
 - **Image storage:** Supabase Storage — only for Epstein-matched homeowners
-- **Vision API:** Gemini 2.0 Flash — cheapest option with strong vision capabilities, billing enabled
+- **Vision API:** Claude Sonnet (`claude-sonnet-4-5-20250929`) via Anthropic SDK — migrated from Gemini 2.0 Flash for significantly better extraction quality
 - **PDF source (primary):** Internet Archive (~50 issues available)
 - **PDF processing:** pdftoppm at 150 DPI for page-to-image conversion
 - **Epstein search (primary):** Playwright browser automation on justice.gov/epstein
@@ -120,4 +125,3 @@ See [schema.sql](schema.sql) for full SQL definitions.
 ### Pending
 - Additional PDF sources beyond archive.org
 - Hosting platform for the website
-- Page number offset handling (magazine page numbers vs. PDF page numbers)

@@ -15,6 +15,7 @@ Usage:
 Options:
     --limit N                           # Limit to N items (for download/extract)
     --issue <identifier>                # Process one specific issue (for extract/load)
+    --reextract                         # Re-extract issues with NULL homeowner names
 """
 
 import json
@@ -66,11 +67,17 @@ def show_status():
     if os.path.exists(EXTRACTIONS_DIR):
         extractions = [f for f in os.listdir(EXTRACTIONS_DIR) if f.endswith(".json")]
         total_features = 0
+        skipped_pre1988 = 0
+        processed = 0
         for ext_file in extractions:
             with open(os.path.join(EXTRACTIONS_DIR, ext_file)) as f:
                 ext_data = json.load(f)
-                total_features += len(ext_data.get("features", []))
-        print(f"\nStep 3 (Extract): {len(extractions)} issues extracted")
+                if ext_data.get("skipped"):
+                    skipped_pre1988 += 1
+                else:
+                    processed += 1
+                    total_features += len(ext_data.get("features", []))
+        print(f"\nStep 3 (Extract): {processed} issues extracted, {skipped_pre1988} skipped (pre-1988)")
         print(f"  {total_features} total features found")
     else:
         print(f"\nStep 3 (Extract): Not run yet")
@@ -98,11 +105,11 @@ def run_download(limit=None):
     download_issues(limit=limit)
 
 
-def run_extract(limit=None, identifier=None):
+def run_extract(limit=None, identifier=None, reextract=False):
     """Step 3: Extract features with Gemini Vision."""
     print("\n--- Step 3: Extracting features with Gemini Vision ---\n")
     from extract_features import extract_all
-    extract_all(limit=limit, identifier=identifier)
+    extract_all(limit=limit, identifier=identifier, reextract=reextract)
 
 
 def run_load(identifier=None):
@@ -112,12 +119,20 @@ def run_load(identifier=None):
     load_all(identifier=identifier)
 
 
+def run_xref():
+    """Step 5: Cross-reference names against Epstein sources."""
+    print("\n--- Step 5: Cross-referencing against Epstein sources ---\n")
+    from cross_reference import cross_reference_all
+    cross_reference_all()
+
+
 def run_all(limit=None):
     """Run all steps in sequence."""
     run_discover()
     run_download(limit=limit)
     run_extract(limit=limit)
     run_load()
+    run_xref()
     show_status()
 
 
@@ -131,6 +146,7 @@ def main():
     # Parse optional flags
     limit = None
     identifier = None
+    reextract = "--reextract" in sys.argv
     if "--limit" in sys.argv:
         idx = sys.argv.index("--limit")
         limit = int(sys.argv[idx + 1])
@@ -143,9 +159,11 @@ def main():
     elif command == "download":
         run_download(limit=limit)
     elif command == "extract":
-        run_extract(limit=limit, identifier=identifier)
+        run_extract(limit=limit, identifier=identifier, reextract=reextract)
     elif command == "load":
         run_load(identifier=identifier)
+    elif command == "xref":
+        run_xref()
     elif command == "run":
         run_all(limit=limit)
     elif command == "status":

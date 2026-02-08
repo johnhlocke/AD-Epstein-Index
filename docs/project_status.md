@@ -17,12 +17,15 @@ This file should be automatically updated when necessary to answer three key que
 | Evaluate Epstein data sources | Phase 2 (early) | Done |
 | Set up Playwright MCP server | Phase 2 | Done |
 | Build custom agents (epstein-search, black-book-search) | Phase 2 | Done |
-| Choose vision API for extraction (Gemini 2.0 Flash) | Phase 1 | Done |
+| Choose vision API for extraction (Gemini → Claude Sonnet) | Phase 1 | Done |
 | Build PDF ingestion pipeline (archive.org) | Phase 1 | Done |
 | Test pipeline end-to-end | Phase 1 | Done |
+| Fix extraction quality (NULL results, under-extraction) | Phase 1 | Done |
+| Migrate extraction from Gemini to Claude Sonnet | Phase 1 | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
-| Build cross-reference engine | Phase 2 | Not Started |
+| Build cross-reference engine | Phase 2 | Done |
+| Batch cross-reference all extracted names | Phase 2 | In Progress |
 | Build interactive website | Phase 3 | Not Started |
 | Deploy website publicly | Phase 3 | Not Started |
 
@@ -49,11 +52,12 @@ This file should be automatically updated when necessary to answer three key que
 - Built complete 4-step pipeline: `discover` → `download` → `extract` → `load`
 - `src/archive_discovery.py` — Found 163 AD items on archive.org, parsed month/year for 141
 - `src/archive_download.py` — Downloads PDFs with rate limiting, resume support, newest-first sorting
-- `src/extract_features.py` — Gemini 2.0 Flash Vision API extracts TOC articles then homeowner data from each article page
+- `src/extract_features.py` — Claude Sonnet Vision API extracts TOC articles then homeowner data from each article page (migrated from Gemini 2.0 Flash for better quality)
 - `src/load_features.py` — Loads extracted JSON into Supabase with duplicate detection
 - `src/pipeline.py` — CLI orchestrator (`discover`, `download`, `extract`, `load`, `run`, `status`)
-- Pipeline tested end-to-end: Downloaded AD Jul/Aug 2020 → Gemini extracted 3 featured homes → loaded into Supabase
-- Gemini API billing enabled for higher quotas
+- Pipeline tested end-to-end on 15+ issues
+- Extraction quality improvements: auto page offset detection, expanded TOC scanning (1-20 pages), nearby-page retry for NULLs, minimum 3 features per issue threshold, supplemental page scanning
+- 32 PDFs downloaded from archive.org (16 post-1988 usable issues)
 
 ### Phase 2: Epstein Cross-Reference (early exploration)
 
@@ -67,27 +71,31 @@ This file should be automatically updated when necessary to answer three key que
 - Built `/black-book-search` agent: Grep-based search with multiple name variations
 - Tested against May 2013 homeowners — no matches found
 
+**Cross-Reference Engine (`src/cross_reference.py`):**
+- Automated batch cross-referencing of all extracted homeowner names against DOJ Epstein Library and Little Black Book
+- Word-boundary matching prevents false positives (e.g., Bush≠Bushnell)
+- Miranda Brooks is the only confirmed Black Book match so far
+
 **Database schema updates:**
 - `matches` table: confidence scoring (high/medium/low) with rationale and manual review flags
 - `black_book_matches` table designed (commented out, for Phase 2 activation)
 
 ## 3. What's Next
 
-**Immediate — Batch Processing:**
-- Download remaining archive.org PDFs (~50 issues with month/year parsed)
-- Run extraction pipeline on all downloaded issues
-- Review extraction quality and refine prompts if needed (known issue: page number offset between magazine pages and PDF pages)
+**Immediate — Batch Processing with Claude:**
+- Re-extract all existing issues using Claude Sonnet (replacing Gemini results) for better accuracy
+- Download remaining archive.org PDFs (~35 more post-1988 issues)
+- Run extraction + load + cross-reference pipeline on all issues
 
 **Phase 1 — Complete the AD Database:**
 - Source additional AD issues beyond archive.org (eBay scans, library digitizations, other archives)
 - Quality review: validate extracted data, fill in missing fields
 - Build data cleanup/deduplication tools
 
-**Phase 2 — Cross-Reference Engine:**
-- Automate DOJ Epstein Library search for each AD homeowner name
-- Automate Little Black Book matching for each homeowner
-- Create Phase 2 database tables (uncomment in schema.sql)
-- Store match results with confidence scores and source links
+**Phase 2 — Cross-Reference at Scale:**
+- Run cross-reference engine across all extracted homeowner names
+- Store match results in Supabase with confidence scores
+- Manual review of any flagged matches
 
 **Phase 3 — Interactive Website:**
 - Design and build public-facing visualization website
