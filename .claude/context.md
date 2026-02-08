@@ -1,0 +1,1 @@
+The goal of this project is to map any correlation between featured homeowners in Architectural Digest and names in the Justice Department's Epstein File List. 

@@ -1,0 +1,120 @@
+{
+  "title": "AD-EPSTEIN INDEX \u2014 AGENT OFFICE",
+  "subtitle": "Architectural Digest research pipeline",
+  "timestamp": "2026-02-08T06:59:26.494642",
+  "agents": [
+    {
+      "id": "scout",
+      "name": "Scout",
+      "role": "Discovers AD issues on archive.org",
+      "status": "done",
+      "message": "Found 163 issues on archive.org",
+      "color": "#e74c3c",
+      "deskItems": [
+        "magnifier",
+        "globe"
+      ],
+      "progress": {
+        "current": 163,
+        "total": 163
+      }
+    },
+    {
+      "id": "courier",
+      "name": "Courier",
+      "role": "Downloads & delivers PDFs",
+      "status": "working",
+      "message": "Downloaded 75 of 163 PDFs",
+      "color": "#3498db",
+      "deskItems": [
+        "folder",
+        "document"
+      ],
+      "progress": {
+        "current": 75,
+        "total": 163
+      }
+    },
+    {
+      "id": "reader",
+      "name": "Reader",
+      "role": "Extracts homeowners & data",
+      "status": "working",
+      "message": "Extracted 13 features from 1/75 issues",
+      "color": "#2ecc71",
+      "deskItems": [
+        "book",
+        "pencil"
+      ],
+      "progress": {
+        "current": 1,
+        "total": 75
+      }
+    },
+    {
+      "id": "detective",
+      "name": "Detective",
+      "role": "Cross-refs against Epstein docs",
+      "status": "idle",
+      "message": "Waiting for extracted names...",
+      "color": "#9b59b6",
+      "deskItems": [
+        "detective-hat",
+        "clipboard"
+      ],
+      "progress": {
+        "current": 0,
+        "total": 13
+      }
+    }
+  ],
+  "stats": [
+    {
+      "label": "Discovered",
+      "value": 163
+    },
+    {
+      "label": "Downloaded",
+      "value": 75
+    },
+    {
+      "label": "Extracted",
+      "value": 1
+    },
+    {
+      "label": "Features",
+      "value": 13
+    },
+    {
+      "label": "XRef Matches",
+      "value": 0
+    }
+  ],
+  "log": [
+    {
+      "time": "06:59",
+      "agent": "Scout",
+      "event": "Tracking 163 issues from archive.org"
+    },
+    {
+      "time": "06:59",
+      "agent": "Courier",
+      "event": "75 PDFs downloaded"
+    },
+    {
+      "time": "06:59",
+      "agent": "Courier",
+      "event": "1 issues skipped (pre-1988)"
+    },
+    {
+      "time": "06:59",
+      "agent": "Reader",
+      "event": "Extracted 13 features from 1 issues"
+    },
+    {
+      "time": "06:59",
+      "agent": "Reader",
+      "event": "3 features still missing homeowner names"
+    }
+  ]
+}

@@ -19,8 +19,6 @@ CREATE TABLE issues (
 CREATE TABLE features (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   issue_id BIGINT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
-  month INTEGER CHECK (month BETWEEN 1 AND 12),
-  year INTEGER CHECK (year BETWEEN 1920 AND 2100),
   article_title TEXT,
   homeowner_name TEXT,
   designer_name TEXT,
@@ -65,43 +63,6 @@ CREATE TABLE features (
 --   feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
 --   epstein_person_id BIGINT NOT NULL REFERENCES epstein_persons(id) ON DELETE CASCADE,
 --   match_type TEXT CHECK (match_type IN ('exact', 'fuzzy', 'manual')),
---   confidence TEXT NOT NULL CHECK (confidence IN ('high', 'medium', 'low')),
---   confidence_rationale TEXT,
---   needs_manual_review BOOLEAN DEFAULT TRUE,
---   manually_confirmed BOOLEAN DEFAULT FALSE,
---   total_doj_results INTEGER DEFAULT 0,
+--   confidence_score NUMERIC(3,2) CHECK (confidence_score BETWEEN 0 AND 1),
 --   created_at TIMESTAMPTZ DEFAULT NOW()
 -- );
-
--- ============================================================
--- Black Book Matches (Phase 2)
--- ============================================================
-
--- Links AD features to entries in Epstein's Little Black Book (2004-2005)
--- CREATE TABLE black_book_matches (
---   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
---   feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
---   black_book_name TEXT NOT NULL,
---   contact_details TEXT,
---   match_status TEXT NOT NULL CHECK (match_status IN ('match', 'partial', 'no_match')),
---   assessment TEXT,
---   manually_confirmed BOOLEAN DEFAULT FALSE,
---   created_at TIMESTAMPTZ DEFAULT NOW()
--- );
-
--- ============================================================
--- Feature Images (only for Epstein-matched homeowners)
--- ============================================================
-
--- Stores article page images uploaded to Supabase Storage
--- Only populated when a homeowner matches an Epstein record
-CREATE TABLE feature_images (
-  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
-  page_number INTEGER,
-  image_url TEXT NOT NULL,
-  description TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Storage: images stored in Supabase Storage bucket "feature-images" (public)

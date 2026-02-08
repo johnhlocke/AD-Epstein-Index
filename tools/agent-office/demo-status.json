@@ -1,0 +1,63 @@
+{
+  "title": "DEMO PROJECT \u2014 AGENT OFFICE",
+  "subtitle": "Sample multi-agent pipeline",
+  "timestamp": "2026-02-07T14:30:00",
+  "agents": [
+    {
+      "id": "researcher",
+      "name": "Scout",
+      "role": "Discovers & indexes items",
+      "status": "done",
+      "message": "Found 163 items in archive",
+      "color": "#e74c3c",
+      "deskItems": ["magnifier", "globe"],
+      "progress": { "current": 163, "total": 163 }
+    },
+    {
+      "id": "coder",
+      "name": "Courier",
+      "role": "Downloads & delivers files",
+      "status": "working",
+      "message": "Downloading item 31 of 163...",
+      "color": "#3498db",
+      "deskItems": ["folder", "document"],
+      "progress": { "current": 31, "total": 163 }
+    },
+    {
+      "id": "reviewer",
+      "name": "Reader",
+      "role": "Extracts data from documents",
+      "status": "idle",
+      "message": "Waiting for more files...",
+      "color": "#2ecc71",
+      "deskItems": ["book", "pencil"],
+      "progress": { "current": 15, "total": 31 }
+    },
+    {
+      "id": "detective",
+      "name": "Detective",
+      "role": "Cross-references names",
+      "status": "idle",
+      "message": "1 match found so far",
+      "color": "#9b59b6",
+      "deskItems": ["detective-hat", "clipboard"],
+      "progress": { "current": 1, "total": 15 }
+    }
+  ],
+  "stats": [
+    { "label": "Discovered", "value": 163 },
+    { "label": "Downloaded", "value": 31 },
+    { "label": "Extracted", "value": 15 },
+    { "label": "Matches", "value": 1 }
+  ],
+  "log": [
+    { "time": "14:30", "agent": "Courier", "event": "Downloading issue #31..." },
+    { "time": "14:28", "agent": "Reader", "event": "Extracted 8 features from November 2013" },
+    { "time": "14:25", "agent": "Detective", "event": "Found match: Miranda Brooks" },
+    { "time": "14:20", "agent": "Reader", "event": "Extracted 6 features from October 2013" },
+    { "time": "14:15", "agent": "Courier", "event": "Downloaded issue #30" },
+    { "time": "14:10", "agent": "Scout", "event": "Discovery complete \u2014 163 issues indexed" },
+    { "time": "14:05", "agent": "Scout", "event": "Scanning archive.org for issues..." },
+    { "time": "14:00", "agent": "Scout", "event": "Pipeline started" }
+  ]
+}
