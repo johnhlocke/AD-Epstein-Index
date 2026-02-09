@@ -327,7 +327,33 @@ See [schema.sql](schema.sql) for full SQL definitions.
 - **Agent architecture:** 7 specialized agents with async work loops, shared base class, skills system
 - **Frontend:** Next.js (App Router), Tailwind CSS, Shadcn UI (Phase 3)
 
+## Phase 3: Visualization Website
+
+```
+Designer Agent (Python)
+  → reads knowledge_base.json (patterns)
+  → reads Supabase data shapes
+  → generates JSON design specs → web/design-specs/
+
+Next.js App (web/)
+  → reads design specs for styling decisions
+  → queries Supabase server-side (service key, never client-exposed)
+  → renders landing page with charts + searchable index
+  → deployed to Vercel
+```
+
+**Architecture:**
+- `web/src/lib/supabase.ts` — server-side only client (service role key)
+- `web/src/lib/queries.ts` — getStats(), getFeatures(), getDossiers(), getDossier()
+- `web/src/app/api/` — REST routes wrapping query functions
+- `web/src/app/page.tsx` — server component, fetches all stats at build time (ISR 5min)
+- `web/src/app/dossier/[id]/page.tsx` — dynamic server component
+- `web/src/components/charts/` — Recharts wrappers (client components)
+- `web/src/components/landing/` — SearchableIndex (client), Hero/KeyFindings/Methodology (server)
+
+**Data flow:** Supabase → Next.js server → HTML (static/ISR) or JSON (API routes) → Browser
+
 ### Pending
 - Additional PDF sources beyond archive.org
-- Hosting platform for the website
 - Phase 2 Supabase tables (currently using disk-based JSON for cross-reference results and dossiers)
+- Vercel production deployment

@@ -16,22 +16,26 @@ Update this file as the design evolves. Add examples, refine rules, remove what 
 
 ## Color Palette
 
-*(To be refined as we add reference examples)*
-
-- **Background:** White / off-white (`#FAFAFA`)
+- **Background:** Off-white (`#FAFAFA`)
 - **Text:** Near-black (`#1A1A1A`)
-- **Accent:** TBD — something authoritative but not aggressive
-- **Data viz primary:** TBD
-- **Data viz secondary:** TBD
-- **Danger/match highlight:** TBD
+- **Accent:** Warm copper (`#B87333`) — authoritative but not aggressive
+- **Accent light:** `#D4A574`
+- **Accent muted:** `#E8D5C0`
+- **Data viz primary:** Copper `#B87333`
+- **Data viz secondary:** Forest green `#2D6A4F`
+- **Data viz tertiary:** Slate blue `#4A7C8F`
+- **Confirmed match:** Green `#2D6A4F` on `#D8F3DC`
+- **Rejected match:** Muted red `#9B2226` on `#FDE8E8`
+- **Pending review:** Amber `#B8860B` on `#FFF3CD`
+- **Border:** `#E5E5E5`
+- **Muted text:** `#737373`
 
 ## Typography
 
-*(To be refined)*
-
-- **Headlines:** Serif font (editorial feel) — consider Georgia, Playfair Display, or similar
-- **Body:** Clean sans-serif — Inter, system font stack
-- **Data/labels:** Monospace or tabular figures for numbers
+- **Headlines:** Playfair Display (serif, editorial weight)
+- **Body:** Inter (clean sans-serif, great readability)
+- **Data/labels:** JetBrains Mono (monospace, tabular figures)
+- All fonts loaded via `next/font/google` (self-hosted, no external requests)
 
 ## Layout
 

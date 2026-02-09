@@ -40,8 +40,9 @@ This file should be automatically updated when necessary to answer three key que
 | Build cross-reference engine | Phase 2 | Done |
 | Batch cross-reference all extracted names | Phase 2 | In Progress |
 | Build dossiers on Epstein-linked leads | Phase 2 | In Progress |
-| Build interactive website | Phase 3 | Not Started |
-| Deploy website publicly | Phase 3 | Not Started |
+| Build interactive website | Phase 3 | Done |
+| Deploy website publicly | Phase 3 | Ready to Deploy |
+| Designer agent → spec generator | Tooling | Done |
 
 ## 2. What's Been Accomplished
 
@@ -131,6 +132,35 @@ Built a 7-agent autonomous pipeline that runs continuously:
 - `src/dashboard_server.py` — HTTP server: inbox API, agent pause/resume, skills editing
 - `src/agents/skills/*.md` — Per-agent personality, methodology, and behavior documentation
 
+### Phase 3: Interactive Website
+
+Built a Next.js visualization website (`web/`) with real-time Supabase data:
+
+**Tech stack:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Shadcn UI, Recharts
+
+**Pages & Routes:**
+- Landing page with 10 sections: Hero, Key Findings, Coverage Heatmap, Features Timeline, Style Distribution, Geographic Treemap, Verdict Breakdown, Searchable Index, Methodology
+- Dossier detail pages (`/dossier/[id]`) with evidence sections, verdict badges, article images
+- API routes: `/api/stats`, `/api/features` (paginated + filterable), `/api/dossiers`, `/api/dossiers/[id]`
+
+**Design:**
+- Editorial/investigative journalism aesthetic (ProPublica-inspired)
+- Playfair Display (headlines), Inter (body), JetBrains Mono (data)
+- Warm copper accent (#B87333), off-white background (#FAFAFA)
+- Verdict colors: green (confirmed), muted red (rejected), amber (pending)
+
+**Data:**
+- Server-side only Supabase access (no client-exposed keys)
+- Coverage heatmap: year x month grid (1988-2025) color-coded by pipeline status
+- Searchable index: debounced text search, year/style/location filters, URL-based state
+- Charts: Recharts for bar/pie/treemap, custom CSS Grid for heatmap
+
+**Designer Agent Evolution:**
+- `src/agents/designer.py` rewritten: `_creation_cycle()` now generates JSON design specs
+- New task type: `generate_design_spec` with spec_type param (tokens, landing-page, dossier-detail, search-index)
+- Specs written to `web/design-specs/*.json`, TaskResult pushed to Editor
+- Auto-regeneration of stale specs (>24h old)
+
 ### Tooling: Agent Office Dashboard
 - Built pixel-art Agent Office visualization (`tools/agent-office/agent-office.html`) showing all 7 pipeline agents working at their desks
 - Redesigned to 3-column horizontal layout: left panel (pipeline funnel, queues, now processing), center (pixel-art office scene), right panel (activity log, notable finds, data quality)
@@ -167,6 +197,8 @@ Built a 7-agent autonomous pipeline that runs continuously:
 - Store final match results in Supabase
 
 **Phase 3 — Interactive Website:**
-- Design and build public-facing visualization website
-- Searchable index, interactive timelines, trend analysis
-- Dossier viewer for Epstein-linked leads
+- ~~Design and build public-facing visualization website~~ **Done**
+- ~~Searchable index, interactive timelines, trend analysis~~ **Done**
+- ~~Dossier viewer for Epstein-linked leads~~ **Done**
+- Deploy to Vercel (`cd web && vercel --prod`)
+- Get service role key from Supabase dashboard and set in Vercel env vars

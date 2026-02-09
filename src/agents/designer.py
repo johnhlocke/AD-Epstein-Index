@@ -1,11 +1,13 @@
 """
-Designer Agent — learns design patterns from Notion, websites, and Figma,
-then creates designs via Figma Make when Phase 3 is active.
+Designer Agent — learns design patterns from external sources during training,
+then generates JSON design specs for the Phase 3 website when in creating mode.
 
-Uses `claude -p` (Claude Code CLI) as a subprocess to access MCP tools:
-Notion, Playwright (for browsing + Figma Make), Figma (for reading designs).
+Training mode: Studies websites, Notion, local images, and Figma via Claude Code CLI.
+Creating mode: Generates JSON design spec files (tokens, layouts, charts) that the
+Next.js app reads to inform its rendering decisions.
 
-Interval: 600s (10 min) — training cycles are thorough, not frequent.
+Uses `claude -p` (Claude Code CLI) as a subprocess to access MCP tools.
+Interval: 600s (10 min) — cycles are thorough, not frequent.
 """
 
 import asyncio
@@ -20,6 +22,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.base import Agent, DATA_DIR, BASE_DIR
+from agents.tasks import TaskResult
 
 TRAINING_DIR = os.path.join(DATA_DIR, "designer_training")
 KNOWLEDGE_PATH = os.path.join(TRAINING_DIR, "knowledge_base.json")
@@ -28,6 +31,11 @@ ESCALATION_PATH = os.path.join(DATA_DIR, "designer_escalations.json")
 MODE_PATH = os.path.join(DATA_DIR, "designer_mode.json")
 ESCALATION_COOLDOWN_HOURS = 2  # Longer cooldown — training is less urgent
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
+DESIGN_SPECS_DIR = os.path.join(BASE_DIR, "web", "design-specs")
+DESIGN_RULES_PATH = os.path.join(BASE_DIR, "docs", "design-rules.md")
+
+# Valid spec types that the Designer can generate
+SPEC_TYPES = ("tokens", "landing-page", "dossier-detail", "search-index")
 
 # Tools the Designer is allowed to use via Claude Code
 ALLOWED_TOOLS = [
@@ -299,9 +307,13 @@ class DesignerAgent(Agent):
         idx = self._sources_studied % len(sources)
         return sources[idx]
 
-    async def work(self):
+    async def work(self, task=None):
         self._mode = self._check_mode()
         skills = self.load_skills()
+
+        # If given a specific task by the Editor, handle it
+        if task and task.type == "generate_design_spec":
+            return await self._creation_cycle(skills, task=task)
 
         if self._mode == "training":
             return await self._training_cycle(skills)
@@ -384,21 +396,111 @@ class DesignerAgent(Agent):
         self.log(f"Training complete: {source_type} — {self._patterns_learned} patterns in knowledge base")
         return True
 
-    async def _creation_cycle(self, skills):
-        """Create designs via Figma Make (Phase 3)."""
+    async def _creation_cycle(self, skills, task=None):
+        """Generate JSON design spec files for the Phase 3 website.
+
+        When invoked by the Editor with a generate_design_spec task, generates
+        the spec type requested. When running autonomously, generates the next
+        spec type that hasn't been created yet (or regenerates stale ones).
+        """
+        spec_type = None
+        task_id = None
+
+        # If Editor assigned a specific spec task, use its params
+        if task:
+            spec_type = task.params.get("spec_type")
+            task_id = task.id
+
+        # Otherwise, find the next spec to generate
+        if not spec_type:
+            spec_type = self._next_needed_spec()
+
+        if not spec_type:
+            self._current_task = "All design specs up to date"
+            self.log("All design specs are current — nothing to generate")
+            return False
+
+        self._current_task = f"Generating {spec_type} design spec..."
+        self.log(f"Generating design spec: {spec_type}")
+
         knowledge = self._load_knowledge()
         knowledge_summary = self._summarize_knowledge(knowledge)
+        data_context = self._explore_data_shapes()
+        design_rules = self._load_design_rules()
 
-        prompt = self._build_creation_prompt(skills, knowledge_summary)
+        prompt = self._build_spec_prompt(spec_type, knowledge_summary, data_context, design_rules)
         result = await asyncio.to_thread(self._call_claude, prompt)
 
-        if result:
-            self._current_task = "Design created — check Figma"
-            self.log("Created design via Figma Make")
-            return True
+        if not result:
+            self._current_task = f"Spec generation failed — {spec_type}"
+            if task_id:
+                await self.outbox.put(TaskResult(
+                    task_id=task_id, task_type="generate_design_spec",
+                    status="failure", result={}, error="Claude CLI returned no output",
+                    agent="designer",
+                ))
+            return False
 
-        self._current_task = "Design creation failed"
-        return False
+        # Parse the JSON spec from the response
+        spec = self._parse_learnings(result)  # Reuses existing JSON parser
+        if not spec:
+            self._current_task = f"Could not parse spec JSON — {spec_type}"
+            if task_id:
+                await self.outbox.put(TaskResult(
+                    task_id=task_id, task_type="generate_design_spec",
+                    status="failure", result={}, error="Could not parse JSON from response",
+                    agent="designer",
+                ))
+            return False
+
+        # Write spec to disk
+        os.makedirs(DESIGN_SPECS_DIR, exist_ok=True)
+        spec_path = os.path.join(DESIGN_SPECS_DIR, f"{spec_type}.json")
+        spec["_generated_at"] = datetime.now().isoformat()
+        spec["_patterns_used"] = sum(len(v) for v in knowledge.values() if isinstance(v, list))
+
+        with open(spec_path, "w") as f:
+            json.dump(spec, f, indent=2)
+
+        self._current_task = f"Wrote {spec_type}.json ({len(spec)} keys)"
+        self.log(f"Design spec written: {spec_path}")
+
+        # Report success to Editor
+        if task_id:
+            await self.outbox.put(TaskResult(
+                task_id=task_id, task_type="generate_design_spec",
+                status="success",
+                result={"spec_type": spec_type, "path": spec_path, "keys": list(spec.keys())},
+                agent="designer",
+            ))
+
+        return True
+
+    def _next_needed_spec(self):
+        """Find the next spec type that hasn't been generated or is stale (>24h old)."""
+        for spec_type in SPEC_TYPES:
+            spec_path = os.path.join(DESIGN_SPECS_DIR, f"{spec_type}.json")
+            if not os.path.exists(spec_path):
+                return spec_type
+            # Check staleness — regenerate if older than 24 hours
+            try:
+                mtime = os.path.getmtime(spec_path)
+                age_hours = (datetime.now().timestamp() - mtime) / 3600
+                if age_hours > 24:
+                    return spec_type
+            except OSError:
+                return spec_type
+        return None
+
+    def _load_design_rules(self):
+        """Load docs/design-rules.md for inclusion in spec prompts."""
+        if os.path.exists(DESIGN_RULES_PATH):
+            try:
+                with open(DESIGN_RULES_PATH) as f:
+                    return f.read()
+            except Exception:
+                pass
+        return "No design rules found."
 
     def _sample_local_images(self, folder_path):
         """Randomly sample images from a local folder (recursive)."""
@@ -476,26 +578,93 @@ Real Data Context — the actual data you'll be designing for:
 
 Focus on patterns relevant to: data visualization, investigative journalism, interactive timelines, searchable databases, and name/connection mapping."""
 
-    def _build_creation_prompt(self, skills, knowledge_summary):
-        """Build a prompt for creating designs via Figma Make."""
-        return f"""You are the Designer agent for the AD-Epstein Index project.
+    def _build_spec_prompt(self, spec_type, knowledge_summary, data_context, design_rules):
+        """Build a prompt for generating a JSON design spec."""
 
-Using everything you've learned, create a design in Figma Make for the Phase 3 visualization website.
+        spec_instructions = {
+            "tokens": """Generate a design tokens JSON spec with these keys:
+{
+  "colors": { "background": "#hex", "foreground": "#hex", "accent": "#hex", ... },
+  "typography": { "headline": "font-family string", "body": "...", "data": "..." },
+  "spacing": { "textMaxWidth": "px value", "vizMaxWidth": "...", "sectionGap": "..." },
+  "chartPalette": ["#hex1", "#hex2", ...],
+  "verdictColors": { "confirmed": {...}, "rejected": {...}, "pending": {...} },
+  "rationale": "Brief explanation of why these tokens were chosen, citing specific patterns"
+}""",
+            "landing-page": """Generate a landing page layout JSON spec with these keys:
+{
+  "sections": [
+    {
+      "id": "hero",
+      "type": "hero|stats|chart|table|prose",
+      "title": "Section title",
+      "chartType": "bar|pie|heatmap|treemap|timeline|null",
+      "dataSource": "Which API endpoint / data field",
+      "layout": "full-width|text-width|viz-width",
+      "rationale": "Why this section is here, citing specific design patterns"
+    }
+  ],
+  "chartRecommendations": {
+    "coverageMap": { "type": "heatmap", "rationale": "..." },
+    "featuresTimeline": { "type": "bar", "rationale": "..." }
+  },
+  "overallRationale": "Design philosophy for the page"
+}""",
+            "dossier-detail": """Generate a dossier detail page JSON spec with these keys:
+{
+  "layout": "Content layout description",
+  "sections": [
+    { "id": "header", "components": ["name", "verdict-badge", "issue-date"], "rationale": "..." },
+    { "id": "evidence", "components": [...], "collapsible": true, "rationale": "..." }
+  ],
+  "verdictPresentation": { "style": "badge|banner|card", "rationale": "..." },
+  "imageGallery": { "layout": "grid|carousel|lightbox", "rationale": "..." },
+  "overallRationale": "Design philosophy for dossier pages"
+}""",
+            "search-index": """Generate a searchable index page JSON spec with these keys:
+{
+  "filters": [
+    { "id": "search", "type": "text|select|range|toggle", "label": "...", "rationale": "..." }
+  ],
+  "table": {
+    "columns": [
+      { "id": "homeowner", "label": "...", "sortable": true, "width": "..." }
+    ],
+    "defaultSort": { "column": "...", "direction": "asc|desc" },
+    "pagination": { "style": "numbered|infinite|load-more", "pageSize": 20 }
+  },
+  "filterState": "url-params|local-state",
+  "overallRationale": "Design philosophy for the index"
+}""",
+        }
 
-Your accumulated design knowledge:
+        instructions = spec_instructions.get(spec_type, "Generate a JSON design spec.")
+
+        return f"""You are the Designer agent for the AD-Epstein Index project, now in spec-generation mode.
+
+Your task: Generate a **{spec_type}** design spec as JSON.
+
+{instructions}
+
+Respond with ONLY a JSON object (no markdown, no explanation).
+
+Your accumulated design knowledge ({sum(1 for _ in knowledge_summary.split(chr(10)))} lines):
 {knowledge_summary}
 
-Project design goals:
-{skills}
+Design rules for this project:
+{design_rules}
 
-Steps:
-1. Open Figma Make in the browser
-2. Create a design for the main dashboard/landing page
-3. Take a screenshot of the result
-4. Evaluate if it matches the design goals
-5. Report what you created and any refinements needed
+Real data context (what will be rendered):
+{data_context}
 
-Respond with a summary of what was created and the Figma URL."""
+Key constraints:
+- Editorial/investigative journalism aesthetic (NYT, ProPublica, The Pudding)
+- Serious and credible, not flashy — let the data speak
+- Warm copper accent (#B87333), off-white background (#FAFAFA)
+- Serif headlines (Playfair Display), sans-serif body (Inter), monospace data (JetBrains Mono)
+- Max text width 720px, max viz width 1200px
+- Verdict colors: confirmed=green, rejected=muted red, pending=amber
+- Every recommendation must cite which pattern from your knowledge base informed it"""
 
     def _call_claude(self, prompt):
         """Call Claude Code CLI with MCP access. Returns output text or None."""

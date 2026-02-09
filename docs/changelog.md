@@ -6,6 +6,40 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 12)
+
+### Added — Phase 3: Interactive Visualization Website
+- **Full Next.js app** in `web/` — App Router, TypeScript strict, Tailwind v4, Shadcn UI, Recharts
+- **Landing page** with 10 sections: Hero, Key Findings, Coverage Heatmap, Features Timeline, Style Distribution, Geographic Treemap, Verdict Breakdown, Searchable Index, Methodology
+- **Dossier detail pages** (`/dossier/[id]`) with evidence sections, verdict badges, article image gallery
+- **API routes**: `/api/stats`, `/api/features` (paginated, filterable by year/style/designer/location/search), `/api/dossiers`, `/api/dossiers/[id]`
+- **Design tokens** (`web/src/lib/design-tokens.ts`): copper accent, editorial typography (Playfair Display + Inter + JetBrains Mono), verdict color system
+- **Server-side Supabase** — service key never exposed to client, all data via server components + API routes
+- **Coverage heatmap** — custom CSS Grid, year x month (1988-2025), color-coded by pipeline status
+- **Searchable index** — debounced search, URL-based filter state for shareable links, paginated table
+- **Recharts visualizations** — bar charts (features by year, styles), donut (verdicts), treemap (locations)
+
+### Changed — Designer Agent Evolution
+- `src/agents/designer.py` `_creation_cycle()` rewritten: generates JSON design specs instead of Figma designs
+- New method `_build_spec_prompt()` builds targeted prompts for each spec type (tokens, landing-page, dossier-detail, search-index)
+- New method `_next_needed_spec()` auto-detects which specs need generation/refresh (>24h staleness)
+- New method `_load_design_rules()` reads docs/design-rules.md for context
+- `work()` now accepts optional `task` param for Editor-assigned `generate_design_spec` tasks
+- Pushes `TaskResult` to outbox so Editor knows when specs are generated
+- Spec files written to `web/design-specs/*.json`
+
+### Fixed — Recharts + React 19 Compatibility
+- **`style` data field crash**: Recharts spreads data properties onto SVG elements — a field named `style` with a string value (e.g., "Contemporary") crashes React 19 (`style` prop must be an object). Renamed to `styleName` in `StyleDistribution.tsx`
+- **SSR hydration errors**: All Recharts chart components (FeaturesTimeline, StyleDistribution, GeographicMap, VerdictBreakdown) now use centralized `useMounted()` hook (`web/src/lib/use-mounted.ts`) to defer rendering until after hydration
+- **CoverageHeatmap Fragment key**: Replaced `<>` with `<Fragment key={row.year}>` for React key support in CSS Grid rows
+
+### Infrastructure
+- `web/.env.local` — Supabase URL + service key (gitignored)
+- `web/next.config.ts` — Supabase Storage image hostname whitelisted
+- All Shadcn components added: button, card, badge, input, table, select, separator, skeleton, tooltip
+
+---
+
 ## 2026-02-09 (Session 11)
 
 ### Changed — Editor as Final Gatekeeper for Researcher Dossiers
