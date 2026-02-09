@@ -114,6 +114,10 @@ class ResearcherAgent(Agent):
 
             strength = dossier.get("connection_strength", "UNKNOWN")
             triage = dossier.get("triage_result", "investigate")
+
+            # Extract metadata for Editor's Supabase persistence
+            meta = dossier.pop("_meta", {})
+
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="success",
                 result={
@@ -121,7 +125,10 @@ class ResearcherAgent(Agent):
                     "dossier": dossier,
                     "connection_strength": strength,
                     "triage_result": triage,
-                    "feature_id": lead.get("feature_id"),
+                    "feature_id": meta.get("feature_id") or lead.get("feature_id"),
+                    "image_paths": meta.get("image_paths", []),
+                    "page_numbers": meta.get("page_numbers", []),
+                    "temp_dir": meta.get("temp_dir"),
                 },
                 agent=self.name,
             )
@@ -166,6 +173,9 @@ class ResearcherAgent(Agent):
             self._current_task = f"Dossier: {name} ({strength})"
             self.log(f"Dossier complete: {name} — {strength} (triage: {triage})")
 
+            # Extract metadata for Editor's Supabase persistence
+            meta = dossier.pop("_meta", {})
+
             # Push result to outbox so Editor can review as gatekeeper
             await self.outbox.put(TaskResult(
                 task_id=f"work_{lead['feature_id']}",
@@ -176,7 +186,10 @@ class ResearcherAgent(Agent):
                     "dossier": dossier,
                     "connection_strength": strength,
                     "triage_result": triage,
-                    "feature_id": lead["feature_id"],
+                    "feature_id": meta.get("feature_id") or lead["feature_id"],
+                    "image_paths": meta.get("image_paths", []),
+                    "page_numbers": meta.get("page_numbers", []),
+                    "temp_dir": meta.get("temp_dir"),
                 },
                 agent=self.name,
             ))
@@ -212,27 +225,70 @@ class ResearcherAgent(Agent):
             return []
 
     def _find_uninvestigated_leads(self):
-        """Find all leads (any non-no_match verdict OR BB match) not yet investigated."""
-        results = self._load_results()
+        """Find leads to investigate. Primary: Supabase YES verdicts. Fallback: results.json.
+
+        Checks Supabase features with detective_verdict='YES' that don't have a dossier yet.
+        Falls back to legacy results.json for pre-refactor data.
+        """
         investigated_ids = self._load_investigated_ids()
         run_log = self._load_run_log()
         failures = run_log.get("investigation_failures", {})
 
         leads = []
-        for r in results:
-            if r.get("feature_id") in investigated_ids:
-                continue
-            # Skip names that have failed too many times
-            name = r.get("homeowner_name", "")
-            if failures.get(name, 0) >= MAX_INVESTIGATION_FAILURES:
-                continue
-            # Lead if: combined_verdict is actionable, OR BB match (backward compat)
-            verdict = r.get("combined_verdict", "")
-            bb_match = r.get("black_book_status") == "match"
-            if verdict in LEAD_VERDICTS or bb_match:
-                leads.append(r)
 
-        # Priority: confirmed > likely > possible > needs_review > bb_only
+        # Primary: Supabase features with detective_verdict='YES'
+        try:
+            from db import get_supabase, get_dossier
+            sb = get_supabase()
+            result = (
+                sb.table("features")
+                .select("id, homeowner_name, issue_id")
+                .eq("detective_verdict", "YES")
+                .execute()
+            )
+            for feat in result.data:
+                feature_id = feat["id"]
+                name = (feat.get("homeowner_name") or "").strip()
+                if not name:
+                    continue
+                if feature_id in investigated_ids:
+                    continue
+                if failures.get(name, 0) >= MAX_INVESTIGATION_FAILURES:
+                    continue
+                # Skip if dossier exists
+                try:
+                    if get_dossier(feature_id):
+                        continue
+                except Exception:
+                    pass
+                leads.append({
+                    "feature_id": feature_id,
+                    "homeowner_name": name,
+                    "combined_verdict": "yes_verdict",
+                    "black_book_status": "unknown",
+                    "black_book_matches": None,
+                    "doj_status": "unknown",
+                    "doj_results": None,
+                    "confidence_score": 0.5,
+                })
+        except Exception:
+            pass  # Fall through to legacy path
+
+        # Fallback: legacy results.json for pre-refactor data
+        if not leads:
+            results = self._load_results()
+            for r in results:
+                if r.get("feature_id") in investigated_ids:
+                    continue
+                name = r.get("homeowner_name", "")
+                if failures.get(name, 0) >= MAX_INVESTIGATION_FAILURES:
+                    continue
+                verdict = r.get("combined_verdict", "")
+                bb_match = r.get("black_book_status") == "match"
+                if verdict in LEAD_VERDICTS or bb_match:
+                    leads.append(r)
+
+        # Priority: confirmed > likely > possible > needs_review > other
         leads.sort(key=lambda r: VERDICT_PRIORITY.get(r.get("combined_verdict", ""), 4))
         return leads
 
@@ -918,75 +974,35 @@ Produce the complete dossier with final connection_strength."""
     # ── Dossier Persistence (Supabase + Disk) ──────────────────
 
     def _save_dossier(self, name, dossier):
-        """Save a dossier to Supabase and disk."""
-        # Pop internal metadata
+        """Save a dossier to disk only. Supabase persistence is handled by the Editor.
+
+        Extracts internal metadata (_feature_id, _image_paths, etc.) and stores
+        them back on the dossier dict so the caller can pass them in the TaskResult.
+        """
+        # Extract internal metadata (keep them available for TaskResult)
         feature_id = dossier.pop("_feature_id", None)
         image_paths = dossier.pop("_image_paths", [])
         page_numbers = dossier.pop("_page_numbers", [])
         temp_dir = dossier.pop("_temp_dir", None)
 
-        # ── Supabase persistence ──
-        if feature_id:
-            try:
-                from db import upsert_dossier, upload_to_storage, insert_dossier_image
+        # Store metadata back as accessible fields for the caller
+        dossier["_meta"] = {
+            "feature_id": feature_id,
+            "image_paths": image_paths,
+            "page_numbers": page_numbers,
+            "temp_dir": temp_dir,
+        }
 
-                # Build row for dossiers table
-                row = {
-                    "subject_name": dossier.get("subject_name", name),
-                    "combined_verdict": dossier.get("combined_verdict"),
-                    "confidence_score": dossier.get("confidence_score"),
-                    "connection_strength": dossier.get("connection_strength"),
-                    "strength_rationale": dossier.get("strength_rationale"),
-                    "triage_result": dossier.get("triage_result"),
-                    "triage_reasoning": dossier.get("triage_reasoning"),
-                    "ad_appearance": dossier.get("ad_appearance"),
-                    "home_analysis": dossier.get("home_analysis"),
-                    "visual_analysis": dossier.get("visual_analysis"),
-                    "epstein_connections": dossier.get("epstein_connections"),
-                    "pattern_analysis": dossier.get("pattern_analysis"),
-                    "key_findings": dossier.get("key_findings"),
-                    "investigation_depth": dossier.get("investigation_depth", "standard"),
-                    "needs_manual_review": dossier.get("needs_manual_review", False),
-                    "review_reason": dossier.get("review_reason"),
-                    "investigated_at": dossier.get("investigated_at"),
-                    "editor_verdict": "PENDING_REVIEW",
-                }
-
-                result = upsert_dossier(feature_id, row)
-                dossier_id = result.get("id") if result else None
-
-                if dossier_id and image_paths:
-                    self.log(f"  Uploading {len(image_paths)} images to Storage...")
-                    for img_path, page_num in zip(image_paths, page_numbers):
-                        try:
-                            with open(img_path, "rb") as f:
-                                file_data = f.read()
-                            storage_path = f"{feature_id}/page_{page_num}.png"
-                            public_url = upload_to_storage(
-                                "dossier-images", storage_path, file_data
-                            )
-                            insert_dossier_image(
-                                dossier_id, feature_id, page_num, storage_path, public_url
-                            )
-                        except Exception as e:
-                            self.log(f"  Image upload failed (page {page_num}): {e}", level="WARN")
-
-                self.log(f"  Saved to Supabase: dossier_id={dossier_id}")
-            except Exception as e:
-                self.log(f"  Supabase save failed: {e}", level="WARN")
-
-        # ── Cleanup temp dir ──
-        if temp_dir:
-            shutil.rmtree(temp_dir, ignore_errors=True)
-
-        # ── Disk backup (unchanged) ──
+        # ── Disk backup only ──
         os.makedirs(DOSSIERS_DIR, exist_ok=True)
 
         safe_name = "".join(c if c.isalnum() or c in " -_" else "" for c in name)
         safe_name = safe_name.strip().replace(" ", "_")
         path = os.path.join(DOSSIERS_DIR, f"{safe_name}.json")
+        # Don't write _meta to disk
+        disk_dossier = {k: v for k, v in dossier.items() if k != "_meta"}
         with open(path, "w") as f:
-            json.dump(dossier, f, indent=2)
+            json.dump(disk_dossier, f, indent=2)
 
         master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
         all_dossiers = []
@@ -1000,11 +1016,11 @@ Produce the complete dossier with final connection_strength."""
         replaced = False
         for i, d in enumerate(all_dossiers):
             if d.get("subject_name", "").lower() == name.lower():
-                all_dossiers[i] = dossier
+                all_dossiers[i] = disk_dossier
                 replaced = True
                 break
         if not replaced:
-            all_dossiers.append(dossier)
+            all_dossiers.append(disk_dossier)
 
         with open(master_path, "w") as f:
             json.dump(all_dossiers, f, indent=2)

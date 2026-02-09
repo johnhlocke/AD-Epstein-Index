@@ -35,6 +35,9 @@ This file should be automatically updated when necessary to answer three key que
 | Dashboard: Editor's Board, coverage map, ledger visibility | Tooling | Done |
 | Editor: event-driven architecture (replaces polling loop) | Tooling | Done |
 | Editor as gatekeeper for Researcher dossiers | Phase 2 | Done |
+| Editor-directed Detective & Researcher flow | Tooling | Done |
+| LLM-powered problem solving for all agents | Tooling | Done |
+| Agent personalities: names and idle chatter | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -132,6 +135,12 @@ Built a 7-agent autonomous pipeline that runs continuously:
 - `src/dashboard_server.py` — HTTP server: inbox API, agent pause/resume, skills editing
 - `src/agents/skills/*.md` — Per-agent personality, methodology, and behavior documentation
 
+**Agent Intelligence:**
+- **LLM-powered problem solving** — Every agent has `problem_solve()` that uses Haiku to diagnose errors and choose recovery strategies (not hardcoded retry). 14 locations across all 7 agents.
+- **Editor-directed Detective flow** — Editor routes features through Detective (YES/NO verdict) and Researcher (dossier), replacing self-managing queries. Binary verdicts stored on `features` table.
+- **Agent personalities** — Each agent has a character name (Arthur, Casey, Elias, Silas, Elena, Miranda) chosen via Gemini Vision analysis of their pixel sprites
+- **Idle chatter** — Agents generate personality-driven idle thoughts via Haiku when waiting for work (replaces static "Waiting for assignment...")
+
 ### Phase 3: Interactive Website
 
 Built a Next.js visualization website (`web/`) with real-time Supabase data:
@@ -181,7 +190,13 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 
 ## 3. What's Next
 
-**Immediate — Scale the Pipeline:**
+**Immediate — Agent Intelligence Upgrades:**
+- Implement episodic memory (ChromaDB + embeddings) so agents learn from past decisions
+- Add reflection loops (periodic self-assessment) to agents
+- Implement inter-agent communication (event bus for peer coordination)
+- Fix Courier `work()` bug (`'NoneType' object has no attribute 'get'`)
+
+**Ongoing — Scale the Pipeline:**
 - Run the multi-agent orchestrator to batch-process remaining archive.org issues
 - Review Researcher dossiers and manually confirm/reject matches
 - Download remaining archive.org PDFs (~35 more post-1988 issues)

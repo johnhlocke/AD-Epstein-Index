@@ -1094,15 +1094,37 @@ Prior knowledge (what's worked and what hasn't):
         strategy_success = False
 
         if not result:
-            self._current_task = f"Failed — {strategy['type']}"
+            # ── Problem-solving: diagnose CLI failure and decide recovery ──
+            decision = await asyncio.to_thread(
+                self.problem_solve,
+                error="Claude CLI returned no result",
+                context={
+                    "strategy_type": strategy["type"],
+                    "strategy_description": strategy["description"][:100],
+                    "missing_months": len(gap_report.get("missing_months", [])),
+                    "coverage_pct": gap_report.get("coverage_pct", 0),
+                    "recent_results": self._recent_strategy_results[-5:],
+                },
+                strategies={
+                    "retry_different_strategy": "Switch to a different strategy type (fill_gaps → explore_sources, etc.)",
+                    "simplify_prompt": "Try with a smaller batch or simpler search terms",
+                    "wait_and_retry": "Possible rate limit or transient error — retry next cycle",
+                    "escalate": "Report to Editor — CLI may be broken or overloaded",
+                },
+            )
+            strategy_name = decision.get("strategy", "escalate")
+            self.log(f"Problem solve: {decision.get('diagnosis', '?')} → {strategy_name}")
+
+            self._current_task = f"Failed — {strategy['type']} ({strategy_name})"
             self._record_learning("failed_strategies", {
                 "strategy": f"{strategy['type']}: {strategy['description'][:80]}",
-                "reason": "Claude CLI returned no result",
+                "reason": f"{decision.get('diagnosis', 'CLI returned no result')} → {strategy_name}",
             })
             self._recent_strategy_results.append({
                 "type": strategy["type"], "success": False,
             })
-            self._maybe_escalate(gap_report, strategy["type"], strategy_failed=True)
+            if strategy_name == "escalate":
+                self._maybe_escalate(gap_report, strategy["type"], strategy_failed=True)
             self._cycle_count += 1
             self._save_scout_log()
             return False
@@ -1206,9 +1228,27 @@ Prior knowledge (what's worked and what hasn't):
         # Keep only last 10
         self._recent_strategy_results = self._recent_strategy_results[-10:]
 
-        # Check if we should escalate to the Editor
+        # Check if we should escalate — use problem_solve for diagnosis
         if not strategy_success:
-            self._maybe_escalate(gap_report, strategy["type"], strategy_failed=True)
+            decision = await asyncio.to_thread(
+                self.problem_solve,
+                error=f"Strategy '{strategy['type']}' produced no useful results",
+                context={
+                    "strategy_type": strategy["type"],
+                    "batch_size": len(strategy.get("batch", [])),
+                    "coverage_pct": gap_report.get("coverage_pct", 0),
+                    "recent_results": self._recent_strategy_results[-5:],
+                },
+                strategies={
+                    "try_different_era": "Focus on a different decade or year range",
+                    "broaden_search": "Use more creative or alternative search terms",
+                    "switch_strategy": "Try a completely different strategy type",
+                    "escalate": "Report to Editor — this approach is exhausted",
+                },
+            )
+            self.log(f"Strategy failed → {decision.get('strategy', '?')}: {decision.get('diagnosis', '?')}")
+            if decision.get("strategy") == "escalate":
+                self._maybe_escalate(gap_report, strategy["type"], strategy_failed=True)
 
         self._cycle_count += 1
         self._save_scout_log()

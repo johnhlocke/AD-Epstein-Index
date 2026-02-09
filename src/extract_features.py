@@ -95,7 +95,7 @@ Look at this magazine page and extract the following information. Use null for a
 
 Return a JSON object with these fields:
 - "article_title": the title of the article
-- "homeowner_name": the CURRENT or most recent owner/resident of the home. For historic or retrospective articles about estates (e.g., "Historic Architecture: Wyntoon"), identify who currently owns or occupies the property, NOT the historical figure who originally built it. If the current owner is not stated, use the name most prominently associated with the home in the article, but add a note explaining the historical context.
+- "homeowner_name": the CURRENT or most recent owner/resident of the home. For historic or retrospective articles about estates (e.g., "Historic Architecture: Wyntoon"), identify who currently owns or occupies the property, NOT the historical figure who originally built it. If the current owner is not stated, use the name most prominently associated with the home in the article, but add a note explaining the historical context. If the homeowner is deliberately unnamed, described generically (e.g., "a young family", "a couple", "the owners"), or the article withholds their identity, use "Anonymous" as the homeowner_name.
 - "designer_name": the interior designer
 - "architecture_firm": the architect or architecture firm
 - "year_built": year the home was built or renovated (integer or null)
@@ -114,6 +114,33 @@ If this page is NOT a featured home article (e.g., it's an ad or editorial), ret
 """
 
 
+def pdf_has_text_layer(pdf_path, sample_page=5):
+    """Check if a PDF has an extractable text layer on a given page."""
+    try:
+        result = subprocess.run(
+            ["pdftotext", "-f", str(sample_page), "-l", str(sample_page), pdf_path, "-"],
+            capture_output=True, text=True, timeout=10,
+        )
+        return len(result.stdout.strip()) > 50
+    except Exception:
+        return False
+
+
+def pdf_extract_text(pdf_path, first_page, last_page):
+    """Extract text from a range of PDF pages using pdftotext.
+
+    Returns the extracted text, or empty string on failure.
+    """
+    try:
+        result = subprocess.run(
+            ["pdftotext", "-f", str(first_page), "-l", str(last_page), "-layout", pdf_path, "-"],
+            capture_output=True, text=True, timeout=30,
+        )
+        return result.stdout.strip()
+    except Exception:
+        return ""
+
+
 def pdf_to_images(pdf_path, pages, output_dir):
     """Convert specific PDF pages to PNG images using pdftoppm.
 
@@ -128,13 +155,16 @@ def pdf_to_images(pdf_path, pages, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     image_paths = []
 
+    # Reader's recovery strategy can request lower resolution
+    dpi = "100" if os.environ.get("READER_LOW_RES") == "1" else "150"
+
     try:
         if isinstance(pages, tuple) and len(pages) == 2:
             # Range of pages
             first, last = pages
             prefix = os.path.join(output_dir, "page")
             subprocess.run(
-                ["pdftoppm", "-png", "-f", str(first), "-l", str(last), "-r", "150", pdf_path, prefix],
+                ["pdftoppm", "-png", "-f", str(first), "-l", str(last), "-r", dpi, pdf_path, prefix],
                 check=True, capture_output=True,
             )
             # pdftoppm creates files like page-01.png, page-02.png, etc.
@@ -146,7 +176,7 @@ def pdf_to_images(pdf_path, pages, output_dir):
             for page_num in pages:
                 prefix = os.path.join(output_dir, f"p{page_num:04d}")
                 subprocess.run(
-                    ["pdftoppm", "-png", "-f", str(page_num), "-l", str(page_num), "-r", "150", pdf_path, prefix],
+                    ["pdftoppm", "-png", "-f", str(page_num), "-l", str(page_num), "-r", dpi, pdf_path, prefix],
                     check=True, capture_output=True,
                 )
                 for f in sorted(os.listdir(output_dir)):
@@ -164,15 +194,51 @@ def pdf_to_images(pdf_path, pages, output_dir):
     return image_paths
 
 
+MAX_IMAGE_BYTES = 1_500_000  # 1.5 MB — keeps 10-page batches under API limit
+
+
 def make_image_content(image_path):
-    """Read an image file and return a Claude image content block."""
+    """Read an image file and return a Claude image content block.
+
+    If the PNG exceeds MAX_IMAGE_BYTES, re-encode as JPEG with progressive
+    quality reduction to stay within the API request size limit.
+    """
     with open(image_path, "rb") as f:
         data = f.read()
+
+    media_type = "image/png"
+
+    if len(data) > MAX_IMAGE_BYTES:
+        try:
+            from PIL import Image
+            img = Image.open(image_path)
+            if img.mode == "RGBA":
+                img = img.convert("RGB")
+            # Try decreasing quality until under limit
+            for quality in (70, 50, 35):
+                import io
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=quality)
+                jpeg_data = buf.getvalue()
+                if len(jpeg_data) <= MAX_IMAGE_BYTES:
+                    data = jpeg_data
+                    media_type = "image/jpeg"
+                    break
+            else:
+                # Even quality 35 is too large — resize to 75%
+                img = img.resize((int(img.width * 0.75), int(img.height * 0.75)))
+                buf = io.BytesIO()
+                img.save(buf, format="JPEG", quality=50)
+                data = buf.getvalue()
+                media_type = "image/jpeg"
+        except ImportError:
+            pass  # No PIL — send the large PNG as-is
+
     return {
         "type": "image",
         "source": {
             "type": "base64",
-            "media_type": "image/png",
+            "media_type": media_type,
             "data": base64.standard_b64encode(data).decode("utf-8"),
         },
     }
@@ -331,8 +397,11 @@ def find_articles_from_toc(pdf_path, temp_dir):
     all_articles = []
     page_offset = None
 
-    # Send TOC pages in two batches to stay within Claude's request size limit
-    batches = [(1, 10), (11, 20)]
+    # Send TOC pages in batches — smaller batches when Reader's recovery strategy requests it
+    if os.environ.get("READER_SMALL_BATCHES") == "1":
+        batches = [(1, 5), (6, 10), (11, 15), (16, 20)]
+    else:
+        batches = [(1, 10), (11, 20)]
     for first, last in batches:
         print(f"  Extracting TOC pages ({first}-{last})...")
         toc_images = pdf_to_images(pdf_path, (first, last), os.path.join(temp_dir, f"toc_{first}"))

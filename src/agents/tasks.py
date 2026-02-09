@@ -97,6 +97,13 @@ class EditorLedger:
             and (task_type is None or e["task"] == task_type)
         )
 
+    def attempt_count(self, key, task_type=None):
+        """Count total attempts (successes + failures) for a key."""
+        entries = self._data.get(key, [])
+        if task_type:
+            entries = [e for e in entries if e["task"] == task_type]
+        return len(entries)
+
     def last_attempt_time(self, key, task_type=None):
         """Return the ISO timestamp of the last attempt, or None."""
         entries = self._data.get(key, [])

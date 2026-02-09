@@ -10,6 +10,7 @@ Usage:
 
 import json
 import os
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -206,6 +207,43 @@ def insert_feature(issue_id, row):
     sb = get_supabase()
     row["issue_id"] = issue_id
     sb.table("features").insert(row).execute()
+
+
+def update_detective_verdict(feature_id, verdict):
+    """Write Detective's binary YES/NO verdict to a feature row.
+
+    Args:
+        feature_id: The feature's numeric primary key
+        verdict: "YES" or "NO"
+    """
+    if verdict not in ("YES", "NO"):
+        raise ValueError(f"Invalid detective verdict: {verdict!r} — must be YES or NO")
+    sb = get_supabase()
+    sb.table("features").update({
+        "detective_verdict": verdict,
+        "detective_checked_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("id", feature_id).execute()
+
+
+def get_features_needing_detective(issue_id=None):
+    """Get features with detective_verdict IS NULL and non-empty homeowner_name.
+
+    Optionally filter by issue_id. Returns list of {id, homeowner_name, issue_id}.
+    """
+    sb = get_supabase()
+    query = (
+        sb.table("features")
+        .select("id, homeowner_name, issue_id")
+        .is_("detective_verdict", "null")
+        .neq("homeowner_name", "")
+        .not_.is_("homeowner_name", "null")
+        .neq("homeowner_name", "null")   # Filter string "null" from Gemini
+        .neq("homeowner_name", "None")   # Filter string "None" from Gemini
+    )
+    if issue_id is not None:
+        query = query.eq("issue_id", issue_id)
+    result = query.execute()
+    return result.data
 
 
 def delete_features_for_issue(issue_id):

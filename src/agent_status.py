@@ -157,15 +157,57 @@ def read_xref():
 
 
 def read_dossiers():
-    """Read dossier stats and per-name results."""
-    empty = {"investigated": 0, "high": 0, "medium": 0, "low": 0, "by_name": {}}
+    """Read dossier stats from Supabase, falling back to local file.
+
+    Returns by_name dict with both connection_strength and editor_verdict.
+    """
+    empty = {"investigated": 0, "high": 0, "medium": 0, "low": 0, "by_name": {}, "confirmed_names": []}
+
+    # Primary source: Supabase
+    try:
+        from db import list_dossiers
+        dossiers = list_dossiers()
+        if dossiers:
+            strengths = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            by_name = {}
+            confirmed_names = []
+            for d in dossiers:
+                s = (d.get("connection_strength") or "").upper()
+                if s in strengths:
+                    strengths[s] += 1
+                name = (d.get("subject_name") or "").strip()
+                verdict = (d.get("editor_verdict") or "").upper()
+                reasoning = d.get("editor_reasoning") or ""
+                if name:
+                    by_name[name.lower()] = {
+                        "strength": s.lower(),
+                        "editor_verdict": verdict,
+                        "editor_reasoning": reasoning,
+                    }
+                if verdict == "CONFIRMED" and name:
+                    confirmed_names.append({
+                        "name": name,
+                        "strength": s.lower(),
+                        "rationale": (d.get("strength_rationale") or "")[:120],
+                        "editor_verdict": verdict,
+                    })
+            return {
+                "investigated": len(dossiers),
+                "high": strengths["HIGH"],
+                "medium": strengths["MEDIUM"],
+                "low": strengths["LOW"],
+                "by_name": by_name,
+                "confirmed_names": confirmed_names,
+            }
+    except Exception:
+        pass
+
+    # Fallback: local file
     if not os.path.exists(DOSSIERS_DIR):
         return empty
-
     master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
     if not os.path.exists(master_path):
         return empty
-
     try:
         with open(master_path) as f:
             dossiers = json.load(f)
@@ -173,12 +215,12 @@ def read_dossiers():
         by_name = {}
         confirmed_names = []
         for d in dossiers:
-            s = d.get("connection_strength", "").upper()
+            s = (d.get("connection_strength") or "").upper()
             if s in strengths:
                 strengths[s] += 1
-            name = d.get("subject_name", "").strip()
+            name = (d.get("subject_name") or "").strip()
             if name:
-                by_name[name.lower()] = s.lower()
+                by_name[name.lower()] = {"strength": s.lower(), "editor_verdict": "", "editor_reasoning": ""}
             if s in ("HIGH", "MEDIUM") and name:
                 confirmed_names.append({
                     "name": name,
@@ -266,8 +308,8 @@ def read_combined_inbox(max_messages=20):
             pass
 
     combined = editor_msgs + human_msgs
-    # Sort by timestamp (ISO format), falling back to time string
-    combined.sort(key=lambda m: m.get("timestamp", m.get("time", "")))
+    # Sort by timestamp — coerce to str to handle mixed float/str values
+    combined.sort(key=lambda m: str(m.get("timestamp", m.get("time", ""))))
     # Most recent first, capped
     return combined[-max_messages:][::-1]
 
@@ -656,10 +698,19 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
         if status == "cleared":
             continue  # Celebrity checked and cleared
 
-        # Determine research status
-        if key in dossier_by_name:
+        # Determine research status and editor verdict
+        dossier_info = dossier_by_name.get(key)
+        editor_verdict = None
+        editor_reasoning = None
+        if isinstance(dossier_info, dict):
             research = "dossier_complete"
-            research_detail = dossier_by_name[key]  # connection strength
+            research_detail = dossier_info.get("strength")
+            editor_verdict = dossier_info.get("editor_verdict") or None
+            editor_reasoning = dossier_info.get("editor_reasoning") or None
+        elif isinstance(dossier_info, str):
+            # Legacy format: just the strength string
+            research = "dossier_complete"
+            research_detail = dossier_info
         elif investigating_now and key.startswith(investigating_now[:8]):
             research = "investigating"
             research_detail = None
@@ -670,6 +721,10 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
             research = None
             research_detail = None
 
+        # Skip names Miranda has rejected — her word is final
+        if editor_verdict == "REJECTED":
+            continue
+
         finds.append({
             "name": name,
             "issue": feat.get("issue", ""),
@@ -678,11 +733,42 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
             "status": status,
             "research": research,
             "research_detail": research_detail,
+            "editor_verdict": editor_verdict,
+            "editor_reasoning": editor_reasoning,
         })
 
-    # Sort: epstein matches first, then celebrities
-    type_order = {"epstein_match": 0, "celebrity": 1, "notable": 2}
-    finds.sort(key=lambda f: type_order.get(f["type"], 3))
+    # Add CONFIRMED dossiers that aren't already in finds (e.g. from pre-extraction era)
+    for name_key, info in dossier_by_name.items():
+        if name_key in seen:
+            continue
+        if not isinstance(info, dict):
+            continue
+        verdict = (info.get("editor_verdict") or "").upper()
+        if verdict == "REJECTED":
+            continue
+        # Include CONFIRMED and PENDING_REVIEW dossiers not yet in feature list
+        strength = info.get("strength", "")
+        if verdict == "CONFIRMED" or strength in ("high", "medium"):
+            finds.append({
+                "name": name_key.title(),
+                "issue": "",
+                "location": "",
+                "type": "epstein_match",
+                "status": "confirmed" if verdict == "CONFIRMED" else "likely_match",
+                "research": "dossier_complete",
+                "research_detail": strength,
+                "editor_verdict": verdict or None,
+                "editor_reasoning": info.get("editor_reasoning"),
+            })
+            seen.add(name_key)
+
+    # Sort: confirmed first, then epstein matches, then celebrities
+    def sort_key(f):
+        if f.get("editor_verdict") == "CONFIRMED":
+            return (0,)
+        type_order = {"epstein_match": 1, "celebrity": 2, "notable": 3}
+        return (type_order.get(f["type"], 4),)
+    finds.sort(key=sort_key)
 
     return finds
 
@@ -837,8 +923,9 @@ def generate_status():
     xref_stats = read_xref()
     dossier_stats = read_dossiers()
 
-    # Count confirmed Epstein associates from dossiers
-    confirmed_associates = dossier_stats.get("high", 0) + dossier_stats.get("medium", 0)
+    # Count confirmed Epstein associates — only those Miranda has CONFIRMED
+    confirmed_names_list = dossier_stats.get("confirmed_names", [])
+    confirmed_associates = len(confirmed_names_list)
 
     # Determine statuses
     scout_status = "working" if 0 < manifest_stats["total"] < TOTAL_EXPECTED_ISSUES else (

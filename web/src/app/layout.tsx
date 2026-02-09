@@ -3,6 +3,7 @@ import { Inter, Playfair_Display, JetBrains_Mono } from "next/font/google";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { GridOverlay } from "@/components/dev/GridOverlay";
 import "./globals.css";
 
 const inter = Inter({
@@ -21,11 +22,11 @@ const jetbrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "The AD-Epstein Index",
+  title: "Where They Live — The AD-Epstein Index",
   description:
     "A data-driven investigation cross-referencing every Architectural Digest featured home (1988-2025) with the DOJ Epstein Library.",
   openGraph: {
-    title: "The AD-Epstein Index",
+    title: "Where They Live — The AD-Epstein Index",
     description:
       "Cross-referencing Architectural Digest with the DOJ Epstein Library.",
     type: "website",
@@ -46,6 +47,7 @@ export default function RootLayout({
           <Header />
           <main>{children}</main>
           <Footer />
+          {process.env.NODE_ENV === "development" && <GridOverlay />}
         </TooltipProvider>
       </body>
     </html>

@@ -143,6 +143,13 @@ class Agent(ABC):
         self._last_task_time = 0.0     # For watchdog timer
         self._current_task_obj = None  # The Task currently being executed
 
+        # Personality-driven speech
+        self._speech = ""              # Latest narrated speech bubble text
+        self._personality = None       # Cached personality from skills file
+        self._agent_name = None        # Character name from skills file (e.g. "Arthur")
+        self._last_idle_chatter = 0.0  # Timestamp of last idle narration
+        self._idle_chatter_interval = 120  # Seconds between idle chatter (2 min)
+
     # ── Lifecycle ──────────────────────────────────────────────
 
     async def run(self):
@@ -176,6 +183,12 @@ class Agent(ABC):
                             result = await self.execute(task)
                             self.outbox.put_nowait(result)
                             did_work = True
+                            # Narrate completion in agent's personality
+                            try:
+                                summary = result.result.get("summary", task.goal) if hasattr(result, "result") and isinstance(result.result, dict) else task.goal
+                                await asyncio.to_thread(self.narrate, f"Completed: {summary}")
+                            except Exception:
+                                pass
                         except Exception as e:
                             # Task execution failed — send failure result
                             fail_result = TaskResult(
@@ -191,6 +204,11 @@ class Agent(ABC):
                             self._last_error = str(e)
                             self._last_error_time = datetime.now()
                             self.log(f"Task {task.id} failed: {e}", level="ERROR")
+                            # Narrate failure in agent's personality
+                            try:
+                                await asyncio.to_thread(self.narrate, f"Failed: {task.goal} — {e}")
+                            except Exception:
+                                pass
                         finally:
                             self._current_task_obj = None
 
@@ -207,6 +225,12 @@ class Agent(ABC):
                     self._last_work_time = datetime.now()
                     if did_work:
                         self.log(f"Work cycle completed (cycle #{self._cycles})", level="DEBUG")
+                    else:
+                        # No work — generate personality-driven idle chatter
+                        try:
+                            await asyncio.to_thread(self.idle_chatter)
+                        except Exception:
+                            pass
                 except Exception as e:
                     self._errors += 1
                     self._last_error = str(e)
@@ -296,6 +320,188 @@ class Agent(ABC):
                 return f.read()
         return ""
 
+    # ── Personality & Speech ─────────────────────────────────
+
+    def _load_personality(self):
+        """Extract the Personality section from this agent's skills file. Cached."""
+        if self._personality is not None:
+            return self._personality
+        skills = self.load_skills()
+        # Extract ## Personality section
+        marker = "## Personality"
+        idx = skills.find(marker)
+        if idx == -1:
+            self._personality = ""
+            return ""
+        start = idx + len(marker)
+        # Find next ## heading or end of file
+        next_section = skills.find("\n## ", start)
+        section = skills[start:next_section].strip() if next_section != -1 else skills[start:].strip()
+        self._personality = section
+        return section
+
+    def narrate(self, facts):
+        """Generate a speech bubble message in this agent's personality voice.
+
+        Uses Haiku for a fast, cheap call (~$0.0005). Falls back to raw facts on error.
+        The result is stored in self._speech for the dashboard to read.
+        """
+        personality = self._load_personality()
+        if not personality:
+            self._speech = facts
+            return facts
+        try:
+            import anthropic
+            client = anthropic.Anthropic()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=100,
+                system=(
+                    f"You are the {self.name.title()} agent in a newsroom-style research pipeline. "
+                    f"Your personality:\n{personality}\n\n"
+                    "Write a short status update (1-2 sentences max) in YOUR voice about what just happened. "
+                    "Stay in character. No emoji. Be brief."
+                ),
+                messages=[{"role": "user", "content": f"What just happened: {facts}"}],
+            )
+            text = response.content[0].text.strip()
+            self._speech = text
+            return text
+        except Exception as e:
+            self.log(f"Narrate failed: {e}", level="DEBUG")
+            self._speech = facts
+            return facts
+
+    def _load_agent_name(self):
+        """Extract the Name from this agent's skills file. Cached."""
+        if self._agent_name is not None:
+            return self._agent_name
+        skills = self.load_skills()
+        marker = "## Name"
+        idx = skills.find(marker)
+        if idx == -1:
+            self._agent_name = ""
+            return ""
+        start = idx + len(marker)
+        next_section = skills.find("\n## ", start)
+        name = skills[start:next_section].strip() if next_section != -1 else skills[start:].strip()
+        self._agent_name = name.split("\n")[0].strip()  # First line only
+        return self._agent_name
+
+    def idle_chatter(self):
+        """Generate a personality-driven idle/bored message.
+
+        Called when the agent has no work. Uses Haiku to produce a short
+        in-character quip about being bored, waiting, thinking, etc.
+        Respects a cooldown interval to avoid spamming.
+        """
+        now = _time.time()
+        if now - self._last_idle_chatter < self._idle_chatter_interval:
+            return  # Too soon since last chatter
+
+        personality = self._load_personality()
+        if not personality:
+            return
+
+        agent_name = self._load_agent_name()
+        self._last_idle_chatter = now
+
+        try:
+            import anthropic
+            client = anthropic.Anthropic()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=80,
+                system=(
+                    f"You are {agent_name or self.name.title()}, the {self.name.title()} agent in a newsroom-style research pipeline. "
+                    f"Your personality:\n{personality}\n\n"
+                    "You're between tasks right now — no assignments from the Editor. "
+                    "Write a short idle thought (1 sentence max) in YOUR voice. "
+                    "You might be bored, restless, thinking about work, fidgeting, "
+                    "making an observation about the office, or reflecting on recent work. "
+                    "Be natural and varied — never repeat yourself. No emoji. Stay in character."
+                ),
+                messages=[{"role": "user", "content": "What are you thinking right now while you wait?"}],
+            )
+            text = response.content[0].text.strip()
+            self._speech = text
+        except Exception:
+            pass  # Silently fail — idle chatter is non-critical
+
+    # ── Problem Solving ────────────────────────────────────────
+
+    def problem_solve(self, error, context, strategies):
+        """Diagnose an error and choose a recovery strategy using LLM reasoning.
+
+        This gives agents the ability to THINK about problems instead of blindly
+        retrying. The LLM sees the error, the context, and the available strategies,
+        then picks the best approach — or decides to escalate to the Editor.
+
+        Args:
+            error: The error message or exception string
+            context: Dict with relevant context (file, task, what was attempted)
+            strategies: Dict of {strategy_name: description} — the agent's toolkit
+
+        Returns:
+            Dict with:
+                diagnosis: What the agent thinks went wrong
+                strategy: Key from strategies dict (or "escalate")
+                reasoning: Why this strategy was chosen
+        """
+        personality = self._load_personality()
+        strategies_text = "\n".join(f"  - {k}: {v}" for k, v in strategies.items())
+        strategies_text += "\n  - escalate: Report to Editor — all local strategies exhausted"
+
+        prompt = f"""You encountered an error while working. Diagnose it and choose the best recovery strategy.
+
+ERROR: {error}
+
+CONTEXT:
+{json.dumps(context, indent=2, default=str)}
+
+AVAILABLE STRATEGIES:
+{strategies_text}
+
+Respond with JSON only:
+{{"diagnosis": "What went wrong (1 sentence)", "strategy": "strategy_name", "reasoning": "Why this strategy (1 sentence)"}}"""
+
+        try:
+            import anthropic
+            client = anthropic.Anthropic()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                system=(
+                    f"You are the {self.name.title()} agent. {personality[:200] if personality else ''}\n"
+                    "You are a problem solver. When something goes wrong, you diagnose it and pick "
+                    "the smartest recovery strategy from your toolkit. Be practical, not theoretical. "
+                    "Only escalate if you genuinely have no local options left."
+                ),
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1]
+                if "```" in text:
+                    text = text[:text.rindex("```")]
+            result = json.loads(text)
+            self.log(f"Problem solve: {result.get('diagnosis', '')} → {result.get('strategy', 'unknown')}")
+            # Narrate the decision
+            try:
+                self.narrate(f"Hit a problem: {result.get('diagnosis', error)}. Trying: {result.get('strategy', 'unknown')}")
+            except Exception:
+                pass
+            return result
+        except Exception as e:
+            self.log(f"Problem solve LLM failed: {e}", level="DEBUG")
+            # Fallback: pick the first non-escalate strategy
+            fallback = next(iter(strategies), "escalate")
+            return {
+                "diagnosis": str(error)[:100],
+                "strategy": fallback,
+                "reasoning": "LLM unavailable, trying first available strategy",
+            }
+
     # ── Logging ───────────────────────────────────────────────
 
     def log(self, message, level="INFO"):
@@ -331,6 +537,7 @@ class Agent(ABC):
             "id": self.name,
             "status": status,
             "message": self._current_task,
+            "speech": self._speech or None,
             "active": self._active,
             "paused": self.is_paused,
             "cycles": self._cycles,

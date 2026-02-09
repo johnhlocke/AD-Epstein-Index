@@ -668,15 +668,15 @@ body {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.chalk-item.completed .chalk-agent { color: rgba(100, 220, 140, 0.85); }
-.chalk-item.completed .chalk-goal { color: rgba(100, 220, 140, 0.5); }
-.chalk-item.failed .chalk-agent { color: rgba(231, 76, 60, 0.85); }
-.chalk-item.failed .chalk-goal { color: rgba(231, 76, 60, 0.5); }
-.chalk-item.in-flight .chalk-agent { color: rgba(245, 200, 66, 0.9); }
-.chalk-item.exhausted .chalk-agent { color: rgba(231, 76, 60, 0.6); text-decoration: line-through; }
-.chalk-item.exhausted .chalk-goal { color: rgba(231, 76, 60, 0.35); text-decoration: line-through; }
-.chalk-item.stuck .chalk-agent { color: rgba(241, 196, 15, 0.85); }
-.chalk-item.stuck .chalk-goal { color: rgba(241, 196, 15, 0.5); }
+.chalk-item.completed .chalk-agent { color: rgba(255, 255, 255, 0.95); }
+.chalk-item.completed .chalk-goal { color: rgba(255, 255, 255, 0.7); }
+.chalk-item.failed .chalk-agent { color: rgba(255, 255, 255, 0.95); }
+.chalk-item.failed .chalk-goal { color: rgba(255, 255, 255, 0.7); }
+.chalk-item.in-flight .chalk-agent { color: rgba(255, 255, 255, 0.95); }
+.chalk-item.exhausted .chalk-agent { color: rgba(255, 255, 255, 0.75); text-decoration: line-through; }
+.chalk-item.exhausted .chalk-goal { color: rgba(255, 255, 255, 0.5); text-decoration: line-through; }
+.chalk-item.stuck .chalk-agent { color: rgba(255, 255, 255, 0.95); }
+.chalk-item.stuck .chalk-goal { color: rgba(255, 255, 255, 0.7); }
 .chalk-section-label {
   font-size: 3.5px;
   color: rgba(255,255,255,0.45);
@@ -906,10 +906,10 @@ body {
   font-size: 6px;
   line-height: 1.6;
   padding: 6px 10px;
-  white-space: nowrap;
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  word-wrap: break-word;
+  width: max-content;
+  max-width: 280px;
   border: 2px solid #333;
   pointer-events: none;
   opacity: 0;
@@ -1374,7 +1374,7 @@ body {
   .top-bar-title { font-size: 8px; }
   .top-stat { padding: 3px 6px; }
   .top-stat-value { font-size: 9px; }
-  .speech-bubble { font-size: 4px; max-width: 120px; }
+  .speech-bubble { font-size: 4px; max-width: 180px; }
 }
 </style>
 </head>
@@ -1932,7 +1932,7 @@ function updateAgent(agentData) {
       }
     }
 
-    updateSpeechBubble('editor', agentData.liveTask || agentData.message || '...');
+    updateSpeechBubble('editor', agentData.speech || agentData.liveTask || agentData.message || '...');
     return;
   }
 
@@ -1946,6 +1946,8 @@ function updateAgent(agentData) {
   const isWorking = status === 'working' && agentData.liveTask;
   const isError = status === 'error';
   const aid = agentData.id;
+  // Personality speech takes priority over generic status messages
+  const speechText = agentData.speech || agentData.liveTask || agentData.message;
 
   if (charEl.classList.contains('editor-engage')) {
     // During Editor engagement, keep front-facing + yellow glow, just update animation
@@ -1954,14 +1956,14 @@ function updateAgent(agentData) {
     // Working: face away (back view), pulsing colored outline
     charEl.classList.add('hub-working', 'anim-working');
     charEl.style.setProperty('--agent-color', AGENT_CONFIG[aid]?.color || '#888');
-    updateSpeechBubble(aid, agentData.liveTask);
+    updateSpeechBubble(aid, speechText);
     // Reset wait counter — agent is active
     agentWaitCycles[aid] = 0;
     delete agentBoredThreshold[aid];
   } else if (isError) {
     // Error: face camera, shake animation
     charEl.classList.add('show-front', 'anim-error');
-    updateSpeechBubble(aid, agentData.last_error || 'Error!');
+    updateSpeechBubble(aid, agentData.speech || agentData.last_error || 'Error!');
     agentWaitCycles[aid] = 0;
     delete agentBoredThreshold[aid];
   } else {
@@ -1974,6 +1976,8 @@ function updateAgent(agentData) {
 
     const cycles = agentWaitCycles[aid];
     const threshold = agentBoredThreshold[aid];
+    // Use last personality speech — agents generate their own idle chatter
+    const waitText = agentData.speech || '';
 
     if (cycles >= threshold) {
       // Alternate between front and bored every 2-3 cycles
@@ -1982,16 +1986,16 @@ function updateAgent(agentData) {
       if (showBored) {
         // Bored: show waiting/bored sprite
         charEl.classList.add('hub-bored', 'anim-idle');
-        updateSpeechBubble(aid, 'Waiting for assignment...');
+        updateSpeechBubble(aid, waitText);
       } else {
         // Brief return to front before going bored again
         charEl.classList.add('hub-waiting', 'show-front', 'anim-idle');
-        updateSpeechBubble(aid, 'Waiting for assignment...');
+        updateSpeechBubble(aid, waitText);
       }
     } else {
       // Not yet bored: normal front-facing wait
       charEl.classList.add('hub-waiting', 'show-front', 'anim-idle');
-      updateSpeechBubble(aid, 'Waiting for assignment...');
+      updateSpeechBubble(aid, waitText);
     }
     // Keep waiting bubble persistently visible (override auto-hide)
     const waitBubble = document.getElementById(`bubble-${aid}`);
@@ -2031,19 +2035,19 @@ function updateSpeechBubble(agentId, text) {
   bubble.textContent = '';
 
   let i = 0;
-  const truncated = text.length > 40 ? text.substring(0, 37) + '...' : text;
   typewriterTimers[agentId] = setInterval(() => {
-    if (i < truncated.length) {
-      bubble.textContent = truncated.substring(0, i + 1);
+    if (i < text.length) {
+      bubble.textContent = text.substring(0, i + 1);
       i++;
     } else {
       clearInterval(typewriterTimers[agentId]);
       typewriterTimers[agentId] = null;
+      const displayTime = Math.max(8000, text.length * 80);
       setTimeout(() => {
         if (bubble.dataset.fullText === text) {
           bubble.classList.remove('visible');
         }
-      }, 8000);
+      }, displayTime);
     }
   }, 35);
 }
@@ -2661,10 +2665,9 @@ function renderChalkboards(taskBoard, editorLedger) {
     } else {
       boardEl.innerHTML = inFlight.slice(0, 6).map(task => {
         const agent = (task.agent || '?').toLowerCase();
-        const color = AGENT_COLORS_CHALK[agent] || 'rgba(255,255,255,0.75)';
         const goal = task.goal || task.type || '';
         return `<div class="chalk-item in-flight">
-          <span class="chalk-agent" style="color:${color}">${escHtml(agent)}</span>
+          <span class="chalk-agent">${escHtml(agent)}</span>
           <span class="chalk-goal">${escHtml(goal)}</span>
         </div>`;
       }).join('');
@@ -2681,10 +2684,8 @@ function renderChalkboards(taskBoard, editorLedger) {
     if (exhausted.length > 0) {
       html += `<div class="chalk-section-label">GAVE UP (${exhausted.length})</div>`;
       html += exhausted.slice(0, 4).map(item => {
-        const agent = (item.agent || '').toLowerCase();
-        const color = AGENT_COLORS_CHALK[agent] || 'rgba(231,76,60,0.6)';
         return `<div class="chalk-item exhausted" title="${escHtml(item.last_error)}">
-          <span class="chalk-agent" style="color:${color}">${escHtml(item.key)}</span>
+          <span class="chalk-agent">${escHtml(item.key)}</span>
           <span class="chalk-goal">${escHtml(item.last_error)}</span>
           <span class="chalk-count">${item.failures}x</span>
         </div>`;
@@ -2695,10 +2696,8 @@ function renderChalkboards(taskBoard, editorLedger) {
     if (stuck.length > 0) {
       html += `<div class="chalk-section-label">RETRYING (${stuck.length})</div>`;
       html += stuck.slice(0, 4).map(item => {
-        const agent = (item.agent || '').toLowerCase();
-        const color = AGENT_COLORS_CHALK[agent] || 'rgba(241,196,15,0.85)';
         return `<div class="chalk-item stuck" title="${escHtml(item.last_error)}">
-          <span class="chalk-agent" style="color:${color}">${escHtml(item.key)}</span>
+          <span class="chalk-agent">${escHtml(item.key)}</span>
           <span class="chalk-goal">${escHtml(item.last_error)}</span>
           <span class="chalk-count">${item.failures}x</span>
         </div>`;
@@ -2718,13 +2717,12 @@ function renderChalkboards(taskBoard, editorLedger) {
   } else {
     resultsEl.innerHTML = results.map(task => {
       const agent = (task.agent || task.completed_by || task.failed_by || '?').toLowerCase();
-      const color = AGENT_COLORS_CHALK[agent] || 'rgba(255,255,255,0.75)';
       const goal = task._status === 'failed'
         ? (task.error || task.goal || task.type || 'Failed')
         : (task.goal || task.type || 'Done');
       const cls = task._status;
       return `<div class="chalk-item ${cls}">
-        <span class="chalk-agent" style="color:${color}">${escHtml(agent)}</span>
+        <span class="chalk-agent">${escHtml(agent)}</span>
         <span class="chalk-goal">${escHtml(goal)}</span>
       </div>`;
     }).join('');
@@ -2992,22 +2990,23 @@ function escHtml(str) {
 }
 
 function renderAll(data) {
-  renderTitle(data);
-  updateLiveBadge(data.timestamp);
-  renderTopStats(data.stats);
-  renderAgents(data.agents);
-  renderPipeline(data.pipeline);
-  renderQueueDepths(data.queue_depths);
-  renderNowProcessing(data.now_processing);
-  renderInbox(data.editor_inbox);
-  renderLogWithFilters(data.log);
-  renderNotableFinds(data.notable_finds);
-  renderThroughput(data.throughput);
-  renderCost(data.cost);
-  renderQuality(data.quality);
-  renderCollaborations(data.collaborations);
-  renderChalkboards(data.task_board, data.editor_ledger);
-  renderCoverageMap(data.coverage_map);
+  const safe = (fn, label) => { try { fn(); } catch(e) { console.error(`renderAll: ${label} failed:`, e); } };
+  safe(() => renderTitle(data), 'title');
+  safe(() => updateLiveBadge(data.timestamp), 'liveBadge');
+  safe(() => renderTopStats(data.stats), 'topStats');
+  safe(() => renderAgents(data.agents), 'agents');
+  safe(() => renderPipeline(data.pipeline), 'pipeline');
+  safe(() => renderQueueDepths(data.queue_depths), 'queueDepths');
+  safe(() => renderNowProcessing(data.now_processing), 'nowProcessing');
+  safe(() => renderInbox(data.editor_inbox), 'inbox');
+  safe(() => renderLogWithFilters(data.log), 'log');
+  safe(() => renderNotableFinds(data.notable_finds), 'notableFinds');
+  safe(() => renderThroughput(data.throughput), 'throughput');
+  safe(() => renderCost(data.cost), 'cost');
+  safe(() => renderQuality(data.quality), 'quality');
+  safe(() => renderCollaborations(data.collaborations), 'collaborations');
+  safe(() => renderChalkboards(data.task_board, data.editor_ledger), 'chalkboards');
+  safe(() => renderCoverageMap(data.coverage_map), 'coverageMap');
   previousState = data;
 }
 

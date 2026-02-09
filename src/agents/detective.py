@@ -54,7 +54,8 @@ class DetectiveAgent(Agent):
     async def execute(self, task):
         """Execute a cross_reference task from the Editor.
 
-        Runs BB + DOJ search on a batch of names and returns results.
+        Runs BB + DOJ search on a batch of names, applies contextual glance
+        for ambiguous cases, and returns binary YES/NO verdicts.
         """
         if task.type != "cross_reference":
             return TaskResult(
@@ -64,6 +65,7 @@ class DetectiveAgent(Agent):
             )
 
         names = task.params.get("names", [])
+        feature_ids = task.params.get("feature_ids", {})  # name → [feature_id, ...] list
         if not names:
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="success",
@@ -73,51 +75,213 @@ class DetectiveAgent(Agent):
         self._current_task = f"Cross-referencing {len(names)} names..."
         checked = []
 
-        from cross_reference import search_black_book, load_black_book, assess_combined_verdict
+        from cross_reference import (
+            search_black_book, load_black_book, assess_combined_verdict,
+            contextual_glance, verdict_to_binary,
+        )
         book_text = await asyncio.to_thread(load_black_book)
 
-        for name in names:
-            bb_matches = search_black_book(name, book_text)
-            bb_verdict = "match" if bb_matches else "no_match"
+        # Step 0: Analyze names with LLM — split compounds, flag skips
+        name_analysis = await asyncio.to_thread(self._analyze_names, names)
 
-            # DOJ search (if browser available)
-            doj_result = None
-            doj_verdict = "pending"
-            try:
-                if await self._ensure_browser():
-                    doj_result = await self._doj_client.search_name_variations(name)
-                    if doj_result.get("search_successful"):
-                        doj_verdict = "searched"
-                        verdict_info = assess_combined_verdict(name, bb_matches, doj_result)
+        for name in names:
+            analysis = name_analysis.get(name, {})
+            individuals = analysis.get("search_names", [name])
+            if not individuals:
+                individuals = [name]  # Fallback
+
+            # Skip if LLM says not a real person
+            if analysis.get("skip"):
+                self.log(f"Skipping '{name}': {analysis.get('reason', 'not a person')}", level="DEBUG")
+                checked.append({
+                    "name": name,
+                    "individuals_searched": [],
+                    "feature_ids": feature_ids.get(name, []),
+                    "bb_verdict": "no_match",
+                    "bb_matches": None,
+                    "doj_verdict": "skipped",
+                    "doj_results": None,
+                    "combined": "no_match",
+                    "confidence_score": 0,
+                    "rationale": f"Skipped: {analysis.get('reason', 'not a searchable person')}",
+                    "glance_result": None,
+                    "binary_verdict": "NO",
+                })
+                continue
+
+            # Search each individual, take the strongest result
+            best_bb_matches = None
+            best_doj_result = None
+            best_verdict_info = None
+            best_bb_verdict = "no_match"
+            best_doj_verdict = "pending"
+
+            for individual in individuals:
+                bb_matches = search_black_book(individual, book_text)
+                if bb_matches:
+                    best_bb_matches = bb_matches
+                    best_bb_verdict = "match"
+
+                # DOJ search (if browser available)
+                doj_result = None
+                doj_verdict = "pending"
+                try:
+                    if await self._ensure_browser():
+                        doj_result = await self._doj_client.search_name_variations(individual)
+                        if doj_result.get("search_successful"):
+                            doj_verdict = "searched"
+                            verdict_info = assess_combined_verdict(individual, bb_matches, doj_result)
+                        else:
+                            doj_verdict = "error"
+                            verdict_info = {"verdict": best_bb_verdict, "confidence_score": 0.5,
+                                            "rationale": f"DOJ search failed for {individual}", "false_positive_indicators": []}
                     else:
+                        verdict_info = {"verdict": best_bb_verdict, "confidence_score": 0.5,
+                                        "rationale": "DOJ browser unavailable", "false_positive_indicators": []}
+                except Exception as e:
+                    # Diagnose DOJ failure and decide recovery
+                    decision = await asyncio.to_thread(
+                        self.problem_solve,
+                        error=str(e)[:200],
+                        context={
+                            "name": individual,
+                            "bb_verdict": best_bb_verdict,
+                            "search_type": "DOJ browser search",
+                        },
+                        strategies={
+                            "skip_doj": "DOJ unavailable — use BB verdict only (lower confidence)",
+                            "retry_with_backoff": "Possible rate limit — wait and retry",
+                            "restart_browser": "Browser may have crashed — close and relaunch",
+                            "escalate": "DOJ site down or WAF blocking — needs Editor attention",
+                        },
+                    )
+                    self.log(f"DOJ problem: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
+
+                    recovered = False
+                    if decision.get("strategy") == "restart_browser":
+                        try:
+                            await self._stop_browser()
+                            await asyncio.sleep(5)
+                            await self._ensure_browser()
+                            doj_result = await self._doj_client.search_name_variations(individual)
+                            if doj_result.get("search_successful"):
+                                doj_verdict = "searched"
+                                verdict_info = assess_combined_verdict(individual, bb_matches, doj_result)
+                                recovered = True
+                        except Exception:
+                            pass  # Fall through to BB-only verdict
+
+                    if not recovered:
                         doj_verdict = "error"
-                        verdict_info = {"verdict": bb_verdict, "confidence_score": 0.5,
-                                        "rationale": "DOJ search failed", "false_positive_indicators": []}
-                else:
-                    verdict_info = {"verdict": bb_verdict, "confidence_score": 0.5,
-                                    "rationale": "DOJ browser unavailable", "false_positive_indicators": []}
-            except Exception as e:
-                doj_verdict = "error"
-                verdict_info = {"verdict": bb_verdict, "confidence_score": 0.3,
-                                "rationale": f"DOJ error: {e}", "false_positive_indicators": []}
+                        verdict_info = {"verdict": best_bb_verdict, "confidence_score": 0.3,
+                                        "rationale": f"DOJ error: {decision.get('diagnosis', str(e))}", "false_positive_indicators": []}
+
+                # Keep the strongest result across individuals
+                if best_verdict_info is None or verdict_info.get("confidence_score", 0) > best_verdict_info.get("confidence_score", 0):
+                    best_verdict_info = verdict_info
+                    best_doj_result = doj_result
+                    best_doj_verdict = doj_verdict
+
+                await asyncio.sleep(2)  # Rate limiting between individuals
+
+            if best_verdict_info is None:
+                best_verdict_info = {"verdict": "no_match", "confidence_score": 0, "rationale": "No results", "false_positive_indicators": []}
+
+            # Contextual glance for ambiguous cases
+            combined = best_verdict_info["verdict"]
+            glance_result = None
+            if combined in ("possible_match", "needs_review", "likely_match"):
+                glance_result = await asyncio.to_thread(
+                    contextual_glance, name, best_bb_matches, best_doj_result
+                )
+
+            # Map to binary YES/NO
+            binary_verdict = verdict_to_binary(
+                combined,
+                best_verdict_info.get("confidence_score", 0),
+                glance_override=glance_result,
+            )
 
             checked.append({
                 "name": name,
-                "bb_verdict": bb_verdict,
-                "bb_matches": bb_matches,
-                "doj_verdict": doj_verdict,
-                "doj_results": doj_result,
-                "combined": verdict_info["verdict"],
-                "confidence_score": verdict_info.get("confidence_score", 0),
-                "rationale": verdict_info.get("rationale", ""),
+                "individuals_searched": individuals,
+                "feature_ids": feature_ids.get(name, []),
+                "bb_verdict": best_bb_verdict,
+                "bb_matches": best_bb_matches,
+                "doj_verdict": best_doj_verdict,
+                "doj_results": best_doj_result,
+                "combined": combined,
+                "confidence_score": best_verdict_info.get("confidence_score", 0),
+                "rationale": best_verdict_info.get("rationale", ""),
+                "glance_result": glance_result,
+                "binary_verdict": binary_verdict,
             })
 
-            await asyncio.sleep(2)  # Rate limiting
+            await asyncio.sleep(2)  # Rate limiting between names
 
         return TaskResult(
             task_id=task.id, task_type=task.type, status="success",
             result={"checked": checked}, agent=self.name,
         )
+
+    # ── Name Analysis (LLM) ──────────────────────────────────────
+
+    def _analyze_names(self, names):
+        """Use Haiku to analyze a batch of names — split compounds, flag non-persons.
+
+        Returns dict: { original_name: { "search_names": [...], "skip": bool, "reason": str } }
+        One LLM call for the whole batch (~$0.001).
+        """
+        import anthropic
+
+        names_list = "\n".join(f"  {i+1}. {n}" for i, n in enumerate(names))
+
+        prompt = f"""You are a detective's assistant preparing names for a search against the Epstein document library.
+
+For each name below, tell me:
+1. The individual people to search for (split couples, groups, etc.)
+2. Whether to skip it entirely (not a real searchable person)
+
+Names from Architectural Digest homeowner features:
+{names_list}
+
+Rules:
+- "Inga and Keith Rubenstein" → search "Inga Rubenstein" AND "Keith Rubenstein" separately
+- "George Clooney, Rande Gerber, and his wife, Cindy Crawford" → search each person
+- "Anonymous", "young family" → skip (not identifiable)
+- "Gritti Palace (hotel)", "The Danaos brothers" → skip (not individual people)
+- "Mr. and Mrs. Charles Yalem" → search "Charles Yalem" (and optionally "Mrs. Charles Yalem")
+- Single names like "Tyler Perry" → search as-is
+- Historical figures who died before 1950 → skip (cannot have known Epstein)
+
+Respond with JSON only. Format:
+{{
+  "Original Name Here": {{
+    "search_names": ["First Last", "First Last"],
+    "skip": false
+  }},
+  "Anonymous": {{
+    "search_names": [],
+    "skip": true,
+    "reason": "Not an identifiable person"
+  }}
+}}"""
+
+        try:
+            client = anthropic.Anthropic()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=2048,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            text = response.content[0].text.strip()
+            if text.startswith("```"):
+                text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()
+            return json.loads(text)
+        except Exception as e:
+            self.log(f"Name analysis LLM failed: {e}", level="WARN")
+            # Fallback: return each name as-is, no skips
+            return {n: {"search_names": [n], "skip": False} for n in names}
 
     # ── Browser Lifecycle ────────────────────────────────────────
 
@@ -315,45 +479,13 @@ class DetectiveAgent(Agent):
     # ── Main Work Loop ───────────────────────────────────────────
 
     async def work(self):
-        self.load_skills()
+        """Idle — Detective is now fully Editor-directed via execute().
 
-        det_log = self._load_detective_log()
-        det_log["cycle_count"] = det_log.get("cycle_count", 0) + 1
-        det_log["last_run"] = datetime.now().isoformat()
-
-        results = self._load_results()
-
-        # Step 1: Apply any pending Editor verdict overrides
-        self._apply_editor_verdicts(results)
-
-        # Step 2: PASS 1 — Black Book (fast, all unchecked names)
-        bb_did_work = await self._pass_black_book(results, det_log)
-
-        # Step 3: PASS 2 — DOJ search (slow, batched)
-        doj_did_work = await self._pass_doj(results, det_log)
-
-        # Save results after both passes
-        self._save_results(results)
-
-        # Update counts
-        self._update_counts_from_results(results)
-        det_log["names_checked"] = self._checked
-        det_log["names_matched"] = self._matches
-        self._save_detective_log(det_log)
-
-        did_work = bb_did_work or doj_did_work
-        if did_work:
-            self._current_task = f"Checked {self._checked} names ({self._matches} matches)"
-            self.log(f"Cycle complete: {self._checked} checked, {self._matches} matches, "
-                     f"DOJ: {det_log.get('doj_searches_completed', 0)} done")
-        else:
-            pending_doj = sum(1 for r in results if r.get("doj_status") == "pending")
-            if pending_doj:
-                self._current_task = f"All BB checked, {pending_doj} DOJ pending"
-            else:
-                self._current_task = f"All {self._checked} names fully checked"
-
-        return did_work
+        The Editor assigns cross_reference tasks after loading extractions
+        and via planning fallbacks. Detective no longer self-manages work.
+        """
+        self._current_task = "Waiting for Editor assignment"
+        return False
 
     async def _pass_black_book(self, results, det_log):
         """Pass 1: Check unchecked features against Black Book (fast, local)."""

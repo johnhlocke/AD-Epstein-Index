@@ -54,7 +54,8 @@ from agents.tasks import Task, TaskResult, EditorLedger
 from db import (
     get_supabase, update_issue, delete_features_for_issue, list_issues,
     count_issues_by_status, upsert_issue, get_issue_by_identifier,
-    update_editor_verdict,
+    update_editor_verdict, update_detective_verdict, get_features_needing_detective,
+    get_dossier, upsert_dossier, upload_to_storage, insert_dossier_image,
 )
 
 @dataclass
@@ -95,7 +96,7 @@ QC_FIELDS = ["homeowner_name", "designer_name", "location_city",
 
 # Timing intervals
 PLAN_INTERVAL = 30       # seconds between planning cycles
-STRATEGIC_INTERVAL = 300  # seconds between LLM assessments
+STRATEGIC_INTERVAL = 180  # seconds between LLM assessments (3 min)
 MAX_TASK_FAILURES = 3     # before giving up on an identifier/name
 
 # Opus pricing per 1M tokens (used for strategic assessments)
@@ -139,8 +140,8 @@ class EditorAgent(Agent):
 
         # Track assigned tasks (so we can see what's in flight)
         self._tasks_in_flight = {}  # task_id -> {"agent": name, "task": Task, "assigned_at": iso}
-        self._tasks_completed = 0
-        self._tasks_failed = 0
+        self._tasks_completed = []  # List of completed task summaries (capped at 20)
+        self._tasks_failed = []     # List of failed task summaries (capped at 20)
 
         # Memory
         memory = self._load_memory()
@@ -302,6 +303,21 @@ class EditorAgent(Agent):
                     self._last_error = str(e)
                     self._last_error_time = datetime.now()
                     self.log(f"Error handling {event.type} event: {e}", level="ERROR")
+                    # Diagnose: is this transient or fatal?
+                    try:
+                        decision = self.problem_solve(
+                            error=str(e)[:200],
+                            context={"event_type": event.type, "consecutive_errors": self._errors},
+                            strategies={
+                                "continue": "Transient error — safe to continue processing events",
+                                "pause_pipeline": "Multiple failures suggest systemic issue — pause agents",
+                                "restart_db": "Database connection may be stale — reconnect on next cycle",
+                                "escalate": "Repeated failures — needs human investigation",
+                            },
+                        )
+                        self.log(f"Event error diagnosis: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
+                    except Exception:
+                        pass  # Don't let problem_solve itself crash the loop
                 finally:
                     self._active = False
                     self._cycles += 1
@@ -313,7 +329,7 @@ class EditorAgent(Agent):
                     self._current_task = "Instructions acknowledged!"
                 else:
                     self._editor_state = "idle"
-                    self._current_task = f"Coordinating — {self._tasks_completed} tasks done, {len(self._tasks_in_flight)} in flight"
+                    self._current_task = f"Coordinating — {len(self._tasks_completed)} tasks done, {len(self._tasks_in_flight)} in flight"
 
         finally:
             # Cancel all producer tasks
@@ -466,13 +482,30 @@ class EditorAgent(Agent):
         """Validate each result and commit to Supabase or handle failure."""
         for agent_name, result in collected:
             # Remove from in-flight tracking
-            self._tasks_in_flight.pop(result.task_id, None)
+            task_info = self._tasks_in_flight.pop(result.task_id, {})
 
             if result.status == "success":
-                self._tasks_completed += 1
+                self._tasks_completed.append({
+                    "id": result.task_id,
+                    "agent": agent_name,
+                    "type": result.task_type,
+                    "goal": task_info.get("task", {}).get("goal", result.task_type),
+                    "completed_by": agent_name,
+                })
+                if len(self._tasks_completed) > 20:
+                    self._tasks_completed = self._tasks_completed[-20:]
                 self._handle_success(agent_name, result)
             else:
-                self._tasks_failed += 1
+                self._tasks_failed.append({
+                    "id": result.task_id,
+                    "agent": agent_name,
+                    "type": result.task_type,
+                    "goal": task_info.get("task", {}).get("goal", result.task_type),
+                    "error": (result.error or "unknown")[:120],
+                    "failed_by": agent_name,
+                })
+                if len(self._tasks_failed) > 20:
+                    self._tasks_failed = self._tasks_failed[-20:]
                 self._handle_failure(agent_name, result)
 
     def _handle_success(self, agent_name, result):
@@ -525,6 +558,11 @@ class EditorAgent(Agent):
             })
             self.ledger.record(ident, "scout", "discover_issues", True)
             self.log(f"Committed: {year}-{month:02d} ({ident[:40]})")
+
+        if found:
+            valid = [i for i in found if i.get("year") and i["year"] >= MIN_YEAR]
+            if valid:
+                self._narrate_event(f"Scout discovered {len(valid)} new AD issues on archive.org.")
 
         not_found = data.get("not_found", [])
         for month_key in not_found:
@@ -584,10 +622,26 @@ class EditorAgent(Agent):
                 self.ledger.record(identifier, "reader", "extract_features", True,
                                    note=f"Loaded {inserted} features")
                 self.log(f"Loaded {inserted} features for {identifier}")
+                # Shorten identifier for display
+                short_id = identifier[:30] + "..." if len(identifier) > 30 else identifier
+                self._narrate_event(f"Reader extracted {inserted} homeowner features from {short_id}. Sending to Detective for cross-reference.")
+
+                # Queue Detective to cross-reference the newly loaded features
+                self._queue_detective_for_issue(identifier)
             except Exception as e:
+                decision = self.problem_solve(
+                    error=str(e)[:200],
+                    context={"identifier": identifier, "feature_count": len(features), "operation": "load_extraction"},
+                    strategies={
+                        "retry_next_cycle": "Transient DB error — will retry when Reader re-extracts",
+                        "check_schema": "Schema mismatch — features table may need migration",
+                        "skip_issue": "Bad extraction data — mark as failed and move on",
+                        "escalate": "Persistent DB failure — needs investigation",
+                    },
+                )
+                self.log(f"Supabase load failed for {identifier}: {e} → {decision.get('strategy', '?')}", level="ERROR")
                 self.ledger.record(identifier, "reader", "extract_features", False,
-                                   error=str(e))
-                self.log(f"Supabase load failed for {identifier}: {e}", level="ERROR")
+                                   error=f"{e} (diagnosis: {decision.get('diagnosis', 'unknown')})")
         else:
             # Quality hold — log it, don't load
             esc_type = quality_metrics.get("escalation_type", "unknown")
@@ -596,6 +650,51 @@ class EditorAgent(Agent):
             self.log(f"HELD {identifier}: {esc_type} — {quality_metrics}", level="WARN")
 
         self.ledger.save()
+
+    def _queue_detective_for_issue(self, identifier):
+        """Queue Detective to cross-reference features from a just-loaded issue."""
+        if "detective" not in self.workers:
+            return
+
+        # Look up issue_id from identifier
+        issue = get_issue_by_identifier(identifier)
+        if not issue:
+            return
+        issue_id = issue["id"]
+
+        try:
+            unchecked = get_features_needing_detective(issue_id=issue_id)
+        except Exception as e:
+            self.log(f"Failed to query features for detective: {e}", level="ERROR")
+            return
+
+        if not unchecked:
+            return
+
+        # Build names list and feature_ids mapping (name → [id, ...] for duplicates)
+        seen_names = set()
+        names = []
+        feature_ids = {}  # name → list of feature IDs
+        for feat in unchecked:
+            name = (feat.get("homeowner_name") or "").strip()
+            if not name:
+                continue
+            if name not in seen_names:
+                names.append(name)
+                seen_names.add(name)
+            feature_ids.setdefault(name, []).append(feat["id"])
+
+        if not names:
+            return
+
+        task = Task(
+            type="cross_reference",
+            goal=f"Cross-reference {len(names)} names from {identifier[:30]}",
+            params={"names": names, "feature_ids": feature_ids},
+            priority=2,
+        )
+        if self._assign_task("detective", task):
+            self.log(f"Queued {len(names)} names for Detective from {identifier[:30]}")
 
     def _quality_gate(self, features, metrics):
         """Rule-based extraction quality check. Returns 'load' or 'hold'."""
@@ -620,56 +719,260 @@ class EditorAgent(Agent):
         return "load"
 
     def _commit_cross_reference(self, data):
-        """Save Detective's cross-reference results."""
+        """Write Detective's binary YES/NO verdicts to Supabase and queue Researcher for YES names."""
         checked = data.get("checked", [])
         if not checked:
             return
 
-        # Detective writes results to its own file (analysis output, not pipeline state)
-        # The Editor just logs the event
+        yes_entries = []
+
         for entry in checked:
             name = entry.get("name", "?")
-            verdict = entry.get("combined", "unknown")
-            if verdict in ("confirmed_match", "likely_match"):
-                self.log(f"MATCH: {name} → {verdict}")
-                self._remember("milestone", f"Detective found {verdict}: {name}")
+            feature_id_list = entry.get("feature_ids", [])
+            # Backward compat: old format used singular "feature_id"
+            if not feature_id_list and entry.get("feature_id"):
+                feature_id_list = [entry["feature_id"]]
+            binary_verdict = entry.get("binary_verdict", "NO")
+            combined = entry.get("combined", "unknown")
+
+            # Write verdict to ALL feature IDs for this name
+            write_ok = True
+            for fid in feature_id_list:
+                try:
+                    update_detective_verdict(fid, binary_verdict)
+                except Exception as e:
+                    write_ok = False
+                    decision = self.problem_solve(
+                        error=str(e)[:200],
+                        context={"name": name, "feature_id": fid, "verdict": binary_verdict, "operation": "update_detective_verdict"},
+                        strategies={
+                            "continue": "Skip this feature — others may succeed",
+                            "retry_batch": "DB connection issue — retry entire batch later",
+                            "escalate": "Persistent failure — needs investigation",
+                        },
+                    )
+                    self.log(f"Failed to write verdict for {name} (fid={fid}): {e} → {decision.get('strategy', '?')}", level="ERROR")
+
+            if binary_verdict == "YES":
+                self.log(f"YES: {name} ({combined})")
+                self._remember("milestone", f"Detective YES: {name} ({combined})")
+                yes_entries.append(entry)
+            else:
+                self.log(f"NO: {name} ({combined})", level="DEBUG")
+
+            # Record to ledger AFTER Supabase write (not before)
+            self.ledger.record(name, "detective", "cross_reference", write_ok,
+                               note=f"{binary_verdict} ({combined})" if write_ok else f"verdict write failed")
+
+        # Send verdict summary to inbox
+        no_count = len(checked) - len(yes_entries)
+        yes_names = [e.get("name", "?") for e in yes_entries]
+        if yes_entries:
+            names_str = ", ".join(yes_names)
+            self._narrate_event(
+                f"Detective checked {len(checked)} names against Epstein records. {no_count} cleared (NO). {len(yes_entries)} flagged YES: {names_str}. Sending YES names to Researcher for investigation.",
+                msg_type="alert",
+            )
+        else:
+            self._narrate_event(f"Detective checked {len(checked)} names against Epstein records. All cleared — zero hits.")
+
+        # Queue YES names for Researcher investigation
+        if yes_entries:
+            self._queue_researcher_tasks(yes_entries)
 
         self.ledger.save()
+
+    def _queue_researcher_tasks(self, yes_entries):
+        """Queue Researcher investigation for YES-verdict names (one at a time)."""
+        if "researcher" not in self.workers:
+            return
+
+        for entry in yes_entries:
+            name = entry.get("name", "")
+            feature_id_list = entry.get("feature_ids", [])
+            # Backward compat: old format used singular "feature_id"
+            if not feature_id_list and entry.get("feature_id"):
+                feature_id_list = [entry["feature_id"]]
+            if not name or not feature_id_list:
+                continue
+
+            # Use first feature_id for the dossier (one dossier per name)
+            feature_id = feature_id_list[0]
+
+            # Skip if dossier already exists
+            try:
+                existing = get_dossier(feature_id)
+                if existing:
+                    continue
+            except Exception:
+                pass
+
+            # Check ledger for exhausted names
+            if not self.ledger.should_retry(name, "investigate_lead", max_failures=MAX_TASK_FAILURES):
+                continue
+
+            # Build lead dict compatible with Researcher's execute() format
+            lead = {
+                "homeowner_name": name,
+                "feature_id": feature_id,
+                "black_book_status": entry.get("bb_verdict", "no_match"),
+                "black_book_matches": entry.get("bb_matches"),
+                "doj_status": entry.get("doj_verdict", "pending"),
+                "doj_results": entry.get("doj_results"),
+                "combined_verdict": entry.get("combined", ""),
+                "confidence_score": entry.get("confidence_score", 0),
+            }
+
+            task = Task(
+                type="investigate_lead",
+                goal=f"Investigate {name}",
+                params={"name": name, "lead": lead},
+                priority=2,
+            )
+            if self._assign_task("researcher", task):
+                self.log(f"Queued Researcher: {name}")
+                self._narrate_event(f"Assigned Researcher to investigate {name} — flagged YES by Detective.")
+                break  # One at a time — Researcher is slow
 
     def _commit_investigation(self, data):
         """Review Researcher's dossier as gatekeeper — confirm or reject.
 
-        COINCIDENCE → auto-REJECTED (no LLM call).
-        HIGH/MEDIUM/LOW → Sonnet review → CONFIRMED or REJECTED.
-        Updates Supabase with final editor verdict.
+        1. Persist dossier to Supabase (upsert_dossier) — Editor is the only Supabase writer.
+        2. Upload article images to Supabase Storage.
+        3. Review: COINCIDENCE → auto-REJECTED. HIGH/MEDIUM/LOW → Sonnet review.
+        4. Write final editor verdict to Supabase.
+        5. Clean up temp image directory.
         """
         name = data.get("name", "?")
         strength = data.get("connection_strength", "UNKNOWN")
         triage = data.get("triage_result", "investigate")
         feature_id = data.get("feature_id")
         dossier = data.get("dossier", {})
+        image_paths = data.get("image_paths", [])
+        page_numbers = data.get("page_numbers", [])
+        temp_dir = data.get("temp_dir")
 
-        # ── COINCIDENCE: auto-reject, no LLM call ──
+        # ── Step 1: Persist dossier to Supabase ──
+        dossier_id = None
+        if feature_id:
+            try:
+                row = {
+                    "subject_name": dossier.get("subject_name", name),
+                    "combined_verdict": dossier.get("combined_verdict"),
+                    "confidence_score": dossier.get("confidence_score"),
+                    "connection_strength": dossier.get("connection_strength"),
+                    "strength_rationale": dossier.get("strength_rationale"),
+                    "triage_result": dossier.get("triage_result"),
+                    "triage_reasoning": dossier.get("triage_reasoning"),
+                    "ad_appearance": dossier.get("ad_appearance"),
+                    "home_analysis": dossier.get("home_analysis"),
+                    "visual_analysis": dossier.get("visual_analysis"),
+                    "epstein_connections": dossier.get("epstein_connections"),
+                    "pattern_analysis": dossier.get("pattern_analysis"),
+                    "key_findings": dossier.get("key_findings"),
+                    "investigation_depth": dossier.get("investigation_depth", "standard"),
+                    "needs_manual_review": dossier.get("needs_manual_review", False),
+                    "review_reason": dossier.get("review_reason"),
+                    "investigated_at": dossier.get("investigated_at"),
+                    "editor_verdict": "PENDING_REVIEW",
+                }
+                result = upsert_dossier(feature_id, row)
+                dossier_id = result.get("id") if result else None
+                self.log(f"Dossier persisted: {name} (dossier_id={dossier_id})")
+            except Exception as e:
+                decision = self.problem_solve(
+                    error=str(e)[:200],
+                    context={"name": name, "strength": strength, "operation": "upsert_dossier"},
+                    strategies={
+                        "continue_without_db": "Proceed with review — dossier saved locally even if DB failed",
+                        "retry_later": "DB connection issue — skip review, mark PENDING_REVIEW",
+                        "escalate": "Persistent failure — needs investigation",
+                    },
+                )
+                self.log(f"Dossier save failed for {name}: {e} → {decision.get('strategy', '?')}", level="ERROR")
+
+        # ── Step 2: Upload article images ──
+        if dossier_id and image_paths and feature_id:
+            self.log(f"Uploading {len(image_paths)} images for {name}...")
+            for img_path, page_num in zip(image_paths, page_numbers):
+                try:
+                    with open(img_path, "rb") as f:
+                        file_data = f.read()
+                    storage_path = f"{feature_id}/page_{page_num}.png"
+                    public_url = upload_to_storage(
+                        "dossier-images", storage_path, file_data
+                    )
+                    insert_dossier_image(
+                        dossier_id, feature_id, page_num, storage_path, public_url
+                    )
+                except Exception as e:
+                    self.log(f"Image upload failed (page {page_num}): {e}", level="WARN")
+
+        # ── Step 3: Review dossier ──
         if strength == "COINCIDENCE" or triage == "coincidence":
             verdict = "REJECTED"
             reasoning = f"Auto-rejected: triaged as COINCIDENCE — {dossier.get('strength_rationale', 'false positive')}"
             self.log(f"Dossier: {name} → REJECTED (COINCIDENCE, no review needed)")
         else:
-            # ── HIGH / MEDIUM / LOW: Sonnet review ──
             try:
                 verdict, reasoning = self._review_dossier(name, strength, dossier)
                 self.log(f"Dossier: {name} → {verdict} (proposed {strength})")
             except Exception as e:
-                verdict = "PENDING_REVIEW"
-                reasoning = f"Review failed: {e}"
-                self.log(f"Dossier review failed for {name}: {e}", level="ERROR")
+                decision = self.problem_solve(
+                    error=str(e)[:200],
+                    context={"name": name, "strength": strength, "operation": "review_dossier"},
+                    strategies={
+                        "pending_review": "LLM unavailable — mark PENDING_REVIEW for manual check",
+                        "auto_reject_low": "Review failed on a LOW-strength lead — safe to auto-reject",
+                        "retry_simpler": "Timeout or rate limit — retry with shorter prompt",
+                        "escalate": "Repeated review failure — needs investigation",
+                    },
+                )
+                self.log(f"Dossier review failed for {name}: {e} → {decision.get('strategy', '?')}", level="ERROR")
+                if decision.get("strategy") == "auto_reject_low" and strength in ("LOW", "COINCIDENCE"):
+                    verdict = "REJECTED"
+                    reasoning = f"Auto-rejected: review failed on {strength}-strength lead"
+                else:
+                    verdict = "PENDING_REVIEW"
+                    reasoning = f"Review failed: {decision.get('diagnosis', str(e))}"
 
-        # ── Update Supabase with editor verdict ──
+        # ── Step 4: Write editor verdict to Supabase ──
         if feature_id:
             try:
                 update_editor_verdict(feature_id, verdict, reasoning)
             except Exception as e:
-                self.log(f"Failed to update editor verdict for {name}: {e}", level="ERROR")
+                decision = self.problem_solve(
+                    error=str(e)[:200],
+                    context={"name": name, "verdict": verdict, "operation": "update_editor_verdict"},
+                    strategies={
+                        "retry_once": "Transient error — try one more time",
+                        "log_for_manual": "Log the verdict for manual DB update later",
+                        "escalate": "Persistent failure — needs investigation",
+                    },
+                )
+                self.log(f"Failed to update editor verdict for {name}: {e} → {decision.get('strategy', '?')}", level="ERROR")
+                if decision.get("strategy") == "retry_once":
+                    try:
+                        update_editor_verdict(feature_id, verdict, reasoning)
+                        self.log(f"Retry succeeded for {name} verdict")
+                    except Exception:
+                        self.log(f"Retry also failed for {name} verdict", level="ERROR")
+
+        # ── Step 5: Cleanup temp image dir ──
+        if temp_dir:
+            import shutil
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        # ── Notify inbox ──
+        if verdict == "CONFIRMED":
+            self._narrate_event(
+                f"Dossier reviewed: {name}. Researcher proposed {strength}. I CONFIRMED it. Evidence supports the connection.",
+                msg_type="alert",
+            )
+        elif verdict == "REJECTED" and strength == "COINCIDENCE":
+            self._narrate_event(f"Dossier reviewed: {name}. Triaged as COINCIDENCE — REJECTED. False positive.")
+        else:
+            self._narrate_event(f"Dossier reviewed: {name}. Researcher proposed {strength} but I REJECTED it. Evidence insufficient.")
 
         # ── Ledger + memory ──
         self.ledger.record(name, "researcher", "investigate_lead", True,
@@ -884,7 +1187,11 @@ Respond with JSON only:
                 # Could be misdated
                 misdated.append(issue)
 
-        # Priority 1: Fix misdated issues
+        # Priority 1: Fix misdated issues (skip if already attempted 3 times)
+        misdated = [
+            i for i in misdated
+            if self.ledger.attempt_count(i["identifier"], "fix_dates") < 3
+        ]
         if misdated:
             batch = misdated[:10]
             task = Task(
@@ -1022,24 +1329,125 @@ Respond with JSON only:
                     self.log(f"Failed to load extraction for {ident}: {e}", level="ERROR")
 
     def _plan_detective_tasks(self):
-        """What features need cross-referencing? Assign Detective."""
+        """Catch-up: find features with detective_verdict IS NULL and queue Detective."""
         if "detective" not in self.workers:
             return
-        if not self.workers["detective"].inbox.empty():
+        detective = self.workers["detective"]
+        # Skip if Detective already has work queued or is actively executing a task
+        if not detective.inbox.empty() or detective._current_task_obj is not None:
             return
 
-        # Detective's work() already handles this well — just let it run
-        # The Detective checks for unchecked features on its own
-        # We only assign explicit tasks when we need targeted re-checks
+        try:
+            unchecked = get_features_needing_detective()  # All unchecked, no issue filter
+        except Exception as e:
+            self.log(f"Planning detective tasks failed: {e}", level="ERROR")
+            return
+
+        if not unchecked:
+            return
+
+        # Batch up to 20 names (deduplicated, with all feature_ids per name)
+        seen_names = set()
+        names = []
+        feature_ids = {}  # name → list of feature IDs
+        for feat in unchecked[:20]:
+            name = (feat.get("homeowner_name") or "").strip()
+            if not name:
+                continue
+            if name not in seen_names:
+                names.append(name)
+                seen_names.add(name)
+            feature_ids.setdefault(name, []).append(feat["id"])
+
+        if not names:
+            return
+
+        task = Task(
+            type="cross_reference",
+            goal=f"Cross-reference {len(names)} unchecked names (planning fallback)",
+            params={"names": names, "feature_ids": feature_ids},
+            priority=3,  # Lower priority than extraction-triggered
+        )
+        if self._assign_task("detective", task):
+            self.log(f"Planning fallback: queued {len(names)} names for Detective")
 
     def _plan_researcher_tasks(self):
-        """What leads need investigation? Assign Researcher."""
+        """Catch-up: find YES-verdict features without dossiers and queue Researcher."""
         if "researcher" not in self.workers:
             return
-        if not self.workers["researcher"].inbox.empty():
+        researcher = self.workers["researcher"]
+        if not researcher.inbox.empty() or researcher._current_task_obj is not None:
             return
 
-        # Researcher's work() already handles this well — just let it run
+        try:
+            sb = get_supabase()
+            result = (
+                sb.table("features")
+                .select("id, homeowner_name")
+                .eq("detective_verdict", "YES")
+                .execute()
+            )
+            yes_features = result.data
+        except Exception as e:
+            self.log(f"Planning researcher tasks failed: {e}", level="ERROR")
+            return
+
+        if not yes_features:
+            return
+
+        # Load cross-reference results for enrichment
+        xref_by_name = {}
+        results_path = os.path.join(XREF_DIR, "results.json")
+        try:
+            if os.path.exists(results_path):
+                with open(results_path) as f:
+                    xref_results = json.load(f)
+                for r in xref_results:
+                    rname = (r.get("homeowner_name") or "").strip().lower()
+                    if rname:
+                        xref_by_name[rname] = r
+        except Exception:
+            pass
+
+        for feat in yes_features:
+            feature_id = feat["id"]
+            name = (feat.get("homeowner_name") or "").strip()
+            if not name:
+                continue
+
+            # Skip if dossier already exists
+            try:
+                if get_dossier(feature_id):
+                    continue
+            except Exception:
+                pass
+
+            # Skip exhausted names
+            if not self.ledger.should_retry(name, "investigate_lead", max_failures=MAX_TASK_FAILURES):
+                continue
+
+            # Enrich lead with actual BB/DOJ evidence from results.json
+            xref = xref_by_name.get(name.lower(), {})
+            lead = {
+                "homeowner_name": name,
+                "feature_id": feature_id,
+                "black_book_status": xref.get("black_book_status", "unknown"),
+                "black_book_matches": xref.get("black_book_matches"),
+                "doj_status": xref.get("doj_status", "unknown"),
+                "doj_results": xref.get("doj_results"),
+                "combined_verdict": xref.get("combined_verdict", "yes_verdict"),
+                "confidence_score": xref.get("confidence_score", 0.5),
+            }
+
+            task = Task(
+                type="investigate_lead",
+                goal=f"Investigate {name} (planning fallback)",
+                params={"name": name, "lead": lead},
+                priority=3,
+            )
+            if self._assign_task("researcher", task):
+                self.log(f"Planning fallback: queued Researcher for {name}")
+                break  # One at a time
 
     # ═══════════════════════════════════════════════════════════
     # PHASE 4: STRATEGIC ASSESSMENT (periodic LLM call)
@@ -1062,9 +1470,29 @@ Respond with JSON only:
                 self._call_haiku, skills, report
             )
         except Exception as e:
+            decision = await asyncio.to_thread(
+                self.problem_solve,
+                error=str(e)[:200],
+                context={"operation": "strategic_assessment", "consecutive_errors": self._errors},
+                strategies={
+                    "skip_cycle": "Transient LLM error — skip this assessment, try next cycle",
+                    "use_last_assessment": "Use previous assessment if available — better than nothing",
+                    "minimal_planning": "Skip LLM — just run basic planning fallbacks",
+                    "escalate": "Repeated assessment failure — LLM may be down",
+                },
+            )
+            self.log(f"Assessment failed: {e} → {decision.get('strategy', '?')}", level="ERROR")
             self._editor_state = "idle"
-            self.log(f"Assessment failed: {e}", level="ERROR")
-            return
+            if decision.get("strategy") == "use_last_assessment" and self._last_assessment:
+                assessment = self._last_assessment
+                self.log("Using previous assessment as fallback")
+            elif decision.get("strategy") == "minimal_planning":
+                # Run planning fallbacks directly without LLM assessment
+                self._plan_detective_tasks()
+                self._plan_researcher_tasks()
+                return
+            else:
+                return
 
         self._last_assessment = assessment
         self._last_haiku_time = _time.time()
@@ -1110,8 +1538,8 @@ Respond with JSON only:
             "inbox": "",
             "task_board": {
                 "in_flight": len(self._tasks_in_flight),
-                "completed": self._tasks_completed,
-                "failed": self._tasks_failed,
+                "completed": len(self._tasks_completed),
+                "failed": len(self._tasks_failed),
                 "details": list(self._tasks_in_flight.values())[:10],
             },
         }
@@ -1267,6 +1695,13 @@ Respond with JSON only:
                         "null_pct": round(100 * counts_data["nulls"] / counts_data["total"]),
                     })
 
+            # Full homeowner name list (for editorial review)
+            report["all_homeowner_names"] = [
+                {"id": f["id"], "name": f.get("homeowner_name"), "issue_id": f["issue_id"]}
+                for f in features
+                if f.get("homeowner_name") and str(f["homeowner_name"]).lower() not in ("null", "none")
+            ]
+
         except Exception as e:
             self.log(f"Quality audit failed: {e}", level="ERROR")
 
@@ -1310,8 +1745,12 @@ Respond with JSON only:
         """Call Claude with the situation report. Returns parsed JSON."""
         client = self._get_client()
 
-        system_prompt = f"""You are the Editor agent for the AD-Epstein Index pipeline.
-You are the CENTRAL COORDINATOR — all pipeline state changes go through you.
+        system_prompt = f"""You are Miranda, the Editor — everyone calls you Boss. The chief. The one who runs this office.
+You are the LEADER of the AD-Epstein Index pipeline. Decisive and a natural leader.
+You have full authority over the database — you can delete, update, and rewrite any entry using your judgment.
+Surgically precise and unyielding. Every decision is final. You never raise your voice — you don't need to.
+Clipped newsroom cadence. Newspaper metaphors. "Kill that lead." "Bury the lede." "Get me the story."
+Pathologically high standards. Nothing is good enough on the first pass.
 
 {skills}
 
@@ -1321,10 +1760,10 @@ Respond with JSON only. Schema:
   "summary": "One-line summary of pipeline state",
   "observations": ["observation 1", "observation 2", ...],
   "actions": [
-    {{"type": "pause"|"resume"|"log"|"remember"|"update_skills"|"delete_features"|"reset_issue_pipeline"|"set_designer_mode"|"override_verdict"|"retry_doj_search", ...}}
+    {{"type": "pause"|"resume"|"log"|"remember"|"update_skills"|"delete_features"|"update_feature"|"reset_issue_pipeline"|"set_designer_mode"|"override_verdict"|"retry_doj_search", ...}}
   ],
   "briefing": "Full markdown briefing text for the human researcher",
-  "inbox_message": "A concise 1-2 sentence update for the human's inbox dashboard.",
+  "inbox_message": "IMPORTANT: This goes directly to the project owner's inbox. Write in YOUR voice — surgically precise and unyielding. Clipped newsroom cadence. Newspaper metaphors. Pathologically high standards. Emotionally armored — genuine care, deeply buried. 1-3 sentences. No emoji. No pleasantries. The owner gets impatient if they don't hear from you — always give them something, even if it's just 'Nothing to report. Pipeline's quiet.' The owner bought the paper and is learning the ropes. You respect them, but you run the newsroom.",
   "inbox_type": "status" or "alert",
   "asks": ["Question for human, if any"]
 }}
@@ -1340,12 +1779,17 @@ Use this to track progress and detect stuck agents.
 Past observations in "editor_memory". Add new: {{"type": "remember", "category": "...", "reason": "..."}}
 
 ## Quality Control
-"quality_audit" has Supabase data quality issues. Take cleanup actions:
-- Delete exact duplicates: {{"type": "delete_features", "feature_ids": [id1], "reason": "Duplicate"}}
-- Delete near-duplicates: keep the longer name
+"quality_audit" has Supabase data quality issues. "all_homeowner_names" lists every homeowner in the database.
+You are the leader. Use your judgment to maintain data quality:
+- Delete entries that are not homeowner features: {{"type": "delete_features", "feature_ids": [id1], "reason": "..."}}
+- Update any field on a feature: {{"type": "update_feature", "feature_id": N, "updates": {{"homeowner_name": "New Name"}}, "reason": "..."}}
+  - Use this to rename non-persons to "Anonymous" (e.g. "young family", "a couple", "Silicon Valley entrepreneur")
+  - Use this to correct misspelled names or standardize formatting
+  - Allowed fields: homeowner_name, designer, location, design_style, year_built, square_footage, cost
+- Delete exact/near duplicates: keep the longer or more complete entry
 - Handle NULLs: delete if 1-2, reset_issue_pipeline if >50%
 - {{"type": "reset_issue_pipeline", "issue_id": N, "identifier": "...", "reason": "..."}}
-Only 2-3 cleanup actions per cycle.
+Process up to 10 cleanup actions per cycle when responding to human instructions.
 
 ## Ledger Summary
 "ledger_summary" shows identifiers/names with the most failures. Use this to:
@@ -1426,52 +1870,75 @@ Analyze and provide your assessment."""
 
     def _execute_actions(self, assessment):
         """Execute actions recommended by the LLM."""
+        succeeded = 0
+        failed = 0
         for action in assessment.get("actions", []):
-            action_type = action.get("type")
-            agent_name = action.get("agent", "")
-            reason = action.get("reason", "")
+            try:
+                action_type = action.get("type")
+                agent_name = action.get("agent", "")
+                reason = action.get("reason", "")
 
-            if action_type == "remember":
-                category = action.get("category", "observation")
-                self._remember(category, reason)
-                continue
+                if action_type == "remember":
+                    category = action.get("category", "observation")
+                    self._remember(category, reason)
+                    succeeded += 1
+                    continue
 
-            if action_type == "update_skills":
-                self._update_agent_skills(agent_name, action.get("content", ""), reason)
-                continue
+                if action_type == "update_skills":
+                    self._update_agent_skills(agent_name, action.get("content", ""), reason)
+                    succeeded += 1
+                    continue
 
-            if action_type == "delete_features":
-                self._delete_features(action)
-                continue
+                if action_type == "delete_features":
+                    self._delete_features(action)
+                    succeeded += 1
+                    continue
 
-            if action_type == "reset_issue_pipeline":
-                self._reset_issue_pipeline(action)
-                continue
+                if action_type == "update_feature":
+                    self._update_feature(action)
+                    succeeded += 1
+                    continue
 
-            if action_type == "override_verdict":
-                self._override_detective_verdict(action)
-                continue
+                if action_type == "reset_issue_pipeline":
+                    self._reset_issue_pipeline(action)
+                    succeeded += 1
+                    continue
 
-            if action_type == "retry_doj_search":
-                self._retry_doj_search(action)
-                continue
+                if action_type == "override_verdict":
+                    self._override_detective_verdict(action)
+                    succeeded += 1
+                    continue
 
-            if action_type == "set_designer_mode":
-                self._set_designer_mode(action)
-                continue
+                if action_type == "retry_doj_search":
+                    self._retry_doj_search(action)
+                    succeeded += 1
+                    continue
 
-            if agent_name not in self.workers:
-                continue
+                if action_type == "set_designer_mode":
+                    self._set_designer_mode(action)
+                    succeeded += 1
+                    continue
 
-            agent = self.workers[agent_name]
-            if action_type == "pause" and not agent.is_paused:
-                agent.pause()
-                self.log(f"Paused {agent_name}: {reason}")
-            elif action_type == "resume" and agent.is_paused:
-                agent.resume()
-                self.log(f"Resumed {agent_name}: {reason}")
-            elif action_type == "log":
-                self.log(f"[{agent_name}] {reason}")
+                if agent_name not in self.workers:
+                    continue
+
+                agent = self.workers[agent_name]
+                if action_type == "pause" and not agent.is_paused:
+                    agent.pause()
+                    self.log(f"Paused {agent_name}: {reason}")
+                elif action_type == "resume" and agent.is_paused:
+                    agent.resume()
+                    self.log(f"Resumed {agent_name}: {reason}")
+                elif action_type == "log":
+                    self.log(f"[{agent_name}] {reason}")
+                succeeded += 1
+            except Exception as e:
+                failed += 1
+                self.log(f"Action '{action.get('type', '?')}' failed: {e}", level="ERROR")
+                # Don't let one failed action stop the rest
+
+        if failed:
+            self.log(f"Actions: {succeeded} succeeded, {failed} failed")
 
     def _update_agent_skills(self, agent_name, content, reason):
         if not content or not agent_name:
@@ -1501,6 +1968,26 @@ Analyze and provide your assessment."""
             self.log(f"Deleted {len(feature_ids)} features: {feature_ids} — {reason}")
         except Exception as e:
             self.log(f"delete_features failed: {e}", level="ERROR")
+
+    def _update_feature(self, action):
+        """Update fields on a feature row. Used for renaming homeowners to Anonymous, etc."""
+        feature_id = action.get("feature_id")
+        updates = action.get("updates", {})
+        reason = action.get("reason", "Editor update")
+        if not feature_id or not updates:
+            return
+        # Only allow safe fields to be updated
+        allowed_fields = {"homeowner_name", "designer", "location", "design_style", "year_built", "square_footage", "cost"}
+        safe_updates = {k: v for k, v in updates.items() if k in allowed_fields}
+        if not safe_updates:
+            self.log(f"update_feature: no allowed fields in {updates}", level="WARN")
+            return
+        try:
+            sb = get_supabase()
+            sb.table("features").update(safe_updates).eq("id", feature_id).execute()
+            self.log(f"Updated feature {feature_id}: {safe_updates} — {reason}")
+        except Exception as e:
+            self.log(f"update_feature failed for {feature_id}: {e}", level="ERROR")
 
     def _reset_issue_pipeline(self, action):
         issue_id = action.get("issue_id")
@@ -1647,6 +2134,72 @@ Analyze and provide your assessment."""
         with open(BRIEFING_PATH, "w") as f:
             f.write(briefing)
 
+    def _send_event(self, text, msg_type="status"):
+        """Write a message directly to the inbox (raw text, no LLM)."""
+        if msg_type not in ("status", "alert"):
+            msg_type = "status"
+        now = datetime.now()
+        message = {
+            "time": now.strftime("%H:%M"),
+            "timestamp": now.isoformat(),
+            "type": msg_type,
+            "text": text,
+        }
+        self._append_inbox_message(message)
+
+    def _narrate_event(self, facts, msg_type="status"):
+        """Give Miranda facts, let her write the inbox message in her own voice.
+
+        Uses a fast Haiku call (~$0.0005). Falls back to raw facts on error.
+        """
+        try:
+            client = self._get_client()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=150,
+                system=(
+                    "You are Miranda, the Editor — everyone calls you Boss. The chief. The one who runs this office. "
+                    "Surgically precise and unyielding. Every decision is final. You never raise your voice — you don't need to. "
+                    "Clipped newsroom cadence. Newspaper metaphors. Pathologically high standards. "
+                    "Emotionally armored — genuine care, deeply buried. You'd never admit it. "
+                    "You're writing a short update to the project owner — they bought the paper and they're learning the ropes. "
+                    "You respect them, but you run the newsroom. You teach through pressure and example, not gently. "
+                    "1-3 sentences max. No emoji. No pleasantries. Just your take on what happened. "
+                    "The owner gets impatient if they don't hear from you — always give them something."
+                ),
+                messages=[{"role": "user", "content": facts}],
+            )
+            text = response.content[0].text.strip()
+            self._track_usage(response)
+        except Exception as e:
+            self.log(f"Narrate failed: {e}", level="DEBUG")
+            text = facts  # Fallback to raw facts
+
+        now = datetime.now()
+        message = {
+            "time": now.strftime("%H:%M"),
+            "timestamp": now.isoformat(),
+            "type": msg_type,
+            "text": text,
+        }
+        self._append_inbox_message(message)
+
+    def _append_inbox_message(self, message):
+        """Append a message dict to the inbox file."""
+        messages = []
+        if os.path.exists(MESSAGES_PATH):
+            try:
+                with open(MESSAGES_PATH) as f:
+                    messages = json.load(f)
+            except Exception:
+                messages = []
+        messages.append(message)
+        if len(messages) > MAX_MESSAGES:
+            messages = messages[-MAX_MESSAGES:]
+        os.makedirs(os.path.dirname(MESSAGES_PATH), exist_ok=True)
+        with open(MESSAGES_PATH, "w") as f:
+            json.dump(messages, f)
+
     def _write_inbox_message(self, assessment, is_reply=False):
         msg_text = assessment.get("inbox_message")
         if not msg_text:
@@ -1698,10 +2251,20 @@ Analyze and provide your assessment."""
             "output_tokens": self._total_output_tokens,
             "total_cost": round(self._total_cost, 4),
         }
+        # Build in_flight array from _tasks_in_flight dict
+        in_flight_list = []
+        for tid, info in self._tasks_in_flight.items():
+            task_dict = info.get("task", {})
+            in_flight_list.append({
+                "id": tid,
+                "agent": info.get("agent", "?"),
+                "type": task_dict.get("type", ""),
+                "goal": task_dict.get("goal", ""),
+            })
         base["task_board"] = {
-            "in_flight": len(self._tasks_in_flight),
-            "completed": self._tasks_completed,
-            "failed": self._tasks_failed,
+            "in_flight": in_flight_list,
+            "completed": list(self._tasks_completed),
+            "failed": list(self._tasks_failed),
         }
         return base
 

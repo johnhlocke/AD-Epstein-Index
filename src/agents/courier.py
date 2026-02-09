@@ -106,10 +106,23 @@ class CourierAgent(Agent):
                     agent=self.name,
                 )
             elif issue.get("status") == "no_pdf":
+                # Diagnose why no PDF was found
+                decision = await asyncio.to_thread(
+                    self.problem_solve,
+                    error="No PDF file found in archive.org metadata",
+                    context={"identifier": identifier, "source": source, "year": year, "month": month},
+                    strategies={
+                        "try_ad_archive": "Try official AD Archive as alternative source",
+                        "check_identifier": "Identifier may be wrong — suggest Scout re-search",
+                        "accept_missing": "This issue may not have been digitized yet",
+                        "escalate": "Needs manual investigation",
+                    },
+                )
+                self.log(f"No PDF: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
                 return TaskResult(
                     task_id=task.id, task_type=task.type, status="failure",
-                    result={"identifier": identifier},
-                    error="No PDF file found in archive.org metadata",
+                    result={"identifier": identifier, "recommended_strategy": decision.get("strategy")},
+                    error=f"No PDF found. Diagnosis: {decision.get('diagnosis', 'unknown')}",
                     agent=self.name,
                 )
             else:
@@ -340,15 +353,34 @@ class CourierAgent(Agent):
             if courier_log:
                 self._record_issue_failure(courier_log, identifier, str(e))
                 self._save_courier_log(courier_log)
-                # Check if this issue has failed too many times
+                # Diagnose the failure and decide recovery
                 failures = courier_log.get("issue_failures", {}).get(identifier, {})
-                if failures.get("failures", 0) >= MAX_ISSUE_FAILURES:
+                failure_count = failures.get("failures", 0)
+                decision = await asyncio.to_thread(
+                    self.problem_solve,
+                    error=str(e)[:200],
+                    context={
+                        "identifier": identifier,
+                        "source": issue.get("source", "archive.org"),
+                        "year": issue.get("year"),
+                        "failure_count": failure_count,
+                    },
+                    strategies={
+                        "retry_next_cycle": "Transient network error — will retry automatically next cycle",
+                        "try_ad_archive": "archive.org may not have it — try official AD Archive instead",
+                        "mark_unavailable": "This issue genuinely doesn't exist or is permanently broken",
+                        "escalate": "Report to Editor — needs human intervention",
+                    },
+                )
+                self.log(f"Problem solve: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
+                if decision.get("strategy") == "escalate" or failure_count >= MAX_ISSUE_FAILURES:
                     self._maybe_escalate(
                         "download_failure",
                         f"Issue {identifier} ({issue.get('year')}-{issue.get('month', '?'):02d}) "
-                        f"has failed download {failures['failures']} times. "
-                        f"Last error: {str(e)[:100]}. May need manual intervention or alternative source.",
-                        {"identifier": identifier, "failures": failures["failures"], "last_error": str(e)[:200]},
+                        f"failed {failure_count} times. "
+                        f"Diagnosis: {decision.get('diagnosis', str(e)[:100])}",
+                        {"identifier": identifier, "failures": failure_count, "last_error": str(e)[:200],
+                         "recommended_strategy": decision.get("strategy", "unknown")},
                     )
 
         # Save the issue's updated status to Supabase

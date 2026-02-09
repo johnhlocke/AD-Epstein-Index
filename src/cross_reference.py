@@ -632,6 +632,112 @@ def detect_false_positive_indicators(name: str, bb_matches, doj_result) -> list:
     return indicators
 
 
+# ── Binary Verdict Mapping (used by Editor) ────────────────────
+
+
+def verdict_to_binary(combined_verdict, confidence_score, glance_override=None):
+    """Map the 5-tier verdict to binary YES/NO for the features table.
+
+    Args:
+        combined_verdict: One of confirmed_match, likely_match, possible_match, needs_review, no_match
+        confidence_score: Float 0-1
+        glance_override: Optional "YES"/"NO" from contextual_glance (takes precedence)
+
+    Returns:
+        "YES" or "NO"
+    """
+    if glance_override in ("YES", "NO"):
+        return glance_override
+
+    if combined_verdict in ("confirmed_match", "likely_match"):
+        return "YES"
+    if combined_verdict == "possible_match" and confidence_score >= 0.40:
+        return "YES"
+    if combined_verdict == "needs_review":
+        return "YES"  # Err toward investigation
+    return "NO"
+
+
+def contextual_glance(name, bb_matches, doj_result):
+    """LLM glance for ambiguous cases — returns YES/NO or None (skip LLM).
+
+    Clear NO (0 BB + DOJ none): return None → caller uses heuristic (NO)
+    Clear YES (BB last_first + DOJ high): return None → caller uses heuristic (YES)
+    Ambiguous: call Haiku with DOJ snippets for ~$0.001
+
+    Returns:
+        "YES", "NO", or None (caller should fall back to heuristic)
+    """
+    bb_has_match = bool(bb_matches)
+    bb_best = ""
+    if bb_matches:
+        rank = {"last_first": 4, "full_name": 3, "last_name_only": 2}
+        bb_best = max(
+            (m.get("match_type", "") for m in bb_matches),
+            key=lambda mt: rank.get(mt, 0),
+            default=""
+        )
+
+    doj_confidence = "none"
+    if doj_result and doj_result.get("search_successful"):
+        doj_confidence = doj_result.get("confidence", "none")
+
+    # Clear NO: no BB match AND no DOJ results
+    if not bb_has_match and doj_confidence == "none":
+        return None
+
+    # Clear YES: BB last_first AND DOJ high
+    if bb_best == "last_first" and doj_confidence == "high":
+        return None
+
+    # Ambiguous — call Haiku for a glance
+    try:
+        import anthropic
+        client = anthropic.Anthropic()
+
+        # Build snippet context from DOJ results
+        snippets = []
+        if doj_result:
+            raw_snippets = doj_result.get("snippets", [])
+            for s in raw_snippets[:5]:
+                if isinstance(s, str):
+                    snippets.append(s[:200])
+
+        snippet_text = "\n".join(snippets) if snippets else "(no DOJ snippets available)"
+        bb_context = ""
+        if bb_matches:
+            bb_context = f"Black Book match type: {bb_best}"
+            for m in bb_matches[:2]:
+                if m.get("context"):
+                    bb_context += f"\nBB context: {m['context'][:150]}"
+
+        prompt = f"""Is the person "{name}" from Architectural Digest magazine the same person referenced in these Epstein-related records?
+
+{bb_context}
+
+DOJ search snippets:
+{snippet_text}
+
+Answer YES if this is likely the same person, NO if this is clearly a different person or coincidence.
+Respond with only YES or NO."""
+
+        response = client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=10,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        answer = response.content[0].text.strip().upper()
+        if answer.startswith("YES"):
+            return "YES"
+        if answer.startswith("NO"):
+            return "NO"
+        return None  # Unparseable — fall back to heuristic
+
+    except Exception:
+        return None  # On error, fall back to heuristic
+
+
 if __name__ == "__main__":
     if "--status" in sys.argv:
         show_status()

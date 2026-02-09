@@ -6,6 +6,53 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 13)
+
+### Added — LLM-Powered Problem Solving for All Agents
+- **`problem_solve(error, context, strategies)`** added to base Agent class — uses Haiku (~$0.001/call) to diagnose errors and choose recovery strategies instead of hardcoded retry logic
+- All `problem_solve()` calls wrapped in `await asyncio.to_thread()` for non-blocking execution
+- **Scout** (`src/agents/scout.py`): 2 locations — CLI failure diagnosis + strategy failure diagnosis (only escalates when LLM recommends it)
+- **Courier** (`src/agents/courier.py`): 2 locations — no-PDF diagnosis + download failure diagnosis (escalation includes LLM diagnosis)
+- **Detective** (`src/agents/detective.py`): DOJ search failure with browser restart recovery — actually stops and relaunches Playwright on "restart_browser" strategy
+- **Designer** (`src/agents/designer.py`): 2 locations — training cycle CLI failure + creation cycle spec generation failure
+- **Reader** (`src/agents/reader.py`): Already had problem_solve; wired `READER_LOW_RES` and `READER_SMALL_BATCHES` env vars into `extract_features.py` so recovery strategies take effect
+- **Editor** (`src/agents/editor.py`): 6 locations — main event loop, extraction commit, cross-reference commit, investigation commit (3 sub-steps), assessment cycle with 3 fallback strategies
+
+### Added — Agent Personalities: Names and Idle Chatter
+- Each agent picked their own name via Gemini Vision analysis of their pixel sprite + personality:
+  - **Arthur** (Scout), **Casey** (Courier), **Elias** (Reader), **Silas** (Detective), **Elena** (Researcher)
+- Names saved in `src/agents/skills/*.md` files under `## Name` section
+- **`idle_chatter()`** in base Agent class — generates personality-driven idle thoughts via Haiku when agents have no work (120s cooldown)
+- **`_load_agent_name()`** extracts name from skills file, cached
+- Removed hardcoded "Waiting for assignment..." from Agent Office dashboard — agents now show their own idle thoughts
+
+### Added — Editor-Directed Detective & Researcher Flow
+- **`verdict_to_binary()`** and **`contextual_glance()`** in `src/cross_reference.py` — maps 5-tier verdicts to YES/NO, uses Haiku for ambiguous cases only
+- **`update_detective_verdict()`** and **`get_features_needing_detective()`** in `src/db.py` — new Supabase functions for detective verdicts
+- Editor now routes data through pipeline: Reader → Editor → Detective → Editor (writes YES/NO) → Researcher
+- `_commit_extraction()` immediately queues Detective for newly-loaded features
+- `_commit_cross_reference()` rewritten: writes YES/NO to Supabase, queues YES names for Researcher
+- `_queue_researcher_tasks()` new helper for assigning investigation tasks
+- `_plan_detective_tasks()` and `_plan_researcher_tasks()` fallbacks catch unchecked features
+- Detective `work()` disabled — returns immediately with "Waiting for Editor assignment"
+
+### Fixed — Editor Bug Fixes
+- **Ledger recording order**: `_commit_cross_reference()` was recording success BEFORE Supabase write could fail. Moved to AFTER with `write_ok` boolean tracking
+- **Per-action error wrapping**: `_execute_actions()` now wraps each action in try/except so one failure doesn't stop subsequent actions. Tracks succeeded/failed counts
+- **Assessment cycle fallbacks**: LLM failure now has 3 recovery strategies: reuse last assessment, minimal planning, or skip
+- **Investigation review recovery**: auto-rejects LOW-strength leads when Sonnet review fails
+
+### Changed — Reader Recovery Strategies
+- `src/extract_features.py` now reads `READER_LOW_RES` env var (100 DPI instead of 150)
+- `src/extract_features.py` now reads `READER_SMALL_BATCHES` env var (5-page TOC chunks instead of 10)
+- Reader's `problem_solve()` sets these env vars, and they now actually take effect
+
+### Database
+- Added `detective_verdict` (YES/NO) and `detective_checked_at` columns to `features` table
+- Added index `idx_features_detective_verdict`
+
+---
+
 ## 2026-02-09 (Session 12)
 
 ### Added — Phase 3: Interactive Visualization Website

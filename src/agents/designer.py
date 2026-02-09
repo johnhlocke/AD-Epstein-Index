@@ -358,14 +358,32 @@ class DesignerAgent(Agent):
 
         if not result:
             self._consecutive_failures += 1
-            self._maybe_escalate("training_failed",
-                                 f"CLI call returned None for {source_type}: {source_ref[:60]}",
-                                 {"source_type": source_type, "source_ref": source_ref})
-            if self._consecutive_failures >= 3:
+            # Diagnose the training failure
+            decision = await asyncio.to_thread(
+                self.problem_solve,
+                error=f"CLI call returned None for {source_type}: {source_ref[:60]}",
+                context={
+                    "source_type": source_type,
+                    "source_ref": source_ref,
+                    "consecutive_failures": self._consecutive_failures,
+                    "patterns_learned": self._patterns_learned,
+                    "sources_studied": self._sources_studied,
+                },
+                strategies={
+                    "skip_source": "This source may be unavailable — move to the next one",
+                    "simplify_request": "Ask for fewer patterns or simpler analysis",
+                    "retry_next_cycle": "Transient error — will retry on next work cycle",
+                    "escalate": "Multiple failures — needs Editor attention",
+                },
+            )
+            self.log(f"Training problem: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
+
+            if decision.get("strategy") == "escalate" or self._consecutive_failures >= 3:
                 self._maybe_escalate("training_stuck",
-                                     f"{self._consecutive_failures} consecutive training failures",
-                                     {"consecutive_failures": self._consecutive_failures})
-            self._current_task = f"Training failed — {source_ref[:30]}"
+                                     f"{self._consecutive_failures} failures. Diagnosis: {decision.get('diagnosis', 'unknown')}",
+                                     {"consecutive_failures": self._consecutive_failures,
+                                      "recommended_strategy": decision.get("strategy", "unknown")})
+            self._current_task = f"Training failed — {source_ref[:30]} ({decision.get('strategy', '?')})"
             return False
 
         # Reset consecutive failures on success
@@ -432,11 +450,23 @@ class DesignerAgent(Agent):
         result = await asyncio.to_thread(self._call_claude, prompt)
 
         if not result:
-            self._current_task = f"Spec generation failed — {spec_type}"
+            decision = await asyncio.to_thread(
+                self.problem_solve,
+                error=f"Spec generation CLI returned nothing for {spec_type}",
+                context={"spec_type": spec_type, "patterns_available": sum(len(v) for v in knowledge.values() if isinstance(v, list))},
+                strategies={
+                    "retry_simpler": "Simplify the spec request — fewer components",
+                    "skip_spec": "Skip this spec type, try the next one",
+                    "escalate": "CLI may be broken — needs Editor attention",
+                },
+            )
+            self.log(f"Spec generation problem: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
+            self._current_task = f"Spec failed — {spec_type} ({decision.get('strategy', '?')})"
             if task_id:
                 await self.outbox.put(TaskResult(
                     task_id=task_id, task_type="generate_design_spec",
-                    status="failure", result={}, error="Claude CLI returned no output",
+                    status="failure", result={"recommended_strategy": decision.get("strategy")},
+                    error=f"Spec generation failed. Diagnosis: {decision.get('diagnosis', 'unknown')}",
                     agent="designer",
                 ))
             return False

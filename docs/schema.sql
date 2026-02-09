@@ -53,8 +53,13 @@ CREATE TABLE features (
   design_style TEXT,
   page_number INTEGER,
   notes TEXT,
+  detective_verdict TEXT DEFAULT NULL
+    CHECK (detective_verdict IN ('YES', 'NO')),
+  detective_checked_at TIMESTAMPTZ DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+CREATE INDEX idx_features_detective_verdict ON features(detective_verdict);
 
 -- ============================================================
 -- Phase 2 Tables (create later)

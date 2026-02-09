@@ -116,6 +116,9 @@ async def write_status(agents):
             if live["active"]:
                 agent_data["status"] = "working"
                 agent_data["liveTask"] = live["message"]
+            # Overlay personality speech bubble if available
+            if live.get("speech"):
+                agent_data["speech"] = live["speech"]
             # Always overlay runtime stats
             agent_data["cycles"] = live.get("cycles", 0)
             agent_data["errors"] = live.get("errors", 0)

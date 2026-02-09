@@ -199,6 +199,13 @@ Every Researcher dossier passes through the Editor before becoming final:
 - Skills loading from `src/agents/skills/<agent>.md`
 - Dashboard status reporting (`get_dashboard_status()`)
 - Error tracking with per-agent failure counts
+- **`problem_solve(error, context, strategies)`** — LLM-powered error diagnosis via Haiku (~$0.001/call). Returns `{diagnosis, strategy, reasoning}`. All agents use this instead of hardcoded retry logic.
+- **`idle_chatter()`** — Generates personality-driven idle thoughts via Haiku when agent has no work. 120s cooldown.
+- **`_load_agent_name()`** — Extracts agent's character name from skills file `## Name` section
+
+### Agent Names
+Each agent has a character name (chosen by analyzing their pixel sprite via Gemini Vision):
+- **Arthur** (Scout), **Casey** (Courier), **Elias** (Reader), **Silas** (Detective), **Elena** (Researcher), **Miranda** (Editor)
 
 ### Orchestrator (`src/orchestrator.py`)
 - Launches all 7 agents as async tasks
@@ -243,20 +250,49 @@ Every Researcher dossier passes through the Editor before becoming final:
 8. If fewer than 3 features found, supplement with page scanning (every 8 pages)
 9. Save results as JSON, then load into Supabase
 
-## Cross-Reference & Investigation Pipeline
+## Cross-Reference & Investigation Pipeline (Editor-Directed)
+
+```
+Reader extracts features
+    ↓
+Editor._commit_extraction()
+    ├── loads features to Supabase
+    └── queries features.detective_verdict IS NULL
+        └── creates cross_reference Task → Detective inbox
+                ↓
+Detective.execute(cross_reference)
+    ├── BB search (instant, local)
+    ├── DOJ search (Playwright browser)
+    ├── contextual_glance() for ambiguous cases (Haiku ~$0.001)
+    └── returns binary_verdict YES/NO per name → outbox
+                ↓
+Editor._commit_cross_reference()
+    ├── writes detective_verdict YES/NO to features table
+    └── queues YES names → Researcher inbox
+                ↓
+Researcher.execute(investigate_lead)
+    ├── 3-step pipeline (triage → deep analysis → synthesis)
+    └── saves dossier with editor_verdict=PENDING_REVIEW → outbox
+                ↓
+Editor._commit_investigation()
+    └── Sonnet review → CONFIRMED or REJECTED
+```
 
 1. **Detective BB pass** — Grep search of `data/black_book.txt` with word-boundary matching, min 5-char last names
 2. **Detective DOJ pass** — Playwright browser search of justice.gov/epstein with WAF bypass, bot check handling
-3. **Combined verdict** — `confirmed_match` / `likely_match` / `possible_match` / `no_match` / `needs_review`
-4. **Researcher investigation** — 3-step pipeline (Triage → Deep Analysis → Synthesis) builds dossier for each non-`no_match` lead:
+3. **Combined verdict** — 5-tier internally (`confirmed_match` → `needs_review`), mapped to binary YES/NO at Supabase boundary via `verdict_to_binary()`
+4. **Contextual glance** — For ambiguous cases only (~10-20%): Haiku reads DOJ snippets to determine if same person. Clear YES/NO cases skip LLM call.
+5. **Editor writes verdict** — `detective_verdict` (YES/NO) and `detective_checked_at` on features table
+6. **Researcher investigation** — 3-step pipeline (Triage → Deep Analysis → Synthesis) builds dossier for each YES lead:
    - Full AD feature context (all 14 fields from Supabase)
    - Article page images for visual analysis (Sonnet)
    - Pattern analysis across all associated names (shared designers, locations, styles, decades)
    - Home analysis (wealth indicators, social circles, style significance, temporal relevance)
    - Proposes connection strength: HIGH / MEDIUM / LOW / COINCIDENCE
    - Saves to Supabase as PENDING_REVIEW, pushes to Editor outbox
-5. **Editor gatekeeper** — Reviews each dossier: COINCIDENCE auto-rejected, others reviewed by Sonnet → CONFIRMED or REJECTED
-6. **Escalation** — CONFIRMED HIGH/MEDIUM findings remembered as milestones
+7. **Editor gatekeeper** — Reviews each dossier: COINCIDENCE auto-rejected, others reviewed by Sonnet → CONFIRMED or REJECTED
+8. **Escalation** — CONFIRMED HIGH/MEDIUM findings remembered as milestones
+9. **Planning fallbacks** — `_plan_detective_tasks()` catches pre-refactor features; `_plan_researcher_tasks()` catches unprocessed YES verdicts
 
 ## Data Flow
 
