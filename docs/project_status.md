@@ -32,6 +32,7 @@ This file should be automatically updated when necessary to answer three key que
 | Editor: event-driven behavior + verdict restrictions | Tooling | Done |
 | Migrate pipeline source of truth: manifest → Supabase | Tooling | Done |
 | Hub-and-spoke architecture: Editor as central coordinator | Tooling | Done |
+| Dashboard: Editor's Board, coverage map, ledger visibility | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -139,6 +140,11 @@ Built a 7-agent autonomous pipeline that runs continuously:
 - Notable Finds highlights celebrities and Epstein matches
 - Data Quality bars show field completion rates across all extractions
 - Throughput metrics, API cost tracking, collaboration animations
+- Editor's Board chalkboard: shows EditorLedger failures (stuck items retrying, exhausted items gave up) instead of all agent tasks
+- Discovery Coverage Map: 38yr x 12mo grid showing pipeline status per issue (discovered/downloaded/extracted/missing)
+- EditorLedger visibility: `read_editor_ledger()` surfaces failure counts, stuck items, and exhausted retries
+- Agent waiting sprites: front-facing idle poses for all workers when no task assigned
+- Editor sprite variants: clipboard (reviewing), failure (concerned), studying (reading)
 
 ## 3. What's Next
 

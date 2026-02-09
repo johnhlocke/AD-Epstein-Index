@@ -6,6 +6,41 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 9)
+
+### Added — Dashboard: Editor's Board Chalkboard
+- Left chalkboard renamed from "ACTIVE TASKS" to "EDITOR'S BOARD" — shows the Editor's failure tracking view instead of all agent tasks
+- Displays "GAVE UP" section (exhausted items, >=3 failures, red strikethrough) and "RETRYING" section (stuck items, yellow)
+- Each item shows identifier key, last error message, and failure count (Nx)
+- Summary line shows total ok/fail counts from EditorLedger
+- Falls back to in-flight tasks when ledger is empty
+
+### Added — Dashboard: Discovery Coverage Map
+- New 38-year x 12-month grid (1988-2025 = 456 cells) in right panel showing pipeline status per AD issue
+- Color-coded cells: red (discovered), blue (downloaded), green (extracted), dim (missing/skipped)
+- Year labels every 5th year plus 1988 and 2025, month headers (J-D)
+- Legend with status color swatches
+- `build_coverage_map()` in `src/agent_status.py` reads issue status from Supabase
+
+### Added — EditorLedger Dashboard Visibility
+- `read_editor_ledger()` in `src/agent_status.py` reads `data/editor_ledger.json` and computes:
+  - Stuck items (failures < max, still retryable)
+  - Exhausted items (failures >= 3, gave up)
+  - Recent failures sorted by time
+  - Total success/failure counts
+- `editor_ledger` field added to `status.json` output
+
+### Added — Agent Sprite Variants
+- Waiting/front-facing sprites for all 6 worker agents (bored/idle state when no task assigned)
+- Editor sprite variants: clipboard (reviewing), failure (concerned), studying (reading)
+- Updated background image and detective front sprite
+
+### Changed — Dashboard CSS
+- New CSS classes: `.exhausted`, `.stuck`, `.chalk-section-label`, `.chalk-count` for chalkboard styling
+- Coverage map CSS: `.coverage-grid`, `.coverage-cell`, `.coverage-legend` with status-colored variants
+
+---
+
 ## 2026-02-09 (Session 8)
 
 ### Changed — Hub-and-Spoke Architecture: Editor as Central Coordinator

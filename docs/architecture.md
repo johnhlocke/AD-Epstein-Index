@@ -179,6 +179,8 @@ Centralized log of every task attempt — replaces scattered per-agent escalatio
 - Generates `status.json` for the Agent Office dashboard
 - Notable finds: filters out no_match names, shows xref verdict + research status
 - Confirmed associates: HIGH and MEDIUM dossier connections with names and rationale
+- `build_coverage_map()`: 38yr x 12mo grid of issue pipeline status from Supabase
+- `read_editor_ledger()`: Reads `data/editor_ledger.json`, computes stuck/exhausted/recent failures for dashboard
 
 ### Dashboard Server (`src/dashboard_server.py`)
 - HTTP server for Agent Office frontend
