@@ -247,11 +247,23 @@ class Agent(ABC):
                     if did_work:
                         self.log(f"Work cycle completed (cycle #{self._cycles})", level="DEBUG")
                     else:
-                        # No work — reflect on recent episodes or generate idle chatter
+                        # No work — use idle time intelligently (priority order)
+                        # 1. Reflect on recent episodes (every 10 min)
                         try:
                             await asyncio.to_thread(self.reflect)
                         except Exception:
                             pass
+                        # 2. Explore cross-agent patterns (every 15 min)
+                        try:
+                            await asyncio.to_thread(self.curious_explore)
+                        except Exception:
+                            pass
+                        # 3. Propose methodology improvements (every 30 min)
+                        try:
+                            await asyncio.to_thread(self.propose_improvement)
+                        except Exception:
+                            pass
+                        # 4. Personality-driven idle chatter (every 2 min)
                         try:
                             await asyncio.to_thread(self.idle_chatter)
                         except Exception:
@@ -532,6 +544,172 @@ class Agent(ABC):
 
         except Exception as e:
             self.log(f"Reflection failed: {e}", level="DEBUG")
+
+    # ── Self-Improvement ──────────────────────────────────────
+
+    _IMPROVEMENT_INTERVAL = 1800  # 30 minutes between improvement proposals
+
+    def propose_improvement(self):
+        """Propose a methodology improvement based on accumulated experience.
+
+        Reviews reflection episodes and failure patterns, then proposes a specific
+        change to how this agent works. The proposal is committed to memory as a
+        'proposal' episode. The Editor can find and act on these during strategic
+        assessment.
+
+        This is NOT self-modifying code — it's structured feedback that a human
+        or the Editor can review and implement.
+
+        Cost: ~$0.002 per proposal (Haiku).
+        """
+        now = _time.time()
+        if not hasattr(self, '_last_improvement'):
+            self._last_improvement = 0.0
+        if now - self._last_improvement < self._IMPROVEMENT_INTERVAL:
+            return
+        self._last_improvement = now
+
+        try:
+            from agents.memory import get_memory
+            memory = get_memory()
+            if not memory or memory.count() < 15:
+                return  # Need enough history
+        except Exception:
+            return
+
+        # Get reflections and failure episodes
+        reflections = memory.recall(
+            f"reflection insight pattern from {self.name}",
+            agent=self.name,
+            n=5,
+        )
+        failures = memory.recall(
+            f"failure error problem {self.name}",
+            agent=self.name,
+            outcome="failure",
+            n=5,
+        )
+
+        if len(reflections) + len(failures) < 3:
+            return
+
+        personality = self._load_personality()
+        agent_name = self._load_agent_name()
+        skills = self.load_skills()
+
+        context_lines = []
+        for ep in reflections:
+            context_lines.append(f"  [reflection] {ep['episode']}")
+        for ep in failures:
+            context_lines.append(f"  [failure] {ep['episode']}")
+        context_text = "\n".join(context_lines[:10])
+
+        try:
+            import anthropic
+            client = anthropic.Anthropic()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=250,
+                system=(
+                    f"You are {agent_name or self.name.title()}, the {self.name.title()} agent. "
+                    f"{personality[:150] if personality else ''}\n\n"
+                    "Based on your experience, propose ONE specific improvement to your methodology. "
+                    "Format your response as:\n"
+                    "WHAT: What should change (1 sentence)\n"
+                    "WHY: Why this would help (1 sentence, cite specific past failures/patterns)\n"
+                    "HOW: How to implement it (1-2 sentences, be concrete)\n\n"
+                    "Be practical, not theoretical. Reference your actual experience."
+                ),
+                messages=[{"role": "user", "content": f"Your recent experience:\n{context_text}\n\nYour current skills (first 300 chars):\n{skills[:300]}\n\nPropose an improvement:"}],
+            )
+            proposal = response.content[0].text.strip()
+            self.log(f"Improvement proposal: {proposal[:80]}...")
+
+            self.commit_episode(
+                task_type="improvement_proposal",
+                episode=f"Proposal from {agent_name or self.name}: {proposal}",
+                outcome="proposal",
+                extra_meta={"proposer": self.name},
+            )
+
+        except Exception as e:
+            self.log(f"Improvement proposal failed: {e}", level="DEBUG")
+
+    # ── Curiosity ──────────────────────────────────────────────
+
+    _CURIOSITY_INTERVAL = 900  # 15 minutes between curiosity explorations
+
+    def curious_explore(self):
+        """Proactive pattern exploration — what's interesting in the data?
+
+        Unlike reflection (which reviews YOUR episodes), curiosity looks across
+        ALL agents' episodes for cross-cutting patterns. This is how agents
+        discover things nobody asked them to look for.
+
+        Called from the idle path in run(). Only triggers every 15 minutes.
+        Override in subclasses for domain-specific exploration.
+        Cost: ~$0.001 per exploration (Haiku).
+        """
+        now = _time.time()
+        if not hasattr(self, '_last_curiosity'):
+            self._last_curiosity = 0.0
+        if now - self._last_curiosity < self._CURIOSITY_INTERVAL:
+            return
+        self._last_curiosity = now
+
+        try:
+            from agents.memory import get_memory
+            memory = get_memory()
+            if not memory or memory.count() < 10:
+                return  # Not enough data to explore
+        except Exception:
+            return
+
+        # Query across ALL agents (no agent filter) for broad patterns
+        all_episodes = memory.recall(
+            f"patterns and insights from the {self.name} perspective",
+            n=15,
+        )
+        if len(all_episodes) < 5:
+            return
+
+        personality = self._load_personality()
+        agent_name = self._load_agent_name()
+
+        episodes_text = "\n".join(
+            f"  - [{ep['agent']}/{ep['metadata'].get('outcome', '?')}] {ep['episode']}"
+            for ep in all_episodes
+        )
+
+        try:
+            import anthropic
+            client = anthropic.Anthropic()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                system=(
+                    f"You are {agent_name or self.name.title()}, the {self.name.title()} agent. "
+                    f"{personality[:150] if personality else ''}\n\n"
+                    "You're looking at activity across the ENTIRE pipeline (all agents). "
+                    "Find ONE interesting pattern, question, or connection that nobody has explicitly asked about. "
+                    "Be specific. Reference actual data points. This is your chance to be proactive — "
+                    "what's worth investigating that the Editor might not have thought of?"
+                ),
+                messages=[{"role": "user", "content": f"Recent pipeline activity:\n{episodes_text}\n\nWhat's interesting here that deserves attention?"}],
+            )
+            insight = response.content[0].text.strip()
+            self.log(f"Curiosity: {insight[:80]}...")
+
+            # Commit as curiosity episode
+            self.commit_episode(
+                task_type="curiosity",
+                episode=f"Curiosity insight: {insight}",
+                outcome="insight",
+            )
+            self._speech = insight[:120] if len(insight) > 120 else insight
+
+        except Exception as e:
+            self.log(f"Curiosity failed: {e}", level="DEBUG")
 
     # ── Episodic Memory ─────────────────────────────────────────
 

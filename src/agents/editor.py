@@ -1156,6 +1156,37 @@ Respond with JSON only:
         self._plan_detective_tasks()
         self._plan_researcher_tasks()
 
+    def _memory_informed_priority(self, agent_name, task):
+        """Adjust task priority based on episodic memory of past attempts.
+
+        Queries memory for similar past tasks on this agent. If recent attempts
+        at similar tasks have high failure rates, deprioritize. If they've been
+        succeeding, boost priority.
+
+        Returns adjusted priority (lower = higher priority).
+        """
+        try:
+            episodes = self.recall_episodes(
+                f"{agent_name} {task.type} {task.goal[:60]}",
+                task_type=task.type,
+                n=5,
+            )
+            if not episodes:
+                return task.priority
+
+            failures = sum(1 for ep in episodes if ep["metadata"].get("outcome") == "failure")
+            successes = sum(1 for ep in episodes if ep["metadata"].get("outcome") == "success")
+
+            if failures >= 3 and successes == 0:
+                # Consistently failing — deprioritize
+                return min(task.priority + 1, 4)
+            elif successes >= 3 and failures == 0:
+                # Consistently succeeding — boost
+                return max(task.priority - 1, 0)
+            return task.priority
+        except Exception:
+            return task.priority
+
     def _assign_task(self, agent_name, task):
         """Push a task to an agent's inbox if the agent exists and inbox is empty."""
         agent = self.workers.get(agent_name)
@@ -1166,6 +1197,9 @@ Respond with JSON only:
         # Don't overload: only assign if inbox is empty
         if not agent.inbox.empty():
             return False
+
+        # Adjust priority based on memory of past attempts
+        task.priority = self._memory_informed_priority(agent_name, task)
 
         agent.inbox.put_nowait(task)
         self._tasks_in_flight[task.id] = {
@@ -1579,7 +1613,29 @@ Respond with JSON only:
         # Ledger summary (recent failures)
         report["ledger_summary"] = self._build_ledger_summary()
 
+        # Agent improvement proposals (from episodic memory)
+        report["improvement_proposals"] = self._get_improvement_proposals()
+
         return report
+
+    def _get_improvement_proposals(self):
+        """Retrieve recent improvement proposals from agent episodic memory."""
+        try:
+            from agents.memory import get_memory
+            memory = get_memory()
+            if not memory:
+                return []
+            proposals = memory.recall(
+                "improvement proposal methodology change",
+                n=5,
+            )
+            return [
+                {"agent": p["agent"], "proposal": p["episode"][:200]}
+                for p in proposals
+                if p["metadata"].get("outcome") == "proposal"
+            ]
+        except Exception:
+            return []
 
     def _build_ledger_summary(self):
         """Build a summary of recent failures from the ledger."""

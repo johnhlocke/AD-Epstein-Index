@@ -40,6 +40,9 @@ This file should be automatically updated when necessary to answer three key que
 | Agent personalities: names and idle chatter | Tooling | Done |
 | Episodic memory (ONNX embeddings + vector recall) | Tooling | Done |
 | Reflection loops (periodic self-assessment) | Tooling | Done |
+| Self-improvement proposals (agent methodology feedback) | Tooling | Done |
+| Planning/Lookahead (memory-informed task priority) | Tooling | Done |
+| Curiosity (cross-agent pattern exploration) | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -195,9 +198,11 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 **Immediate — Agent Intelligence Upgrades:**
 - ~~Implement episodic memory~~ **Done** (ONNX all-MiniLM-L6-v2, 384-dim, JSON-backed)
 - ~~Add reflection loops~~ **Done** (10-min periodic self-assessment via Haiku)
-- Implement self-improvement (agents propose changes to their skills files)
-- Implement planning/lookahead (Editor models task difficulty and optimizes scheduling)
-- Implement curiosity (agents explore patterns when idle)
+- ~~Implement self-improvement~~ **Done** (30-min methodology proposals via Haiku)
+- ~~Implement planning/lookahead~~ **Done** (memory-informed priority in Editor)
+- ~~Implement curiosity~~ **Done** (15-min cross-agent pattern exploration)
+- Implement world model (structured pipeline state representation)
+- Implement inter-agent communication (event bus for peer coordination)
 - Fix Courier `work()` bug (`'NoneType' object has no attribute 'get'`)
 
 **Ongoing — Scale the Pipeline:**

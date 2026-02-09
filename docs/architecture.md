@@ -227,13 +227,36 @@ reflect() ─── periodic self-assessment ───────┘
 - **Integration:** `problem_solve()` queries memory before deciding; `run()` commits after every task; `reflect()` generates compound insights every 10 min
 - **Cost:** Embeddings are free (local). Reflections ~$0.001/call (Haiku, every 10 min per agent)
 
-### Reflection
+### Idle Intelligence Pipeline
 
-Agents periodically review their recent episodes (every 10 min when idle):
-1. Recall last 10 episodes for this agent
-2. Ask Haiku to identify patterns and suggest improvements
-3. Commit the insight back to memory as a 'reflection' episode
-4. Future problem_solve() calls can recall these reflection insights
+When agents have no work, they use idle time intelligently (each with independent cooldowns):
+
+| Method | Interval | What it does | Cost |
+|--------|----------|-------------|------|
+| `reflect()` | 10 min | Reviews own episodes, identifies patterns | ~$0.001 |
+| `curious_explore()` | 15 min | Explores ALL agents' episodes for cross-cutting patterns | ~$0.001 |
+| `propose_improvement()` | 30 min | Proposes methodology changes (WHAT/WHY/HOW format) | ~$0.002 |
+| `idle_chatter()` | 2 min | Personality-driven banter | ~$0.0005 |
+
+**Data flow:**
+```
+reflect() ──→ reflection episodes ──→ recalled by future problem_solve()
+curious_explore() ──→ curiosity episodes ──→ cross-agent knowledge
+propose_improvement() ──→ proposal episodes ──→ Editor reads during assessment
+idle_chatter() ──→ speech bubble on dashboard
+```
+
+### Memory-Informed Planning (Editor)
+
+`_memory_informed_priority()` adjusts task priority before assignment:
+- Queries episodic memory for past attempts at similar tasks
+- 3+ failures → deprioritize (don't repeat doomed tasks)
+- 3+ successes → boost priority (lean into what works)
+- Called by `_assign_task()` before pushing to agent inbox
+
+`_get_improvement_proposals()` surfaces agent proposals during strategic assessment:
+- Queries episodic memory for 'proposal' outcome episodes
+- Included in situation report for the Editor's strategic LLM
 
 ### Orchestrator (`src/orchestrator.py`)
 - Launches all 7 agents as async tasks

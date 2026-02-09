@@ -32,6 +32,35 @@ Format: entries are grouped by date, with the most recent at the top.
   - Shows reflection as speech bubble on dashboard
 - Wired into idle path of `run()` loop — agents reflect before chattering when idle
 
+### Added — Self-Improvement Proposals (Gap 3 of Intelligence Roadmap)
+- **`propose_improvement()`** in base Agent class — periodic methodology proposals every 30 minutes
+  - Reviews reflection episodes and failure patterns, proposes specific changes via Haiku
+  - Structured format: WHAT / WHY / HOW — practical, not theoretical
+  - Proposals committed to memory as 'proposal' episodes
+  - Editor reads proposals during strategic assessment (`_get_improvement_proposals()`)
+  - NOT self-modifying: proposals are structured feedback for human/Editor review
+
+### Added — Planning/Lookahead (Gap 4 of Intelligence Roadmap)
+- **`_memory_informed_priority()`** in Editor — adjusts task priority based on past experience
+  - Queries memory for similar past tasks on the target agent
+  - 3+ failures with 0 successes → deprioritize (avoid repeating doomed tasks)
+  - 3+ successes with 0 failures → boost priority (lean into what works)
+  - Called automatically by `_assign_task()` before pushing to agent inbox
+
+### Added — Curiosity (Gap 5 of Intelligence Roadmap)
+- **`curious_explore()`** in base Agent class — cross-agent pattern exploration every 15 minutes
+  - Unlike reflection (reviews YOUR episodes), curiosity queries ALL agents' episodes
+  - Asks Haiku to find interesting patterns nobody explicitly asked about
+  - Commits insights as 'curiosity' episodes — cross-pollinating knowledge between agents
+  - Shows insight as speech bubble on dashboard
+
+### Changed — Idle Intelligence Pipeline
+- Agents now have a 4-stage idle intelligence pipeline (all with independent cooldowns):
+  1. `reflect()` — self-assessment (every 10 min)
+  2. `curious_explore()` — cross-agent patterns (every 15 min)
+  3. `propose_improvement()` — methodology proposals (every 30 min)
+  4. `idle_chatter()` — personality banter (every 2 min)
+
 ---
 
 ## 2026-02-09 (Session 13)
