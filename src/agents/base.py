@@ -183,6 +183,17 @@ class Agent(ABC):
                             result = await self.execute(task)
                             self.outbox.put_nowait(result)
                             did_work = True
+                            # Commit success episode to memory
+                            try:
+                                summary = result.result.get("summary", task.goal) if hasattr(result, "result") and isinstance(result.result, dict) else task.goal
+                                await asyncio.to_thread(
+                                    self.commit_episode,
+                                    task.type,
+                                    f"Task '{task.goal[:80]}' completed successfully. {str(summary)[:120]}",
+                                    "success",
+                                )
+                            except Exception:
+                                pass
                             # Narrate completion in agent's personality
                             try:
                                 summary = result.result.get("summary", task.goal) if hasattr(result, "result") and isinstance(result.result, dict) else task.goal
@@ -204,6 +215,16 @@ class Agent(ABC):
                             self._last_error = str(e)
                             self._last_error_time = datetime.now()
                             self.log(f"Task {task.id} failed: {e}", level="ERROR")
+                            # Commit failure episode to memory
+                            try:
+                                await asyncio.to_thread(
+                                    self.commit_episode,
+                                    task.type,
+                                    f"Task '{task.goal[:80]}' failed: {str(e)[:120]}",
+                                    "failure",
+                                )
+                            except Exception:
+                                pass
                             # Narrate failure in agent's personality
                             try:
                                 await asyncio.to_thread(self.narrate, f"Failed: {task.goal} — {e}")
@@ -226,7 +247,11 @@ class Agent(ABC):
                     if did_work:
                         self.log(f"Work cycle completed (cycle #{self._cycles})", level="DEBUG")
                     else:
-                        # No work — generate personality-driven idle chatter
+                        # No work — reflect on recent episodes or generate idle chatter
+                        try:
+                            await asyncio.to_thread(self.reflect)
+                        except Exception:
+                            pass
                         try:
                             await asyncio.to_thread(self.idle_chatter)
                         except Exception:
@@ -428,6 +453,139 @@ class Agent(ABC):
         except Exception:
             pass  # Silently fail — idle chatter is non-critical
 
+    # ── Reflection ─────────────────────────────────────────────
+
+    _REFLECTION_INTERVAL = 600  # 10 minutes between reflections
+
+    def reflect(self):
+        """Periodic self-assessment: review recent episodes and generate insights.
+
+        Looks at the last ~10 episodes from this agent's memory, asks the LLM
+        to identify patterns, recurring problems, and lessons learned. Commits
+        the insight back to memory as a 'reflection' episode.
+
+        Called from the idle path in run() — only triggers every 10 minutes.
+        Cost: ~$0.001 per reflection (Haiku).
+        """
+        now = _time.time()
+        if not hasattr(self, '_last_reflection'):
+            self._last_reflection = 0.0
+        if now - self._last_reflection < self._REFLECTION_INTERVAL:
+            return
+        self._last_reflection = now
+
+        # Get recent episodes for this agent
+        try:
+            from agents.memory import get_memory
+            memory = get_memory()
+            if not memory or memory.count() < 5:
+                return  # Not enough history to reflect on
+
+            # Recall recent episodes (use a broad query to get variety)
+            recent = memory.recall(
+                f"recent {self.name} agent activity",
+                agent=self.name,
+                n=10,
+            )
+            if len(recent) < 3:
+                return
+        except Exception:
+            return
+
+        personality = self._load_personality()
+        agent_name = self._load_agent_name()
+
+        episodes_text = "\n".join(
+            f"  - [{ep['metadata'].get('outcome', '?')}] {ep['episode']}"
+            for ep in recent
+        )
+
+        try:
+            import anthropic
+            client = anthropic.Anthropic()
+            response = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=200,
+                system=(
+                    f"You are {agent_name or self.name.title()}, the {self.name.title()} agent. "
+                    f"{personality[:150] if personality else ''}\n\n"
+                    "You're reflecting on your recent work. Review these episodes and identify:\n"
+                    "1. A pattern you notice (recurring problem, common strategy that works)\n"
+                    "2. Something you should do differently next time\n"
+                    "Be specific and practical — this note is for your future self."
+                ),
+                messages=[{"role": "user", "content": f"Your recent episodes:\n{episodes_text}\n\nWhat patterns do you see? What would you do differently?"}],
+            )
+            insight = response.content[0].text.strip()
+            self.log(f"Reflection: {insight[:80]}...")
+
+            # Commit the reflection as a special episode
+            self.commit_episode(
+                task_type="reflection",
+                episode=f"Self-reflection: {insight}",
+                outcome="insight",
+                extra_meta={"episode_count": len(recent)},
+            )
+
+            # Show reflection as speech
+            self._speech = insight[:120] if len(insight) > 120 else insight
+
+        except Exception as e:
+            self.log(f"Reflection failed: {e}", level="DEBUG")
+
+    # ── Episodic Memory ─────────────────────────────────────────
+
+    def recall_episodes(self, context_description, task_type=None, n=3):
+        """Recall similar past episodes from episodic memory.
+
+        Args:
+            context_description: Text describing the current situation.
+            task_type: Optionally filter to a specific task type.
+            n: Number of episodes to recall.
+
+        Returns:
+            List of episode dicts, or empty list if memory unavailable.
+        """
+        try:
+            from agents.memory import get_memory
+            memory = get_memory()
+            if not memory:
+                return []
+            return memory.recall(
+                query=context_description,
+                agent=self.name,
+                task_type=task_type,
+                n=n,
+            )
+        except Exception:
+            return []
+
+    def commit_episode(self, task_type, episode, outcome="success", extra_meta=None):
+        """Commit an episode to episodic memory.
+
+        Args:
+            task_type: Task type (discover_issues, download_pdf, etc.)
+            episode: Free-text description of what happened and what was learned.
+            outcome: "success" or "failure"
+            extra_meta: Additional metadata dict (values must be str/int/float/bool).
+        """
+        try:
+            from agents.memory import get_memory
+            memory = get_memory()
+            if not memory:
+                return
+            meta = {"outcome": outcome}
+            if extra_meta:
+                meta.update(extra_meta)
+            memory.commit(
+                agent=self.name,
+                task_type=task_type,
+                episode=episode,
+                metadata=meta,
+            )
+        except Exception:
+            pass  # Memory is non-critical
+
     # ── Problem Solving ────────────────────────────────────────
 
     def problem_solve(self, error, context, strategies):
@@ -452,6 +610,18 @@ class Agent(ABC):
         strategies_text = "\n".join(f"  - {k}: {v}" for k, v in strategies.items())
         strategies_text += "\n  - escalate: Report to Editor — all local strategies exhausted"
 
+        # Recall similar past problems from episodic memory
+        past_episodes = self.recall_episodes(
+            f"Error: {error}. Context: {json.dumps(context, default=str)[:200]}",
+            n=3,
+        )
+        memory_context = ""
+        if past_episodes:
+            memory_lines = []
+            for ep in past_episodes:
+                memory_lines.append(f"  - {ep['episode']}")
+            memory_context = "\n\nPAST EXPERIENCE (similar problems you've seen before):\n" + "\n".join(memory_lines)
+
         prompt = f"""You encountered an error while working. Diagnose it and choose the best recovery strategy.
 
 ERROR: {error}
@@ -460,7 +630,7 @@ CONTEXT:
 {json.dumps(context, indent=2, default=str)}
 
 AVAILABLE STRATEGIES:
-{strategies_text}
+{strategies_text}{memory_context}
 
 Respond with JSON only:
 {{"diagnosis": "What went wrong (1 sentence)", "strategy": "strategy_name", "reasoning": "Why this strategy (1 sentence)"}}"""
@@ -475,7 +645,8 @@ Respond with JSON only:
                     f"You are the {self.name.title()} agent. {personality[:200] if personality else ''}\n"
                     "You are a problem solver. When something goes wrong, you diagnose it and pick "
                     "the smartest recovery strategy from your toolkit. Be practical, not theoretical. "
-                    "Only escalate if you genuinely have no local options left."
+                    "Only escalate if you genuinely have no local options left. "
+                    "If you have past experience with similar problems, USE IT — don't repeat mistakes."
                 ),
                 messages=[{"role": "user", "content": prompt}],
             )
@@ -486,6 +657,16 @@ Respond with JSON only:
                     text = text[:text.rindex("```")]
             result = json.loads(text)
             self.log(f"Problem solve: {result.get('diagnosis', '')} → {result.get('strategy', 'unknown')}")
+
+            # Commit this decision to episodic memory
+            task_type = context.get("task_type", context.get("task", "unknown"))
+            self.commit_episode(
+                task_type=str(task_type),
+                episode=f"Error: {str(error)[:100]}. Diagnosed: {result.get('diagnosis', '?')}. Strategy: {result.get('strategy', '?')}. Reasoning: {result.get('reasoning', '?')}",
+                outcome="decision",
+                extra_meta={"strategy": result.get("strategy", "unknown")},
+            )
+
             # Narrate the decision
             try:
                 self.narrate(f"Hit a problem: {result.get('diagnosis', error)}. Trying: {result.get('strategy', 'unknown')}")
@@ -533,6 +714,16 @@ Respond with JSON only:
         else:
             status = "idle"
 
+        # Get memory episode count (non-blocking)
+        memory_count = 0
+        try:
+            from agents.memory import get_memory
+            mem = get_memory()
+            if mem:
+                memory_count = mem.count()
+        except Exception:
+            pass
+
         return {
             "id": self.name,
             "status": status,
@@ -546,4 +737,5 @@ Respond with JSON only:
             "last_error_time": self._last_error_time.isoformat() if self._last_error_time else None,
             "last_work": self._last_work_time.isoformat() if self._last_work_time else None,
             "progress": self.get_progress(),
+            "memory_episodes": memory_count,
         }

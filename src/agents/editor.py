@@ -219,6 +219,16 @@ class EditorAgent(Agent):
             "text": text,
         })
         self._save_memory(memory)
+        # Also commit to episodic memory for semantic recall
+        try:
+            self.commit_episode(
+                task_type=f"editor_{category}",
+                episode=text,
+                outcome=category,
+                extra_meta={"category": category},
+            )
+        except Exception:
+            pass
 
     def _get_memory_summary(self):
         memory = self._load_memory()

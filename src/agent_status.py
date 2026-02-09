@@ -878,6 +878,16 @@ def read_editor_ledger():
     }
 
 
+def _get_memory_count():
+    """Get total episodic memory episode count. Returns 0 on failure."""
+    try:
+        from agents.memory import get_memory
+        mem = get_memory()
+        return mem.count() if mem else 0
+    except Exception:
+        return 0
+
+
 def build_coverage_map():
     """Build a year×month grid showing pipeline status for each AD issue.
 
@@ -1099,6 +1109,7 @@ def generate_status():
             {"label": "XRef Leads", "value": xref_stats.get("leads", xref_stats.get("matches", 0))},
             {"label": "Dossiers", "value": dossier_stats["investigated"]},
             {"label": "Confirmed", "value": confirmed_associates, "details": dossier_stats.get("confirmed_names", [])},
+            {"label": "Memories", "value": _get_memory_count()},
         ],
         "collaborations": build_collaborations(manifest_stats, extraction_stats, xref_stats),
         "log": build_log(manifest_stats, extraction_stats, xref_stats),

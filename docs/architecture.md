@@ -207,6 +207,34 @@ Every Researcher dossier passes through the Editor before becoming final:
 Each agent has a character name (chosen by analyzing their pixel sprite via Gemini Vision):
 - **Arthur** (Scout), **Casey** (Courier), **Elias** (Reader), **Silas** (Detective), **Elena** (Researcher), **Miranda** (Editor)
 
+### Episodic Memory (`src/agents/memory.py`)
+
+Agents learn from experience via a lightweight vector store:
+
+```
+problem_solve() ─── recall similar past errors ──→ LLM gets PAST EXPERIENCE context
+         │                                              │
+         └── commit decision episode ──→ JSON store ←── recall
+                                              ↑
+run() loop ── commit success/failure ─────────┘
+                                              ↑
+reflect() ─── periodic self-assessment ───────┘
+```
+
+- **Embeddings:** all-MiniLM-L6-v2 via ONNX (22M params, 384-dim, local, no API calls)
+- **Storage:** JSON file (`data/agent_memory/episodes.json`), capped at 2,000 episodes
+- **Recall:** Cosine similarity on pre-computed embeddings + metadata filters (agent, task_type, outcome)
+- **Integration:** `problem_solve()` queries memory before deciding; `run()` commits after every task; `reflect()` generates compound insights every 10 min
+- **Cost:** Embeddings are free (local). Reflections ~$0.001/call (Haiku, every 10 min per agent)
+
+### Reflection
+
+Agents periodically review their recent episodes (every 10 min when idle):
+1. Recall last 10 episodes for this agent
+2. Ask Haiku to identify patterns and suggest improvements
+3. Commit the insight back to memory as a 'reflection' episode
+4. Future problem_solve() calls can recall these reflection insights
+
 ### Orchestrator (`src/orchestrator.py`)
 - Launches all 7 agents as async tasks
 - Wires Editor with worker references (Editor.workers = all other agents)

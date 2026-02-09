@@ -6,6 +6,34 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 14)
+
+### Added — Episodic Memory (Gap 1 of Intelligence Roadmap)
+- **`src/agents/memory.py`** — Lightweight vector store using ONNX embeddings (all-MiniLM-L6-v2, 384-dim)
+  - `AgentMemory.commit()` stores episodes with pre-computed embeddings + filterable metadata
+  - `AgentMemory.recall()` retrieves similar past episodes via cosine similarity + metadata filters
+  - JSON-backed persistence (`data/agent_memory/episodes.json`), capped at 2,000 episodes
+  - No external services needed — runs entirely locally with onnxruntime + numpy + tokenizers
+- **Base Agent integration** (`src/agents/base.py`):
+  - `recall_episodes()` — convenience wrapper for semantic memory recall
+  - `commit_episode()` — convenience wrapper for storing episodes
+  - `problem_solve()` now recalls similar past errors before making decisions (PAST EXPERIENCE section in LLM prompt)
+  - `problem_solve()` commits every decision to memory (error, diagnosis, strategy, reasoning)
+  - `run()` loop commits success/failure episodes after every task execution
+- **Editor integration** — `_remember()` now also commits to episodic memory for semantic recall
+- **Dashboard** — "Memories" stat added to top bar showing total episode count
+- **ChromaDB installed but unused** — Python 3.14 incompatibility (pydantic v1). Built custom vector store instead.
+
+### Added — Reflection Loops (Gap 2 of Intelligence Roadmap)
+- **`reflect()`** method in base Agent class — periodic self-assessment every 10 minutes
+  - Reviews last 10 episodes from this agent's memory via Haiku (~$0.001/call)
+  - Identifies patterns (recurring problems, strategies that work) and areas for improvement
+  - Commits insights back to memory as 'reflection' episodes — building compound knowledge
+  - Shows reflection as speech bubble on dashboard
+- Wired into idle path of `run()` loop — agents reflect before chattering when idle
+
+---
+
 ## 2026-02-09 (Session 13)
 
 ### Added — LLM-Powered Problem Solving for All Agents

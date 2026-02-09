@@ -38,6 +38,8 @@ This file should be automatically updated when necessary to answer three key que
 | Editor-directed Detective & Researcher flow | Tooling | Done |
 | LLM-powered problem solving for all agents | Tooling | Done |
 | Agent personalities: names and idle chatter | Tooling | Done |
+| Episodic memory (ONNX embeddings + vector recall) | Tooling | Done |
+| Reflection loops (periodic self-assessment) | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -191,9 +193,11 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 ## 3. What's Next
 
 **Immediate — Agent Intelligence Upgrades:**
-- Implement episodic memory (ChromaDB + embeddings) so agents learn from past decisions
-- Add reflection loops (periodic self-assessment) to agents
-- Implement inter-agent communication (event bus for peer coordination)
+- ~~Implement episodic memory~~ **Done** (ONNX all-MiniLM-L6-v2, 384-dim, JSON-backed)
+- ~~Add reflection loops~~ **Done** (10-min periodic self-assessment via Haiku)
+- Implement self-improvement (agents propose changes to their skills files)
+- Implement planning/lookahead (Editor models task difficulty and optimizes scheduling)
+- Implement curiosity (agents explore patterns when idle)
 - Fix Courier `work()` bug (`'NoneType' object has no attribute 'get'`)
 
 **Ongoing — Scale the Pipeline:**
