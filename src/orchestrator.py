@@ -153,6 +153,23 @@ async def write_status(agents):
                 if find["name"].lower().strip().startswith(investigating_name[:8]):
                     find["research"] = "investigating"
 
+    # Overlay now_processing with live agent tasks
+    # agent_status.py infers generic messages from counts ("Downloading (87 remaining)")
+    # but we have the actual current task from each running agent
+    if "now_processing" in status:
+        for agent_id, live in live_agents.items():
+            if agent_id in status["now_processing"]:
+                if live["active"] and live.get("message"):
+                    status["now_processing"][agent_id] = {
+                        "task": live["message"],
+                        "active": True,
+                    }
+                elif live.get("paused"):
+                    status["now_processing"][agent_id] = {
+                        "task": "Paused",
+                        "active": False,
+                    }
+
     # Add Editor's task board to status
     if "editor" in live_agents:
         editor_live = live_agents["editor"]
@@ -161,7 +178,9 @@ async def write_status(agents):
         status["task_board"] = task_board
         status["editor_cost"] = cost
 
-    # Add live activity log entries
+    # Add live activity log entries from agent_activity.log
+    # These are real timestamped events (e.g., "Downloaded AD Nov 2013")
+    # and replace the static summary lines from agent_status.py
     if os.path.exists(LOG_PATH):
         try:
             with open(LOG_PATH) as f:

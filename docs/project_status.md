@@ -33,6 +33,7 @@ This file should be automatically updated when necessary to answer three key que
 | Migrate pipeline source of truth: manifest → Supabase | Tooling | Done |
 | Hub-and-spoke architecture: Editor as central coordinator | Tooling | Done |
 | Dashboard: Editor's Board, coverage map, ledger visibility | Tooling | Done |
+| Editor: event-driven architecture (replaces polling loop) | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -122,7 +123,7 @@ Built a 7-agent autonomous pipeline that runs continuously:
 **Infrastructure (Hub-and-Spoke):**
 - `src/agents/tasks.py` — Task/TaskResult dataclasses, EditorLedger for centralized failure tracking
 - `src/agents/base.py` — Async work loop with inbox/outbox asyncio.Queue, execute() for task-driven work, watchdog timer
-- `src/agents/editor.py` — Central coordinator: plans tasks, collects results, validates, commits to Supabase. Only agent that writes pipeline state.
+- `src/agents/editor.py` — Central coordinator with event-driven architecture: blocks on unified event queue instead of polling. 4 producer tasks (outbox forwarder, message watcher, planning/strategic heartbeats) feed events. Human messages detected in <2s (was 300s), agent results in <0.5s (was 5s).
 - `src/db.py` — Shared DB module (singleton Supabase client, issue/feature CRUD). All agents import from here — Supabase `issues` table is the single source of truth
 - `src/orchestrator.py` — Launches all agents, wires Editor with worker references, merges live status + task board into `status.json`
 - `src/dashboard_server.py` — HTTP server: inbox API, agent pause/resume, skills editing

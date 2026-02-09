@@ -429,57 +429,33 @@ def build_collaborations(manifest_stats, extraction_stats, xref_stats):
 
 
 def build_log(manifest_stats, extraction_stats, xref_stats):
-    """Build a recent activity log from available data."""
+    """Build a recent activity log from available data.
+
+    Prioritizes real timestamped events from agent_activity.log.
+    Only falls back to pipeline summary if no real log entries exist.
+    When the orchestrator is running, it replaces this entirely with live log data.
+    """
+    # Real activity log entries always take priority
+    live_entries = read_activity_log(max_lines=20)
+    if live_entries:
+        return live_entries
+
+    # Fallback: pipeline summary (only when no activity log exists)
+    # These are marked with "--:--" to distinguish from real timestamps
     log = []
-    now = datetime.now().strftime("%H:%M")
-
     if manifest_stats["total"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Scout",
-            "event": f"Tracking {manifest_stats['total']} issues from archive.org"
-        })
-
+        log.append({"time": "--:--", "agent": "Scout",
+                     "event": f"Tracking {manifest_stats['total']} issues"})
     if manifest_stats["downloaded"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Courier",
-            "event": f"{manifest_stats['downloaded']} PDFs downloaded"
-        })
-
-    if manifest_stats["skipped"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Courier",
-            "event": f"{manifest_stats['skipped']} issues skipped (pre-1988)"
-        })
-
+        log.append({"time": "--:--", "agent": "Courier",
+                     "event": f"{manifest_stats['downloaded']} PDFs downloaded"})
     if extraction_stats["extracted"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Reader",
-            "event": f"Extracted {extraction_stats['features']} features from {extraction_stats['extracted']} issues"
-        })
-
-    if extraction_stats["nulls"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Reader",
-            "event": f"{extraction_stats['nulls']} features still missing homeowner names"
-        })
-
+        log.append({"time": "--:--", "agent": "Reader",
+                     "event": f"{extraction_stats['features']} features from {extraction_stats['extracted']} issues"})
     if xref_stats["checked"] > 0:
         leads = xref_stats.get("leads", xref_stats.get("matches", 0))
-        log.append({
-            "time": now,
-            "agent": "Detective",
-            "event": f"Checked {xref_stats['checked']} names, found {leads} leads"
-        })
-
-    # Merge in live activity log entries (from orchestrator)
-    live_entries = read_activity_log(max_lines=10)
-    if live_entries:
-        log = live_entries + log  # Live entries first
+        log.append({"time": "--:--", "agent": "Detective",
+                     "event": f"Checked {xref_stats['checked']} names, {leads} leads"})
 
     return log
 

@@ -87,28 +87,60 @@ The system runs as 7 autonomous agents coordinated by the Editor via asyncio.Que
 | Reader | 30s | Claude Sonnet | Extracts homeowner data via Vision API, TOC + article pages |
 | Detective | 180s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright (batched) |
 | Researcher | 120s | Claude Haiku | Builds dossiers with pattern analysis + home analysis |
-| Editor | 5s | Claude Opus | Central coordinator: plans tasks, validates results, commits to Supabase |
+| Editor | event-driven | Claude Opus | Central coordinator: event queue replaces polling, plans tasks, validates results, commits to Supabase |
 | Designer | 600s | Claude Haiku | Learns design patterns from training sources |
 
-### Editor Coordinator Model (Hub-and-Spoke)
+### Editor Coordinator Model (Event-Driven Hub-and-Spoke)
 
 The Editor is the central coordinator — the ONLY agent that writes pipeline state to Supabase.
 
-**Main loop (every 5s):**
-1. `_collect_results()` — drain all agent outboxes
-2. `_process_results()` — validate each result, commit to Supabase or reject
-3. `_handle_failures()` — log failures to EditorLedger, maybe reassign
+**Event-driven architecture** (replaces the old 5-second polling loop):
 
-**Planning loop (every 30s):**
-4. `_plan_and_assign()` — scan Supabase, create tasks, push to agent inboxes:
+The Editor blocks on a single `asyncio.Queue` that receives events from 4 background producer tasks:
+
+```
+  ┌─────────────────┐   ┌──────────────────┐   ┌─────────────────┐
+  │ Outbox Forwarder │   │ Message Watcher  │   │ Timer Heartbeats│
+  │ (checks 0.5s)   │   │ (checks 1s mtime)│   │ (30s / 300s)    │
+  └────────┬────────┘   └────────┬─────────┘   └────────┬────────┘
+           │                     │                       │
+           ▼                     ▼                       ▼
+      ┌─────────────────────────────────────────────────────┐
+      │              Editor Event Queue                      │
+      │   await queue.get()  ← blocks until event arrives   │
+      └──────────────────────────┬──────────────────────────┘
+                                 │
+                                 ▼
+                    ┌────────────────────────┐
+                    │   _handle_event()      │
+                    │                        │
+                    │  agent_result → commit  │
+                    │  human_message → chat   │
+                    │  timer_plan → assign    │
+                    │  timer_strategic → LLM  │
+                    └────────────────────────┘
+```
+
+| Event | Source | Latency |
+|---|---|---|
+| `agent_result` | Outbox forwarder (0.5s poll) | < 1 second |
+| `human_message` | File mtime watcher (1s poll) | < 2 seconds |
+| `timer_plan` | asyncio.sleep(30) | Every 30s |
+| `timer_strategic` | asyncio.sleep(300) | Every 5 min |
+
+**Planning (every 30s via `timer_plan` event):**
+- `_plan_and_assign()` — scan Supabase, create tasks, push to agent inboxes:
    - Missing issues? → assign Scout
    - Discovered but not downloaded? → assign Courier
    - Downloaded but not extracted? → assign Reader
    - Features need cross-referencing? → assign Detective (via work())
    - Leads need investigation? → assign Researcher (via work())
 
-**Strategic assessment (every 5 min or on human message):**
-5. `_strategic_assessment()` — call Claude for complex decisions, handle human messages
+**Strategic assessment (every 5 min via `timer_strategic` event, OR immediately on `human_message` event):**
+- `_strategic_assessment()` — call Claude for complex decisions, handle human messages
+
+**Event batching:**
+- `_drain_pending_events()` — after handling one event, drains any that accumulated during processing (e.g., multiple agent results arriving during a long LLM call). Batches `agent_result` events into a single `_process_results()` call for efficiency.
 
 ### Task Infrastructure (`src/agents/tasks.py`)
 

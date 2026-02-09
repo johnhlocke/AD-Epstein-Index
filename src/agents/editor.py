@@ -5,18 +5,37 @@ The Editor is the ONLY agent that writes pipeline state to Supabase.
 Worker agents (Scout, Courier, Reader, Detective, Researcher) receive
 tasks via their inbox queues and report results via outbox queues.
 
-Main loop (every 5s):
-  1. Collect results from all agent outboxes
-  2. Validate results, commit to Supabase or reject
-  3. Handle failures (log to ledger, maybe reassign)
+EVENT-DRIVEN ARCHITECTURE (replaces the old 5-second polling loop):
 
-Planning loop (every 30s):
-  4. Scan Supabase state → create tasks → push to agent inboxes
+The Editor blocks on a single asyncio.Queue that receives events from
+four background producer tasks:
 
-Strategic assessment (every 5 min or on human message):
-  5. Call Claude for complex decisions, handle human messages
+  ┌─────────────────┐   ┌──────────────────┐   ┌─────────────────┐
+  │ Outbox Forwarder │   │ Message Watcher  │   │ Timer Heartbeats│
+  │ (checks 0.5s)   │   │ (checks 1s mtime)│   │ (30s / 300s)    │
+  └────────┬────────┘   └────────┬─────────┘   └────────┬────────┘
+           │                     │                       │
+           ▼                     ▼                       ▼
+      ┌─────────────────────────────────────────────────────┐
+      │              Editor Event Queue                      │
+      │   await queue.get()  ← blocks until event arrives   │
+      └──────────────────────────┬──────────────────────────┘
+                                 │
+                                 ▼
+                    ┌────────────────────────┐
+                    │   _handle_event()      │
+                    │                        │
+                    │  agent_result → commit  │
+                    │  human_message → chat   │
+                    │  timer_plan → assign    │
+                    │  timer_strategic → LLM  │
+                    └────────────────────────┘
 
-Interval: 5s (fast poll for results + human messages).
+Event latencies:
+  agent_result  — < 1 second  (0.5s outbox poll)
+  human_message — < 2 seconds (1s file mtime watch)
+  timer_plan    — every 30s   (planning heartbeat)
+  timer_strategic — every 300s (LLM assessment) OR immediately on chat
 """
 
 import asyncio
@@ -24,7 +43,9 @@ import json
 import os
 import sys
 import time as _time
+from dataclasses import dataclass, field
 from datetime import datetime
+from typing import Any
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -34,6 +55,21 @@ from db import (
     get_supabase, update_issue, delete_features_for_issue, list_issues,
     count_issues_by_status, upsert_issue, get_issue_by_identifier,
 )
+
+@dataclass
+class EditorEvent:
+    """A single event delivered to the Editor's event queue.
+
+    Event types:
+      agent_result   — a worker finished a task (payload: list of (agent_name, TaskResult))
+      human_message  — a human sent a chat message (payload: None)
+      timer_plan     — 30-second planning heartbeat (payload: None)
+      timer_strategic — 5-minute strategic assessment heartbeat (payload: None)
+    """
+    type: str                              # "agent_result" | "human_message" | "timer_plan" | "timer_strategic"
+    payload: Any = None                    # event-specific data
+    timestamp: float = field(default_factory=_time.time)
+
 
 BRIEFING_PATH = os.path.join(DATA_DIR, "editor_briefing.md")
 INBOX_PATH = os.path.join(DATA_DIR, "editor_inbox.md")
@@ -71,6 +107,10 @@ class EditorAgent(Agent):
         super().__init__("editor", interval=5)
         self.workers = workers or {}
         self.ledger = EditorLedger()
+
+        # Event-driven architecture
+        self._event_queue = asyncio.Queue()
+        self._human_messages_mtime = 0.0  # last known mtime of human_messages.json
 
         # Timing
         self._last_plan_time = 0
@@ -207,38 +247,194 @@ class EditorAgent(Agent):
             pass
 
     # ═══════════════════════════════════════════════════════════
-    # MAIN WORK LOOP — the Editor's heartbeat
+    # EVENT-DRIVEN RUN LOOP — replaces base class polling
     # ═══════════════════════════════════════════════════════════
 
+    async def run(self):
+        """Event-driven main loop. Blocks on a unified event queue instead of polling.
+
+        Starts 4 background producer tasks that feed events into self._event_queue,
+        then loops on queue.get() dispatching each event to _handle_event().
+        """
+        self._running = True
+        self._stop_requested = False
+        self.log("Editor agent started (event-driven)")
+
+        # Initialize human_messages mtime
+        if os.path.exists(HUMAN_MESSAGES_PATH):
+            try:
+                self._human_messages_mtime = os.path.getmtime(HUMAN_MESSAGES_PATH)
+            except OSError:
+                pass
+
+        # Start background producer tasks
+        producers = [
+            asyncio.create_task(self._outbox_forwarder(), name="outbox_forwarder"),
+            asyncio.create_task(self._human_message_watcher(), name="message_watcher"),
+            asyncio.create_task(self._planning_heartbeat(), name="planning_heartbeat"),
+            asyncio.create_task(self._strategic_heartbeat(), name="strategic_heartbeat"),
+        ]
+
+        try:
+            while not self._stop_requested:
+                # Block until an event arrives (10s timeout to check stop flag)
+                try:
+                    event = await asyncio.wait_for(
+                        self._event_queue.get(), timeout=10.0
+                    )
+                except asyncio.TimeoutError:
+                    # No event in 10s — just loop back to check stop flag
+                    continue
+
+                self._active = True
+                try:
+                    await self._handle_event(event)
+                    # After handling, drain any events that queued up during processing
+                    await self._drain_pending_events()
+                except Exception as e:
+                    self._errors += 1
+                    self._last_error = str(e)
+                    self._last_error_time = datetime.now()
+                    self.log(f"Error handling {event.type} event: {e}", level="ERROR")
+                finally:
+                    self._active = False
+                    self._cycles += 1
+                    self._last_work_time = datetime.now()
+
+                # Update idle display
+                if _time.time() < self._happy_until:
+                    self._editor_state = "happy"
+                    self._current_task = "Instructions acknowledged!"
+                else:
+                    self._editor_state = "idle"
+                    self._current_task = f"Coordinating — {self._tasks_completed} tasks done, {len(self._tasks_in_flight)} in flight"
+
+        finally:
+            # Cancel all producer tasks
+            for task in producers:
+                task.cancel()
+            await asyncio.gather(*producers, return_exceptions=True)
+            self._running = False
+            self.log("Editor agent stopped")
+
     async def work(self):
-        now = _time.time()
+        """Stub — required by base class @abstractmethod but never called.
 
-        # ── Phase 1: Collect results from all agent outboxes (every cycle) ──
-        results_collected = self._collect_results()
+        The Editor overrides run() with an event-driven loop, so work() is bypassed.
+        """
+        return False
 
-        # ── Phase 2: Process collected results ──
-        if results_collected:
-            self._process_results(results_collected)
+    # ── Event Producers ───────────────────────────────────────
 
-        # ── Phase 3: Plan and assign tasks (every PLAN_INTERVAL) ──
-        if now - self._last_plan_time >= PLAN_INTERVAL:
-            self._last_plan_time = now
+    async def _outbox_forwarder(self):
+        """Poll worker outboxes every 0.5s and forward results to the event queue.
+
+        This is the bridge between the workers' outbox queues (push model) and
+        the Editor's event queue. 0.5s polling is simple and introduces no
+        coupling between worker agents and the Editor's internals.
+        """
+        while not self._stop_requested:
+            collected = self._collect_results()
+            if collected:
+                await self._event_queue.put(
+                    EditorEvent(type="agent_result", payload=collected)
+                )
+            await asyncio.sleep(0.5)
+
+    async def _human_message_watcher(self):
+        """Watch human_messages.json mtime every 1s. Fires event on change.
+
+        Uses a single os.path.getmtime() stat() syscall per check — lightweight.
+        Only fires an event when new messages arrive (mtime changes).
+        """
+        while not self._stop_requested:
+            try:
+                if os.path.exists(HUMAN_MESSAGES_PATH):
+                    mtime = os.path.getmtime(HUMAN_MESSAGES_PATH)
+                    if mtime > self._human_messages_mtime:
+                        # File changed — check if there are unread messages
+                        unread = self._read_human_messages()
+                        if unread:
+                            self._human_messages_mtime = mtime
+                            await self._event_queue.put(
+                                EditorEvent(type="human_message")
+                            )
+                        else:
+                            # mtime changed but no unread messages (just marked read)
+                            self._human_messages_mtime = mtime
+            except OSError:
+                pass
+            await asyncio.sleep(1.0)
+
+    async def _planning_heartbeat(self):
+        """Emit timer_plan event every PLAN_INTERVAL seconds."""
+        while not self._stop_requested:
+            await asyncio.sleep(PLAN_INTERVAL)
+            if not self._stop_requested:
+                await self._event_queue.put(
+                    EditorEvent(type="timer_plan")
+                )
+
+    async def _strategic_heartbeat(self):
+        """Emit timer_strategic event every STRATEGIC_INTERVAL seconds."""
+        while not self._stop_requested:
+            await asyncio.sleep(STRATEGIC_INTERVAL)
+            if not self._stop_requested:
+                await self._event_queue.put(
+                    EditorEvent(type="timer_strategic")
+                )
+
+    # ── Event Dispatcher ──────────────────────────────────────
+
+    async def _handle_event(self, event):
+        """Route a single event to the appropriate handler."""
+        if event.type == "agent_result":
+            self._process_results(event.payload)
+
+        elif event.type == "human_message":
+            # Human messages get immediate strategic assessment
+            self._last_strategic_time = _time.time()
+            await self._strategic_assessment(has_human_messages=True)
+
+        elif event.type == "timer_plan":
+            self._last_plan_time = _time.time()
             await self._plan_and_assign()
 
-        # ── Phase 4: Strategic assessment (every STRATEGIC_INTERVAL or on human message) ──
-        has_human_messages = bool(self._read_human_messages())
-        if has_human_messages or now - self._last_strategic_time >= STRATEGIC_INTERVAL:
-            self._last_strategic_time = now
-            await self._strategic_assessment(has_human_messages)
+        elif event.type == "timer_strategic":
+            self._last_strategic_time = _time.time()
+            await self._strategic_assessment(has_human_messages=False)
 
-        # Update state display
-        if _time.time() < self._happy_until:
-            self._editor_state = "happy"
-            self._current_task = "Instructions acknowledged!"
-        elif not results_collected and now - self._last_plan_time < 5:
-            self._editor_state = "idle"
-            self._current_task = f"Coordinating — {self._tasks_completed} tasks done, {len(self._tasks_in_flight)} in flight"
-        return bool(results_collected)
+        else:
+            self.log(f"Unknown event type: {event.type}", level="WARN")
+
+    async def _drain_pending_events(self):
+        """After handling one event, drain any that accumulated during processing.
+
+        During a long LLM call (~5s), multiple agent_result events may queue up.
+        This batches them into a single _process_results() call for efficiency.
+        Other event types are handled individually.
+        """
+        batched_results = []
+
+        while not self._event_queue.empty():
+            try:
+                event = self._event_queue.get_nowait()
+            except asyncio.QueueEmpty:
+                break
+
+            if event.type == "agent_result":
+                # Batch agent results together
+                batched_results.extend(event.payload)
+            else:
+                # Handle non-result events immediately (but first flush any batched results)
+                if batched_results:
+                    self._process_results(batched_results)
+                    batched_results = []
+                await self._handle_event(event)
+
+        # Flush any remaining batched results
+        if batched_results:
+            self._process_results(batched_results)
 
     # ═══════════════════════════════════════════════════════════
     # PHASE 1: COLLECT RESULTS

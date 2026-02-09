@@ -612,7 +612,7 @@ body {
 .chalkboard {
   position: absolute;
   overflow: hidden;
-  padding: 6px 8px;
+  padding: 14px 10px 6px;
   font-family: 'Press Start 2P', monospace;
 }
 .chalkboard-left {
@@ -629,13 +629,13 @@ body {
 }
 .chalk-title {
   font-size: 5px;
-  color: rgba(255, 255, 255, 0.85);
+  color: #fff;
   text-transform: uppercase;
   letter-spacing: 1.5px;
   margin-bottom: 4px;
-  text-shadow: 0 0 3px rgba(255,255,255,0.15);
+  text-shadow: 0 0 4px rgba(255,255,255,0.3);
   text-align: center;
-  border-bottom: 1px solid rgba(255,255,255,0.15);
+  border-bottom: 1px solid rgba(255,255,255,0.25);
   padding-bottom: 3px;
 }
 .chalk-list {
@@ -651,9 +651,9 @@ body {
   padding: 2px 0;
   font-size: 4px;
   line-height: 1.6;
-  color: rgba(255, 255, 255, 0.75);
-  text-shadow: 0 0 2px rgba(255,255,255,0.1);
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: #fff;
+  text-shadow: 0 0 3px rgba(255,255,255,0.2);
+  border-bottom: 1px solid rgba(255,255,255,0.1);
 }
 .chalk-item:last-child { border-bottom: none; }
 .chalk-agent {
@@ -663,7 +663,7 @@ body {
   letter-spacing: 0.5px;
 }
 .chalk-goal {
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.85);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -693,7 +693,7 @@ body {
 }
 .chalk-empty {
   font-size: 4px;
-  color: rgba(255,255,255,0.3);
+  color: rgba(255,255,255,0.6);
   text-align: center;
   padding: 8px 0;
   font-style: italic;
@@ -1613,6 +1613,9 @@ const AGENT_CONFIG = {
   },
 };
 const CORRIDOR_MEET_Y = 55;
+// Chalkboard positions (where Editor stands when visiting boards)
+const BOARD_LEFT_POS = { x: 20, y: 32 };   // Editor's Board (left chalkboard)
+const BOARD_RIGHT_POS = { x: 80, y: 32 };  // Completed/Failed Board (right chalkboard)
 
 // ── State ──
 let currentState = null;
@@ -2061,6 +2064,82 @@ function moveAgentTo(agentId, xPct, yPct, showFront = false) {
   charEl.style.top = yPct + '%';
   uiEl.style.left = xPct + '%';
   uiEl.style.top = yPct + '%';
+}
+
+// ── Editor Aisle Pathfinding ──
+// Routes the Editor along aisles — never diagonally through desks.
+// Rule: to change rows, first go to center aisle (x=50), walk vertically, then walk to destination X.
+const AISLE_X = 50;
+const EDITOR_WALK_SPEED = 35; // percent-units per second
+
+async function walkEditorTo(destX, destY, options = {}) {
+  // options.finalSprite — sprite to show when done (e.g. 'front', 'back', 'clipboard')
+  // options.carrySprite — sprite override during all walk segments (e.g. 'clipboard')
+  const charEl = agentCharElements['editor'];
+  const uiEl = agentUIElements['editor'];
+  if (!charEl || !uiEl) return;
+
+  const curX = parseFloat(charEl.style.left) || AGENT_CONFIG.editor.homeX;
+  const curY = parseFloat(charEl.style.top) || AGENT_CONFIG.editor.homeY;
+
+  // Build waypoints
+  const waypoints = [];
+  const isOnAisle = Math.abs(curX - AISLE_X) < 3;
+  const destIsOnAisle = Math.abs(destX - AISLE_X) < 3;
+  const sameRow = Math.abs(curY - destY) < 3;
+
+  if (sameRow) {
+    // Same row — walk horizontally
+    waypoints.push({ x: destX, y: curY });
+  } else {
+    // Different row — route through center aisle
+    if (!isOnAisle) {
+      waypoints.push({ x: AISLE_X, y: curY }); // Step to aisle
+    }
+    waypoints.push({ x: AISLE_X, y: destY }); // Walk aisle vertically
+    if (!destIsOnAisle) {
+      waypoints.push({ x: destX, y: destY }); // Walk to final X
+    }
+  }
+
+  // Walk each segment
+  let prevX = curX, prevY = curY;
+  for (const wp of waypoints) {
+    const dx = wp.x - prevX;
+    const dy = wp.y - prevY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (dist < 1) { prevX = wp.x; prevY = wp.y; continue; }
+
+    const duration = Math.max(0.4, Math.min(2.0, dist / EDITOR_WALK_SPEED));
+
+    // Set walk sprite
+    if (options.carrySprite) {
+      editorSetSprite(options.carrySprite);
+    } else if (Math.abs(dy) >= Math.abs(dx)) {
+      editorSetSprite(dy < 0 ? 'back' : 'front');
+    }
+    // For horizontal moves with no carrySprite, keep current sprite
+
+    // Set transition speed proportional to distance
+    const trans = `left ${duration}s ease-in-out, top ${duration}s ease-in-out`;
+    charEl.style.transition = trans;
+    uiEl.style.transition = trans;
+
+    charEl.style.left = wp.x + '%';
+    charEl.style.top = wp.y + '%';
+    uiEl.style.left = wp.x + '%';
+    uiEl.style.top = wp.y + '%';
+
+    await sleep(duration * 1000 + 50);
+    prevX = wp.x;
+    prevY = wp.y;
+  }
+
+  // Reset to default CSS transition
+  charEl.style.transition = '';
+  uiEl.style.transition = '';
+
+  if (options.finalSprite) editorSetSprite(options.finalSprite);
 }
 
 function moveAgentHome(agentId) {
@@ -3095,18 +3174,19 @@ function runDemoLoop() {
   if (!FORCE_DEMO) return;
   demoStep++;
 
-  switch (demoStep % 12) {
+  // Use the task-board-driven functions so board visits are visible
+  switch (demoStep % 16) {
     case 1:
-      triggerCollaboration('editor', 'reader', 'Assigning extraction task');
+      editorAssignTask('reader', 'Extract features from Nov 2013');
       break;
-    case 4:
-      triggerCollaboration('editor', 'detective', 'Names to cross-reference');
+    case 5:
+      editorCollectResult('courier', 'Downloaded sim_ad_2004-10');
       break;
-    case 7:
-      triggerCollaboration('editor', 'scout', 'Find missing issues');
+    case 9:
+      editorAssignTask('scout', 'Find AD issues Jan-Mar 2015');
       break;
-    case 10:
-      triggerCollaboration('editor', 'courier', 'Download next PDF');
+    case 13:
+      editorHandleFailure('courier', '404 not found on archive.org');
       break;
   }
   setTimeout(runDemoLoop, 5000);
@@ -3167,21 +3247,42 @@ async function editorPatrol() {
   editorBusy = true;
   const cfg = AGENT_CONFIG.editor;
 
-  // Walk up the aisle (show back)
-  editorSetSprite('back');
-  moveAgentTo('editor', 50, 45, false);
-  // Re-assert back sprite after moveAgentTo's class changes
-  editorSetSprite('back');
-  await sleep(2000);
+  // Walk up the center aisle
+  await walkEditorTo(50, 45, { finalSprite: 'back' });
 
   // Pause at top
   await sleep(1200);
 
-  // Walk back down (show front)
-  editorSetSprite('front');
-  moveAgentTo('editor', cfg.homeX, cfg.homeY, true);
-  editorSetSprite('front');
-  await sleep(2000);
+  // Walk back down
+  await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
+
+  editorBusy = false;
+}
+
+/** Study the boards — walk to each chalkboard, study them, return to center. */
+async function editorStudyBoards() {
+  if (editorBusy) return;
+  editorBusy = true;
+  const cfg = AGENT_CONFIG.editor;
+
+  // Walk to Editor's Board (left chalkboard) via aisle
+  updateSpeechBubble('editor', 'Let me check the board...');
+  await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
+
+  // Study the board
+  editorSetSprite('studying');
+  updateSpeechBubble('editor', 'Reviewing assignments...');
+  await sleep(3000);
+
+  // Walk to Completed/Failed board (right chalkboard) — same row, horizontal
+  await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y);
+
+  editorSetSprite('studying');
+  updateSpeechBubble('editor', 'Checking results...');
+  await sleep(2500);
+
+  // Walk back home via aisle
+  await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
 
   editorBusy = false;
 }
@@ -3207,14 +3308,8 @@ async function editorVisitAgent(agentId) {
   // Agent steps toward aisle to meet Editor
   moveAgentTo(agentId, target.exitX, target.homeY, true);
 
-  // Determine direction
-  const goingUp = target.homeY < cfg.homeY;
-
-  // Walk toward agent's row in the center aisle
-  editorSetSprite(goingUp ? 'back' : 'front');
-  moveAgentTo('editor', 50, target.homeY, !goingUp);
-  if (goingUp) editorSetSprite('back');
-  await sleep(1800);
+  // Walk toward agent's row via center aisle
+  await walkEditorTo(50, target.homeY);
 
   // Turn to face the agent and interact
   editorSetSprite('front');
@@ -3228,14 +3323,8 @@ async function editorVisitAgent(agentId) {
   // Agent returns to desk
   moveAgentHome(agentId);
 
-  // Walk back home
-  const goingHome = cfg.homeY > target.homeY;
-  editorSetSprite(goingHome ? 'front' : 'back');
-  moveAgentTo('editor', cfg.homeX, cfg.homeY, goingHome);
-  if (!goingHome) editorSetSprite('back');
-  await sleep(1800);
-
-  editorSetSprite('front');
+  // Walk back home via aisle
+  await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
   editorBusy = false;
 }
 
@@ -3375,7 +3464,7 @@ function diffTaskBoard() {
   _prevTaskBoard = JSON.parse(JSON.stringify(board));
 }
 
-/** Editor walks to agent to assign a task (clipboard in hand). */
+/** Editor walks to board, picks up task, then walks to agent to assign it. */
 async function editorAssignTask(agentId, label) {
   if (editorBusy) return;
   editorBusy = true;
@@ -3388,40 +3477,37 @@ async function editorAssignTask(agentId, label) {
 
   if (soundOn) playCollabSound();
 
-  // Yellow glow on both
+  // Step 1: Walk to Editor's Board via aisle to pick up the assignment
+  await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
+
+  editorSetSprite('clipboard');
+  updateSpeechBubble('editor', 'New assignment...');
+  await sleep(1500);
+
+  // Step 2: Yellow glow on both — agent steps to aisle
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
     targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored');
     targetChar.classList.add('editor-engage', 'show-front');
   }
-
-  // Agent steps toward aisle
   moveAgentTo(agentId, target.exitX, target.homeY, true);
 
-  // Editor walks with clipboard
-  const goingUp = target.homeY < cfg.homeY;
-  editorSetSprite('clipboard');
-  moveAgentTo('editor', 50, target.homeY, !goingUp);
-  await sleep(1800);
+  // Step 3: Walk from board to agent's row via aisle with clipboard
+  await walkEditorTo(50, target.homeY, { carrySprite: 'clipboard' });
 
-  // Face agent, deliver task
+  // Step 4: Face agent, deliver task
   editorSetSprite('front');
   updateSpeechBubble('editor', label);
   await sleep(2500);
 
-  // Clear engagement
+  // Step 5: Clear engagement, agent returns
   if (editorChar) editorChar.classList.remove('editor-engage');
   if (targetChar) targetChar.classList.remove('editor-engage', 'show-front');
   moveAgentHome(agentId);
 
-  // Walk back
-  const goingHome = cfg.homeY > target.homeY;
-  editorSetSprite(goingHome ? 'front' : 'back');
-  moveAgentTo('editor', cfg.homeX, cfg.homeY, goingHome);
-  if (!goingHome) editorSetSprite('back');
-  await sleep(1800);
+  // Step 6: Walk back home via aisle
+  await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
 
-  editorSetSprite('front');
   editorBusy = false;
 }
 
@@ -3447,12 +3533,8 @@ async function editorCollectResult(agentId, label) {
 
   moveAgentTo(agentId, target.exitX, target.homeY, true);
 
-  // Walk to agent (empty-handed)
-  const goingUp = target.homeY < cfg.homeY;
-  editorSetSprite(goingUp ? 'back' : 'front');
-  moveAgentTo('editor', 50, target.homeY, !goingUp);
-  if (goingUp) editorSetSprite('back');
-  await sleep(1800);
+  // Walk to agent via aisle (empty-handed)
+  await walkEditorTo(50, target.homeY);
 
   // Collect and show happy face
   editorSetSprite('happy');
@@ -3464,12 +3546,16 @@ async function editorCollectResult(agentId, label) {
   if (targetChar) targetChar.classList.remove('editor-engage', 'show-front');
   moveAgentHome(agentId);
 
-  // Walk back with clipboard (carrying the result)
+  // Walk to Completed board (right chalkboard) via aisle to log the result
+  await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
+
   editorSetSprite('clipboard');
-  moveAgentTo('editor', cfg.homeX, cfg.homeY, true);
+  updateSpeechBubble('editor', 'Logging result...');
   await sleep(1800);
 
-  editorSetSprite('front');
+  // Walk home via aisle
+  await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
+
   editorBusy = false;
 }
 
@@ -3497,12 +3583,8 @@ async function editorHandleFailure(agentId, label) {
 
   moveAgentTo(agentId, target.exitX, target.homeY, true);
 
-  // Walk to agent
-  const goingUp = target.homeY < cfg.homeY;
-  editorSetSprite(goingUp ? 'back' : 'front');
-  moveAgentTo('editor', 50, target.homeY, !goingUp);
-  if (goingUp) editorSetSprite('back');
-  await sleep(1800);
+  // Walk to agent via aisle
+  await walkEditorTo(50, target.homeY);
 
   // Show failure/concerned face
   editorSetSprite('failure');
@@ -3514,14 +3596,16 @@ async function editorHandleFailure(agentId, label) {
   if (targetChar) { targetChar.classList.remove('collab-glow', 'show-front'); targetChar.style.removeProperty('--glow-color'); }
   moveAgentHome(agentId);
 
-  // Walk back
-  const goingHome = cfg.homeY > target.homeY;
-  editorSetSprite(goingHome ? 'front' : 'back');
-  moveAgentTo('editor', cfg.homeX, cfg.homeY, goingHome);
-  if (!goingHome) editorSetSprite('back');
+  // Walk to Editor's Board (left chalkboard) via aisle to log the failure
+  await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y, { carrySprite: 'clipboard' });
+
+  editorSetSprite('clipboard');
+  updateSpeechBubble('editor', 'Logging failure...');
   await sleep(1800);
 
-  editorSetSprite('front');
+  // Walk home via aisle
+  await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
+
   editorBusy = false;
 }
 
@@ -3557,18 +3641,18 @@ async function doEditorBehavior() {
     // No task board events — check editor_state for strategic assessment
     const editorState = currentState?.agents?.find(a => a.id === 'editor')?.editor_state;
     if (editorState === 'assessing') {
-      // Studying at desk
-      editorSetSprite('studying');
-      updateSpeechBubble('editor', 'Analyzing pipeline strategy...');
-      await sleep(4000);
-      editorSetSprite('front');
+      // Strategic assessment: walk to boards and study them
+      await editorStudyBoards();
     } else {
       // True idle: subtle animations
       const roll = Math.random();
-      if (roll < 0.40) {
+      if (roll < 0.25) {
         await editorTapFoot();
-      } else if (roll < 0.70) {
+      } else if (roll < 0.45) {
         await editorCheckWatch();
+      } else if (roll < 0.70) {
+        // Walk to chalkboards and study them
+        await editorStudyBoards();
       } else {
         // Occasional patrol up the aisle and back
         await editorPatrol();

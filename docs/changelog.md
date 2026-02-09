@@ -6,6 +6,51 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 10)
+
+### Changed — Editor: Event-Driven Architecture
+- **Replaced 5-second polling loop with unified event queue** (`asyncio.Queue`) — Editor now blocks on `await queue.get()` instead of waking every 5s
+- New `EditorEvent` dataclass (type, payload, timestamp) as event envelope
+- 4 background producer tasks feed events into the queue:
+  - `_outbox_forwarder()` — polls worker outboxes every 0.5s (was 5s)
+  - `_human_message_watcher()` — checks `human_messages.json` mtime every 1s (was 300s)
+  - `_planning_heartbeat()` — emits event every 30s (unchanged)
+  - `_strategic_heartbeat()` — emits event every 300s (unchanged)
+- `_handle_event()` dispatcher routes events to existing handlers
+- `_drain_pending_events()` batches agent_result events that accumulate during long LLM calls
+- `work()` stubbed out (required by base class `@abstractmethod` but never called)
+- **Latency improvements**: agent results <0.5s (was 5s), human messages <2s (was 300s), CPU sleeps when idle (was polling)
+- No changes to base.py — worker agents completely unaffected
+
+### Changed — Dashboard: Live Task Overlays
+- Orchestrator now overlays real agent tasks into `now_processing` (e.g., "Downloading: architecturaldig47losa" instead of generic "Downloading (87 remaining)")
+- Paused agents show "Paused" in now_processing panel
+
+### Changed — Dashboard: Activity Log Priority
+- `build_log()` now prioritizes real timestamped entries from `agent_activity.log` over pipeline summary
+- Fallback summary lines marked with `--:--` timestamp to distinguish from live events
+
+### Changed — Dashboard: Chalkboard Readability
+- Increased chalkboard padding, brightened chalk text and goal text opacity
+- Chalk title text now solid white with stronger text-shadow
+- Chalk item borders slightly more visible
+
+### Added — Dashboard: Editor Aisle Pathfinding
+- `walkEditorTo()` routes Editor sprite along aisles (never diagonally through desks)
+- Board positions defined for left/right chalkboard visits
+- Walk speed constant (`EDITOR_WALK_SPEED`) for consistent animation
+
+### Changed — Agent Sprite Assets
+- Updated Courier sprites (front, back, waiting) — higher resolution
+- Updated Scout sprites (front, back, waiting) — refined art
+
+### Added — Dashboard Assets
+- `bg-office-chalkboard.png` — new background with chalkboard overlay
+- `bg-office-clear-new-layers.psd` — layered source file
+- `bg-office-clear-old.png` — previous background preserved
+
+---
+
 ## 2026-02-09 (Session 9)
 
 ### Added — Dashboard: Editor's Board Chalkboard
