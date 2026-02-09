@@ -210,19 +210,40 @@ class DesignerAgent(Agent):
             except Exception:
                 pass
 
-        # Dossier stats
-        dossier_path = os.path.join(DATA_DIR, "dossiers", "all_dossiers.json")
-        if os.path.exists(dossier_path):
-            try:
-                with open(dossier_path) as f:
-                    dossiers = json.load(f)
-                strengths = {}
-                for d in dossiers:
-                    s = d.get("connection_strength", "unknown")
-                    strengths[s] = strengths.get(s, 0) + 1
-                summary["dossier_strengths"] = strengths
-            except Exception:
-                pass
+        # Dossier stats (Supabase first, disk fallback)
+        dossiers = []
+        try:
+            from db import list_dossiers
+            dossiers = list_dossiers()
+        except Exception:
+            dossier_path = os.path.join(DATA_DIR, "dossiers", "all_dossiers.json")
+            if os.path.exists(dossier_path):
+                try:
+                    with open(dossier_path) as f:
+                        dossiers = json.load(f)
+                except Exception:
+                    pass
+
+        if dossiers:
+            strengths = {}
+            for d in dossiers:
+                s = d.get("connection_strength", "unknown")
+                strengths[s] = strengths.get(s, 0) + 1
+            summary["dossier_strengths"] = strengths
+
+            # Visual analysis samples (for design inspiration)
+            visual_samples = []
+            for d in dossiers[:10]:
+                va = d.get("visual_analysis")
+                if va:
+                    visual_samples.append({
+                        "subject": d.get("subject_name", "?"),
+                        "visual_analysis": va,
+                    })
+                    if len(visual_samples) >= 5:
+                        break
+            if visual_samples:
+                summary["sample_visual_analyses"] = visual_samples
 
         # Format as readable string
         lines = [f"Real Pipeline Data Snapshot ({datetime.now().strftime('%Y-%m-%d %H:%M')}):"]

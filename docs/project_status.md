@@ -34,6 +34,7 @@ This file should be automatically updated when necessary to answer three key que
 | Hub-and-spoke architecture: Editor as central coordinator | Tooling | Done |
 | Dashboard: Editor's Board, coverage map, ledger visibility | Tooling | Done |
 | Editor: event-driven architecture (replaces polling loop) | Tooling | Done |
+| Editor as gatekeeper for Researcher dossiers | Phase 2 | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -101,6 +102,7 @@ This file should be automatically updated when necessary to answer three key que
 - Connection strength rating: HIGH / MEDIUM / LOW / COINCIDENCE with explicit rationale
 - Per-name failure tracking (`MAX_INVESTIGATION_FAILURES = 3`) prevents infinite API quota burn on consistently failing names
 - Escalation system: HIGH findings and notable patterns escalated to Editor
+- **Editor gatekeeper**: Every dossier goes through Editor review before becoming final. COINCIDENCE auto-rejected (free), HIGH/MEDIUM/LOW reviewed by Sonnet (~$0.005/review). Dossiers saved as PENDING_REVIEW until Editor confirms or rejects.
 
 **Database schema updates:**
 - `matches` table: confidence scoring (high/medium/low) with rationale and manual review flags

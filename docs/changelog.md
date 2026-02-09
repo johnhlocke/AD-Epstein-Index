@@ -6,6 +6,39 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 11)
+
+### Changed — Editor as Final Gatekeeper for Researcher Dossiers
+- **Editor now reviews every Researcher dossier before it becomes final** — Researcher proposes a `connection_strength`, Editor confirms or rejects
+- `_commit_investigation()` replaced with gatekeeper logic:
+  - COINCIDENCE → auto-REJECTED (no LLM call, free)
+  - HIGH → Sonnet review with "default CONFIRMED" stance
+  - MEDIUM → Sonnet review with balanced judgment call
+  - LOW → Sonnet review with "default REJECTED" stance
+- New `_review_dossier()` method uses Claude Sonnet (~$0.005/review) for evidence evaluation
+- On review failure → safe fallback to PENDING_REVIEW (never silently drops)
+
+### Changed — Researcher Outbox Push
+- `work()` loop now pushes `TaskResult` to `self.outbox` after saving each dossier — Editor receives every investigation for gatekeeper review (previously work() was self-managing and Editor never saw results)
+- `execute()` now includes `feature_id` in result dict for Supabase lookup
+
+### Changed — Dossier Supabase Row
+- Researcher now writes `editor_verdict: "PENDING_REVIEW"` on every new dossier — no dossier goes straight to CONFIRMED
+
+### Database
+- Added 3 columns to `dossiers` table: `editor_verdict` (CONFIRMED/REJECTED/PENDING_REVIEW), `editor_reasoning`, `editor_reviewed_at`
+- Added index `idx_dossiers_editor_verdict` for filtering by verdict
+- Backfill migration: existing HIGH/MEDIUM → CONFIRMED, LOW/COINCIDENCE → REJECTED
+
+### Added — `db.py` Functions
+- `update_editor_verdict(feature_id, verdict, reasoning)` — clean separation: only Editor calls this
+- `list_dossiers()` now accepts optional `editor_verdict` filter parameter
+
+### Changed — Researcher Skills Doc
+- Clarified that `connection_strength` is a proposal, not a final verdict — Editor has final say
+
+---
+
 ## 2026-02-09 (Session 10)
 
 ### Changed — Editor: Event-Driven Architecture

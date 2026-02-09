@@ -173,11 +173,21 @@ Centralized log of every task attempt — replaces scattered per-agent escalatio
 1. Picks up non-`no_match` leads from `results.json` that haven't been investigated
 2. Gathers AD feature context from Supabase (all 14 fields)
 3. Builds investigation context: BB matches, DOJ snippets, AD appearance details
-4. Calls Claude Haiku with structured dossier prompt → JSON output
+4. **3-step pipeline**: Triage (Haiku) → Deep Analysis (Sonnet + images) → Synthesis (Sonnet)
 5. Robust JSON parsing with brace-counting fallback for truncated responses
-6. Rates connection strength: HIGH / MEDIUM / LOW / COINCIDENCE
-7. COINCIDENCE results auto-dismissed via verdict override
-8. Saves dossier to `data/dossiers/{Name}.json` and master `all_dossiers.json`
+6. Proposes connection strength: HIGH / MEDIUM / LOW / COINCIDENCE
+7. Saves dossier to Supabase with `editor_verdict = PENDING_REVIEW` + disk backup
+8. Pushes `TaskResult` to outbox → Editor receives for gatekeeper review
+
+### Editor Gatekeeper (Dossier Review)
+Every Researcher dossier passes through the Editor before becoming final:
+- **COINCIDENCE** → auto-REJECTED (no LLM call needed, free)
+- **HIGH** → Sonnet review with "default CONFIRMED" stance (~$0.005)
+- **MEDIUM** → Sonnet review with balanced stance (~$0.005)
+- **LOW** → Sonnet review with "default REJECTED" stance (~$0.005)
+- Editor calls `update_editor_verdict(feature_id, verdict, reasoning)` to finalize
+- On review failure → safe default to PENDING_REVIEW
+- Dashboard shows only CONFIRMED connections
 
 ### Agent Base Class (`src/agents/base.py`)
 - Async work loop with configurable interval
@@ -203,6 +213,7 @@ Centralized log of every task attempt — replaces scattered per-agent escalatio
 - Singleton Supabase client (`get_supabase()`) — all agents import from here
 - Issue CRUD: `get_issue_by_identifier()`, `upsert_issue()`, `update_issue()`, `list_issues()`, `count_issues_by_status()`
 - Feature CRUD: `feature_exists()`, `insert_feature()`, `delete_features_for_issue()`
+- Dossier CRUD: `upsert_dossier()`, `get_dossier()`, `list_dossiers(strength, editor_verdict)`, `update_editor_verdict()`
 - Replaces the local `archive_manifest.json` — Supabase `issues` table is the single source of truth
 
 ### Agent Status (`src/agent_status.py`)
@@ -237,12 +248,15 @@ Centralized log of every task attempt — replaces scattered per-agent escalatio
 1. **Detective BB pass** — Grep search of `data/black_book.txt` with word-boundary matching, min 5-char last names
 2. **Detective DOJ pass** — Playwright browser search of justice.gov/epstein with WAF bypass, bot check handling
 3. **Combined verdict** — `confirmed_match` / `likely_match` / `possible_match` / `no_match` / `needs_review`
-4. **Researcher investigation** — Claude Haiku builds dossier for each non-`no_match` lead:
+4. **Researcher investigation** — 3-step pipeline (Triage → Deep Analysis → Synthesis) builds dossier for each non-`no_match` lead:
    - Full AD feature context (all 14 fields from Supabase)
+   - Article page images for visual analysis (Sonnet)
    - Pattern analysis across all associated names (shared designers, locations, styles, decades)
    - Home analysis (wealth indicators, social circles, style significance, temporal relevance)
-   - Connection strength: HIGH / MEDIUM / LOW / COINCIDENCE
-5. **Escalation** — HIGH findings and notable patterns escalated to Editor
+   - Proposes connection strength: HIGH / MEDIUM / LOW / COINCIDENCE
+   - Saves to Supabase as PENDING_REVIEW, pushes to Editor outbox
+5. **Editor gatekeeper** — Reviews each dossier: COINCIDENCE auto-rejected, others reviewed by Sonnet → CONFIRMED or REJECTED
+6. **Escalation** — CONFIRMED HIGH/MEDIUM findings remembered as milestones
 
 ## Data Flow
 
@@ -291,6 +305,8 @@ See [schema.sql](schema.sql) for full SQL definitions.
 | `features` | 1 | One row per featured home (homeowner, designer, location, article_author, etc.) |
 | `epstein_persons` | 2 | Unique individuals from Epstein files |
 | `epstein_references` | 2 | Each mention of a person (document, context, URL) |
+| `dossiers` | 2 | One row per investigated lead — Researcher's analysis + Editor's final verdict (CONFIRMED/REJECTED/PENDING_REVIEW) |
+| `dossier_images` | 2 | Article page images linked to dossiers (stored in Supabase Storage) |
 | `matches` | 2 | Links AD features to Epstein persons with confidence scoring |
 | `black_book_matches` | 2 | Links AD features to Epstein's Little Black Book entries |
 | `feature_images` | 2 | Article page images for matched homeowners (stored in Supabase Storage) |

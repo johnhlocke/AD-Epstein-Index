@@ -87,3 +87,68 @@ CREATE TABLE features (
 --   confidence_score NUMERIC(3,2) CHECK (confidence_score BETWEEN 0 AND 1),
 --   created_at TIMESTAMPTZ DEFAULT NOW()
 -- );
+
+-- ============================================================
+-- Dossier Tables (Researcher agent output)
+-- ============================================================
+
+-- Dossiers: one row per investigated lead (one dossier per feature)
+CREATE TABLE dossiers (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE UNIQUE,
+  subject_name TEXT NOT NULL,
+
+  -- Verdict fields
+  combined_verdict TEXT,
+  confidence_score NUMERIC(3,2),
+  connection_strength TEXT CHECK (connection_strength IN ('HIGH', 'MEDIUM', 'LOW', 'COINCIDENCE')),
+  strength_rationale TEXT,
+
+  -- Triage fields
+  triage_result TEXT CHECK (triage_result IN ('investigate', 'coincidence')),
+  triage_reasoning TEXT,
+
+  -- Analysis JSONB columns
+  ad_appearance JSONB,
+  home_analysis JSONB,
+  visual_analysis JSONB,
+  epstein_connections JSONB,
+  pattern_analysis JSONB,
+  key_findings JSONB,
+
+  -- Review fields
+  investigation_depth TEXT DEFAULT 'standard',
+  needs_manual_review BOOLEAN DEFAULT FALSE,
+  review_reason TEXT,
+
+  -- Editor gatekeeper fields
+  editor_verdict TEXT DEFAULT 'PENDING_REVIEW'
+    CHECK (editor_verdict IN ('CONFIRMED', 'REJECTED', 'PENDING_REVIEW')),
+  editor_reasoning TEXT,
+  editor_reviewed_at TIMESTAMPTZ,
+
+  -- Timestamps
+  investigated_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_dossiers_connection_strength ON dossiers(connection_strength);
+CREATE INDEX idx_dossiers_feature_id ON dossiers(feature_id);
+CREATE INDEX idx_dossiers_editor_verdict ON dossiers(editor_verdict);
+
+-- Dossier images: article page images linked to dossiers
+CREATE TABLE dossier_images (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  dossier_id BIGINT NOT NULL REFERENCES dossiers(id) ON DELETE CASCADE,
+  feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+  page_number INTEGER,
+  storage_path TEXT,
+  public_url TEXT,
+  image_type TEXT DEFAULT 'article_page',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_dossier_images_dossier_id ON dossier_images(dossier_id);
+
+-- NOTE: Also create Supabase Storage bucket "dossier-images" (public) in Dashboard.

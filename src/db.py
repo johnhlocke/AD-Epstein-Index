@@ -8,6 +8,7 @@ Usage:
     from db import get_supabase, list_issues, update_issue, get_or_create_issue
 """
 
+import json
 import os
 from dotenv import load_dotenv
 from supabase import create_client
@@ -215,3 +216,248 @@ def delete_features_for_issue(issue_id):
     if count > 0:
         sb.table("features").delete().eq("issue_id", issue_id).execute()
     return count
+
+
+# ── Dossier Operations ──────────────────────────────────────
+
+
+def upsert_dossier(feature_id, data):
+    """Upsert a dossier by feature_id (one dossier per feature).
+
+    Args:
+        feature_id: The feature's numeric primary key
+        data: Dict of dossier fields (should NOT include feature_id — it's added here)
+
+    Returns:
+        The upserted row dict, or None on failure.
+    """
+    sb = get_supabase()
+
+    # Check if dossier exists for this feature
+    existing = sb.table("dossiers").select("id").eq("feature_id", feature_id).execute()
+
+    # Ensure feature_id is in the data
+    data["feature_id"] = feature_id
+    data["updated_at"] = "now()"
+
+    if existing.data:
+        # Update existing
+        dossier_id = existing.data[0]["id"]
+        result = sb.table("dossiers").update(data).eq("id", dossier_id).execute()
+        return result.data[0] if result.data else None
+    else:
+        # Insert new
+        result = sb.table("dossiers").insert(data).execute()
+        return result.data[0] if result.data else None
+
+
+def get_dossier(feature_id):
+    """Fetch a single dossier by feature_id. Returns dict or None."""
+    sb = get_supabase()
+    result = sb.table("dossiers").select("*").eq("feature_id", feature_id).execute()
+    return result.data[0] if result.data else None
+
+
+def list_dossiers(strength=None, editor_verdict=None):
+    """List all dossiers, optionally filtered by connection_strength and/or editor_verdict.
+
+    Args:
+        strength: Optional filter (e.g., "HIGH", "MEDIUM", "LOW", "COINCIDENCE")
+        editor_verdict: Optional filter (e.g., "CONFIRMED", "REJECTED", "PENDING_REVIEW")
+
+    Returns:
+        List of dossier dicts.
+    """
+    sb = get_supabase()
+    query = sb.table("dossiers").select("*")
+    if strength is not None:
+        query = query.eq("connection_strength", strength)
+    if editor_verdict is not None:
+        query = query.eq("editor_verdict", editor_verdict)
+    result = query.order("created_at", desc=True).execute()
+    return result.data
+
+
+def update_editor_verdict(feature_id, verdict, reasoning):
+    """Update a dossier's editor verdict. Only the Editor calls this.
+
+    Args:
+        feature_id: The feature's numeric primary key (dossier is keyed by feature_id)
+        verdict: "CONFIRMED", "REJECTED", or "PENDING_REVIEW"
+        reasoning: Editor's reasoning for the verdict
+
+    Returns:
+        The updated row dict, or None if no dossier found.
+    """
+    sb = get_supabase()
+    result = (
+        sb.table("dossiers")
+        .update({
+            "editor_verdict": verdict,
+            "editor_reasoning": reasoning,
+            "editor_reviewed_at": "now()",
+            "updated_at": "now()",
+        })
+        .eq("feature_id", feature_id)
+        .execute()
+    )
+    return result.data[0] if result.data else None
+
+
+def insert_dossier_image(dossier_id, feature_id, page_number, storage_path, public_url):
+    """Insert a dossier image record.
+
+    Args:
+        dossier_id: FK to dossiers table
+        feature_id: FK to features table
+        page_number: The PDF page number this image corresponds to
+        storage_path: Path in Supabase Storage (e.g., "dossier-images/123/page_42.png")
+        public_url: Public URL for the image
+
+    Returns:
+        The inserted row dict.
+    """
+    sb = get_supabase()
+    row = {
+        "dossier_id": dossier_id,
+        "feature_id": feature_id,
+        "page_number": page_number,
+        "storage_path": storage_path,
+        "public_url": public_url,
+        "image_type": "article_page",
+    }
+    result = sb.table("dossier_images").insert(row).execute()
+    return result.data[0] if result.data else None
+
+
+def get_dossier_images(dossier_id):
+    """Fetch all images for a dossier. Returns list of dicts."""
+    sb = get_supabase()
+    result = (
+        sb.table("dossier_images")
+        .select("*")
+        .eq("dossier_id", dossier_id)
+        .order("page_number")
+        .execute()
+    )
+    return result.data
+
+
+def upload_to_storage(bucket, path, file_data, content_type="image/png"):
+    """Upload a file to Supabase Storage. Returns the public URL.
+
+    Args:
+        bucket: Storage bucket name (e.g., "dossier-images")
+        path: Path within the bucket (e.g., "123/page_42.png")
+        file_data: Raw bytes to upload
+        content_type: MIME type (default "image/png")
+
+    Returns:
+        Public URL string for the uploaded file.
+    """
+    sb = get_supabase()
+    sb.storage.from_(bucket).upload(
+        path,
+        file_data,
+        {"content-type": content_type},
+    )
+    # Build public URL
+    url = os.getenv("SUPABASE_URL", "")
+    return f"{url}/storage/v1/object/public/{bucket}/{path}"
+
+
+# ── Migration ───────────────────────────────────────────────
+
+
+def migrate_disk_dossiers():
+    """Migrate existing disk dossiers (data/dossiers/*.json) into Supabase.
+
+    Reads each individual dossier JSON, looks up the feature_id from
+    cross_references/results.json, and upserts into the dossiers table.
+
+    Run once: python3 -c "from db import migrate_disk_dossiers; migrate_disk_dossiers()"
+    """
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    dossiers_dir = os.path.join(base_dir, "dossiers")
+    results_path = os.path.join(base_dir, "cross_references", "results.json")
+
+    if not os.path.exists(dossiers_dir):
+        print("No dossiers directory found.")
+        return
+
+    # Build name → feature_id lookup from cross-reference results
+    name_to_fid = {}
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            results = json.load(f)
+        for r in results:
+            name = (r.get("homeowner_name") or "").strip().lower()
+            fid = r.get("feature_id")
+            if name and fid:
+                name_to_fid[name] = fid
+
+    migrated = 0
+    skipped = 0
+
+    for fname in os.listdir(dossiers_dir):
+        if not fname.endswith(".json"):
+            continue
+        if fname in ("all_dossiers.json", "investigated_ids.json"):
+            continue
+
+        fpath = os.path.join(dossiers_dir, fname)
+        try:
+            with open(fpath) as f:
+                dossier = json.load(f)
+        except Exception as e:
+            print(f"  SKIP {fname}: could not parse JSON — {e}")
+            skipped += 1
+            continue
+
+        subject = (dossier.get("subject_name") or "").strip()
+        if not subject:
+            print(f"  SKIP {fname}: no subject_name")
+            skipped += 1
+            continue
+
+        # Look up feature_id by subject name (case-insensitive)
+        feature_id = name_to_fid.get(subject.lower())
+        if not feature_id:
+            print(f"  SKIP {fname}: no feature_id found for '{subject}'")
+            skipped += 1
+            continue
+
+        # Build Supabase row from dossier fields
+        row = {
+            "subject_name": subject,
+            "combined_verdict": dossier.get("combined_verdict"),
+            "confidence_score": dossier.get("confidence_score"),
+            "connection_strength": dossier.get("connection_strength"),
+            "strength_rationale": dossier.get("strength_rationale"),
+            "triage_result": "investigate",  # Pre-existing dossiers were all investigated
+            "triage_reasoning": "Migrated from disk — pre-triage era",
+            "ad_appearance": dossier.get("ad_appearance"),
+            "home_analysis": dossier.get("home_analysis"),
+            "visual_analysis": None,  # Not available for legacy dossiers
+            "epstein_connections": dossier.get("epstein_connections"),
+            "pattern_analysis": dossier.get("pattern_analysis"),
+            "key_findings": dossier.get("key_findings"),
+            "investigation_depth": dossier.get("investigation_depth", "standard"),
+            "needs_manual_review": dossier.get("needs_manual_review", False),
+            "review_reason": dossier.get("review_reason"),
+            "investigated_at": dossier.get("investigated_at"),
+        }
+
+        try:
+            result = upsert_dossier(feature_id, row)
+            if result:
+                print(f"  OK {subject} → feature_id={feature_id}")
+                migrated += 1
+            else:
+                print(f"  FAIL {subject}: upsert returned None")
+                skipped += 1
+        except Exception as e:
+            print(f"  FAIL {subject}: {e}")
+            skipped += 1
+
+    print(f"\nMigration complete: {migrated} migrated, {skipped} skipped")

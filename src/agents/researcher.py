@@ -5,10 +5,18 @@ Hub-and-spoke model: Editor can assign investigate_lead tasks via inbox.
 When no task is assigned, falls back to legacy work() loop which
 self-manages lead discovery and investigation.
 
-Picks up ALL leads from the Detective's combined verdicts (confirmed_match,
-likely_match, possible_match, needs_review) plus legacy BB matches. Enriches
-each investigation with full Supabase feature data and cross-lead pattern
-analysis (shared designers, location clusters, style correlations).
+3-STEP INVESTIGATION PIPELINE:
+  Step 1 — TRIAGE (Haiku): Quick check for temporal impossibility, non-persons,
+           obviously common names. ~$0.001 per lead. COINCIDENCE → dismiss early.
+  Step 2 — DEEP ANALYSIS (Sonnet + images): Full investigation with article page
+           images for visual design analysis. ~$0.03 per lead.
+  Step 3 — SYNTHESIS (Sonnet): Cross-lead patterns, final strength rating,
+           complete dossier. ~$0.02 per lead.
+
+Total cost: ~$0.001 for COINCIDENCE, ~$0.05 for full investigation.
+
+All dossiers persisted to Supabase (dossiers table) with disk backup.
+Article page images uploaded to Supabase Storage (dossier-images bucket).
 
 Interval: 120s — investigation is thorough but not time-critical.
 """
@@ -16,7 +24,10 @@ Interval: 120s — investigation is thorough but not time-critical.
 import asyncio
 import json
 import os
+import shutil
 import sys
+import tempfile
+import time
 from collections import Counter
 from datetime import datetime
 
@@ -44,6 +55,13 @@ VERDICT_PRIORITY = {
     "possible_match": 2,
     "needs_review": 3,
 }
+
+# Model IDs
+HAIKU_MODEL = "claude-haiku-4-5-20251001"
+SONNET_MODEL = "claude-sonnet-4-5-20250929"
+
+# Rate limit pause between Sonnet calls
+SONNET_PAUSE_SECONDS = 2
 
 
 class ResearcherAgent(Agent):
@@ -95,12 +113,15 @@ class ResearcherAgent(Agent):
             self._dossiers_built += 1
 
             strength = dossier.get("connection_strength", "UNKNOWN")
+            triage = dossier.get("triage_result", "investigate")
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="success",
                 result={
                     "name": name,
                     "dossier": dossier,
                     "connection_strength": strength,
+                    "triage_result": triage,
+                    "feature_id": lead.get("feature_id"),
                 },
                 agent=self.name,
             )
@@ -141,8 +162,24 @@ class ResearcherAgent(Agent):
             self._investigated += 1
 
             strength = dossier.get("connection_strength", "UNKNOWN")
+            triage = dossier.get("triage_result", "investigate")
             self._current_task = f"Dossier: {name} ({strength})"
-            self.log(f"Dossier complete: {name} — {strength}")
+            self.log(f"Dossier complete: {name} — {strength} (triage: {triage})")
+
+            # Push result to outbox so Editor can review as gatekeeper
+            await self.outbox.put(TaskResult(
+                task_id=f"work_{lead['feature_id']}",
+                task_type="investigate_lead",
+                status="success",
+                result={
+                    "name": name,
+                    "dossier": dossier,
+                    "connection_strength": strength,
+                    "triage_result": triage,
+                    "feature_id": lead["feature_id"],
+                },
+                agent=self.name,
+            ))
 
             # Update run log
             self._update_run_log(success=True, has_patterns=bool(dossier.get("pattern_analysis")))
@@ -223,24 +260,21 @@ class ResearcherAgent(Agent):
 
     def _find_ad_context(self, feature_id):
         """Look up full AD feature data from Supabase, fall back to disk."""
-        # Try Supabase first (has all 13+ fields)
         try:
-            from supabase import create_client
-            url = os.environ.get("SUPABASE_URL")
-            key = os.environ.get("SUPABASE_ANON_KEY")
-            if url and key:
-                sb = create_client(url, key)
-                resp = sb.table("features").select("*").eq("id", feature_id).execute()
-                if resp.data:
-                    row = resp.data[0]
-                    # Also get issue month/year
-                    issue_id = row.get("issue_id")
-                    if issue_id:
-                        issue_resp = sb.table("issues").select("month, year").eq("id", issue_id).execute()
-                        if issue_resp.data:
-                            row["issue_month"] = issue_resp.data[0].get("month")
-                            row["issue_year"] = issue_resp.data[0].get("year")
-                    return row
+            from db import get_supabase
+            sb = get_supabase()
+            resp = sb.table("features").select("*").eq("id", feature_id).execute()
+            if resp.data:
+                row = resp.data[0]
+                issue_id = row.get("issue_id")
+                if issue_id:
+                    issue_resp = sb.table("issues").select("month, year, pdf_path, identifier").eq("id", issue_id).execute()
+                    if issue_resp.data:
+                        row["issue_month"] = issue_resp.data[0].get("month")
+                        row["issue_year"] = issue_resp.data[0].get("year")
+                        row["pdf_path"] = issue_resp.data[0].get("pdf_path")
+                        row["identifier"] = issue_resp.data[0].get("identifier")
+                return row
         except Exception:
             pass
         # Fall back to disk
@@ -268,7 +302,6 @@ class ResearcherAgent(Agent):
                             "issue_month": month,
                             "issue_year": year,
                         }
-                        # Copy all available fields
                         for key in ("homeowner_name", "article_title", "designer_name",
                                     "architecture_firm", "year_built", "square_footage",
                                     "cost", "location_city", "location_state",
@@ -285,23 +318,17 @@ class ResearcherAgent(Agent):
 
     def _fetch_features_batch(self, feature_ids):
         """Fetch multiple features from Supabase, fall back to disk."""
-        features = []
-
-        # Try Supabase
         try:
-            from supabase import create_client
-            url = os.environ.get("SUPABASE_URL")
-            key = os.environ.get("SUPABASE_ANON_KEY")
-            if url and key:
-                sb = create_client(url, key)
-                # Supabase IN filter
-                resp = sb.table("features").select("*").in_("id", feature_ids).execute()
-                if resp.data:
-                    return resp.data
+            from db import get_supabase
+            sb = get_supabase()
+            resp = sb.table("features").select("*").in_("id", feature_ids).execute()
+            if resp.data:
+                return resp.data
         except Exception:
             pass
 
         # Fall back to disk
+        features = []
         id_set = set(feature_ids)
         if os.path.exists(EXTRACTIONS_DIR):
             for fname in os.listdir(EXTRACTIONS_DIR):
@@ -336,12 +363,10 @@ class ResearcherAgent(Agent):
         if not associated_ids:
             return None
 
-        # Fetch all associated features
         features = self._fetch_features_batch(associated_ids)
         if not features:
             return None
 
-        # Compute pattern stats
         patterns = {
             "total_associated": len(features),
             "design_styles": dict(Counter(
@@ -366,7 +391,6 @@ class ResearcherAgent(Agent):
             )),
         }
 
-        # Find correlations specific to this name
         current_feature = next(
             (f for f in features
              if (f.get("homeowner_name") or "").lower() == current_name.lower()),
@@ -398,29 +422,81 @@ class ResearcherAgent(Agent):
         patterns["correlations_for_current"] = correlations
         return patterns
 
-    # ── Investigation (Haiku Call) ──────────────────────────────
+    # ═══════════════════════════════════════════════════════════
+    # 3-STEP INVESTIGATION PIPELINE
+    # ═══════════════════════════════════════════════════════════
 
     def _investigate_match(self, match, skills):
-        """Build a dossier for a lead using Claude Haiku with full context + pattern analysis."""
+        """Build a dossier using 3-step pipeline: triage → deep analysis → synthesis."""
         name = match.get("homeowner_name", "Unknown")
-        bb_matches = match.get("black_book_matches") or []
-        doj_results = match.get("doj_results")
         feature_id = match.get("feature_id")
         combined_verdict = match.get("combined_verdict", "")
 
-        # Gather all available context
+        # Build shared context used by all steps
+        context = self._build_investigation_context(match)
+
+        self.log(f"Step 1: Triage — {name}")
+
+        # ── STEP 1: TRIAGE (Haiku — fast, cheap) ──────────────
+        triage = self._step_triage(context, skills)
+
+        if triage.get("result") == "coincidence":
+            self.log(f"  Triaged out: {name} — {triage.get('reasoning', '?')[:80]}")
+            dossier = self._build_coincidence_dossier(match, context, triage)
+            # Tag for image/supabase flow (no images for coincidence)
+            dossier["_feature_id"] = feature_id
+            dossier["_image_paths"] = []
+            dossier["_temp_dir"] = None
+            return dossier
+
+        # ── STEP 2: DEEP ANALYSIS (Sonnet + images) ──────────
+        self.log(f"Step 2: Deep analysis — {name}")
+        time.sleep(SONNET_PAUSE_SECONDS)
+
+        # Extract article page images if PDF available
+        image_info = self._extract_article_images(feature_id, context)
+
+        step2_result = self._step_deep_analysis(context, image_info, skills)
+
+        # ── STEP 3: SYNTHESIS (Sonnet — patterns + final) ─────
+        self.log(f"Step 3: Synthesis — {name}")
+        time.sleep(SONNET_PAUSE_SECONDS)
+
+        pattern_context = self._build_pattern_context(name)
+        dossier = self._step_synthesis(context, step2_result, pattern_context, triage, skills)
+
+        # Ensure required fields
+        dossier["investigated_at"] = datetime.now().isoformat()
+        dossier["combined_verdict"] = combined_verdict
+        dossier["triage_result"] = "investigate"
+        dossier["triage_reasoning"] = triage.get("reasoning", "")
+
+        # Tag for image/supabase flow
+        dossier["_feature_id"] = feature_id
+        dossier["_image_paths"] = image_info.get("image_paths", [])
+        dossier["_page_numbers"] = image_info.get("page_numbers", [])
+        dossier["_temp_dir"] = image_info.get("temp_dir")
+
+        return dossier
+
+    def _build_investigation_context(self, match):
+        """Build the shared context dict used across all pipeline steps."""
+        name = match.get("homeowner_name", "Unknown")
+        bb_matches = match.get("black_book_matches") or []
+        feature_id = match.get("feature_id")
+
         context = {
             "name": name,
             "feature_id": feature_id,
-            "combined_verdict": combined_verdict,
+            "combined_verdict": match.get("combined_verdict", ""),
             "confidence_score": match.get("confidence_score"),
             "black_book_status": match.get("black_book_status"),
             "black_book_matches": bb_matches,
             "doj_status": match.get("doj_status", "pending"),
-            "doj_results": doj_results,
+            "doj_results": match.get("doj_results"),
         }
 
-        # Full AD feature data (all 13+ fields)
+        # Full AD feature data
         ad_context = self._find_ad_context(feature_id)
         if ad_context:
             context["ad_feature"] = ad_context
@@ -432,57 +508,80 @@ class ResearcherAgent(Agent):
                 bb_contexts.append(m["context"])
         context["black_book_context"] = bb_contexts
 
-        # Pattern analysis across all associated names
-        pattern_context = self._build_pattern_context(name)
+        return context
 
-        # Call Claude for analysis
+    # ── Step 1: Triage ─────────────────────────────────────────
+
+    def _step_triage(self, context, skills):
+        """Quick triage: COINCIDENCE or investigate? Uses Haiku (~$0.001)."""
         client = self._get_client()
 
-        # Build pattern section for prompt
-        pattern_prompt = ""
-        if pattern_context:
-            pattern_prompt = f"""
+        system_prompt = """You are the Researcher triage agent. Your ONLY job is to quickly determine
+if a lead is worth investigating or is obviously a COINCIDENCE (false positive).
 
-## Pattern Analysis Context
-These are aggregate patterns across ALL {pattern_context['total_associated']} Epstein-associated names in the AD database:
+Check for:
+1. TEMPORAL IMPOSSIBILITY: Person died before 1980 or born after 2000 → coincidence
+2. NON-PERSON ENTITY: Hotels, palaces, resorts, clubs, studios → coincidence
+3. CLEARLY DIFFERENT PERSON: DOJ results clearly reference someone with a different first name → coincidence
+4. HISTORIC RETROSPECTIVE: AD article about a property from 1800s/early 1900s → likely coincidence
+5. NO EVIDENCE AT ALL: No BB match AND no DOJ results → coincidence
 
-Design styles: {json.dumps(pattern_context['design_styles'])}
-Designers: {json.dumps(pattern_context['designers'])}
-Architects: {json.dumps(pattern_context['architects'])}
-Locations: {json.dumps(pattern_context['locations'])}
-Decades built: {json.dumps(pattern_context['decades'])}
-Issue years: {json.dumps(pattern_context['issue_years'])}
+Respond with JSON only:
+{
+  "result": "investigate" or "coincidence",
+  "reasoning": "1-2 sentence explanation",
+  "temporal_check": "passed" or "failed: reason"
+}
 
-Correlations specific to {name}: {json.dumps(pattern_context['correlations_for_current'])}
+Be aggressive about filtering COINCIDENCE — you save expensive Sonnet calls.
+But when in doubt, choose "investigate" — better to spend $0.05 than miss a real lead."""
 
-Analyze these patterns. Do any correlations stand out? Shared designers, location clusters, or style preferences among Epstein-associated names are significant."""
+        user_msg = f"""Triage this lead:
+
+Name: {context['name']}
+Combined verdict: {context['combined_verdict']}
+Black Book status: {context['black_book_status']}
+BB matches: {json.dumps(context.get('black_book_matches', []), default=str)[:500]}
+DOJ status: {context['doj_status']}
+DOJ results summary: {json.dumps(context.get('doj_results', {}), default=str)[:800]}
+AD feature: {json.dumps(context.get('ad_feature', {}), default=str)[:500]}
+
+Should this lead be fully investigated or dismissed as COINCIDENCE?"""
+
+        response = client.messages.create(
+            model=HAIKU_MODEL,
+            max_tokens=512,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+
+        return self._parse_json_response(response.content[0].text)
+
+    # ── Step 2: Deep Analysis ──────────────────────────────────
+
+    def _step_deep_analysis(self, context, image_info, skills):
+        """Full analysis with article images. Uses Sonnet (~$0.03)."""
+        client = self._get_client()
 
         system_prompt = f"""You are the Researcher agent for the AD-Epstein Index project.
 
 {skills}
 
-You are investigating a lead — a person who appeared in Architectural Digest AND was flagged by the Detective agent's cross-reference against Epstein records. Your job is to build a thorough dossier assessing the connection.
+You are performing DEEP ANALYSIS on a lead that passed triage. You have:
+1. Full AD feature data (homeowner, designer, location, style, cost, etc.)
+2. Cross-reference results (Black Book matches, DOJ search results)
+3. Article page images from the actual magazine (if available)
 
-You have access to:
-1. The full AD feature data (homeowner, designer, location, style, cost, etc.)
-2. The Detective's cross-reference results (Black Book matches, DOJ search results, combined verdict)
-3. Pattern analysis across ALL Epstein-associated names in the database (shared designers, locations, styles)
+Analyze the home itself as evidence — the design style, wealth signals, designer choices,
+and location all reveal the person's social world.
 
-Be tenacious. Ask WHY this person appears in a high-end lifestyle magazine alongside Epstein associates. Look for patterns.
-
-Pay special attention to the HOME ITSELF as evidence:
-- What does the design style reveal? (e.g., Mediterranean Revival in Palm Beach = old-money social circle)
-- What does the cost/square footage suggest about wealth level?
-- Who was the designer/architect? Do they work for other Epstein-associated clients?
-- Where is the home? Is this a known luxury enclave (Palm Beach, Upper East Side, Aspen, St. Barts)?
-- When was it built/renovated relative to Epstein's active period (1990-2008)?
-- The home is a window into someone's social world — the designer they hired, the neighborhood they chose, the style they preferred all tell a story.{pattern_prompt}
+If article images are provided, perform VISUAL ANALYSIS:
+- What does the photography/layout reveal about the home's scale and luxury level?
+- What design elements are visible (materials, art, furnishings)?
+- Do the visuals suggest a particular social milieu?
 
 Respond with JSON only:
 {{
-  "subject_name": "Full name of the person",
-  "combined_verdict": "{combined_verdict}",
-  "confidence_score": 0.85,
   "ad_appearance": {{
     "issue": "Month Year",
     "location": "City, State/Country",
@@ -496,83 +595,284 @@ Respond with JSON only:
     "notes": "Any relevant notes"
   }},
   "home_analysis": {{
-    "wealth_indicators": "What the home's cost, size, and location reveal about wealth level",
-    "social_circle_clues": "What the designer choice and neighborhood suggest about social connections",
-    "style_significance": "How the design style relates to broader patterns among Epstein associates",
-    "temporal_relevance": "Whether the home's timeline overlaps with Epstein's active period (1990-2008)"
+    "wealth_indicators": "What the home's cost, size, and location reveal",
+    "social_circle_clues": "What the designer choice and neighborhood suggest",
+    "style_significance": "How the design style relates to Epstein associate patterns",
+    "temporal_relevance": "Whether the timeline overlaps with Epstein's active period (1990-2008)"
+  }},
+  "visual_analysis": {{
+    "design_aesthetic": "Overall aesthetic from the photographs",
+    "wealth_signals_visual": "What the photos reveal about wealth level",
+    "social_markers": "What decor/setting suggests about social circles",
+    "notable_details": ["Specific visual observations from the article images"]
   }},
   "epstein_connections": [
     {{
-      "source": "black_book | doj_library | flight_logs | court_docs",
+      "source": "black_book | doj_library",
       "match_type": "exact | last_first | last_name_only",
       "evidence": "What was found",
       "context": "Surrounding text or document reference"
     }}
-  ],
-  "pattern_analysis": {{
-    "shared_designers": ["Designer X (also worked for Name A, Name B)"],
-    "shared_locations": ["Palm Beach (N other associated names)"],
-    "shared_styles": ["Style name (used by N other associated names)"],
-    "temporal_clustering": "Observation about timing of AD feature vs Epstein's activity",
-    "notable_correlations": ["Any other cross-lead patterns worth noting"]
-  }},
-  "connection_strength": "HIGH | MEDIUM | LOW | COINCIDENCE",
-  "strength_rationale": "2-3 sentences explaining the rating, including pattern evidence",
-  "key_findings": ["bullet point 1", "bullet point 2"],
-  "investigation_depth": "standard",
-  "needs_manual_review": true/false,
-  "review_reason": "Why manual review is needed, if applicable",
-  "investigated_at": "ISO timestamp"
+  ]
 }}
 
-Connection strength guide:
-- HIGH: Multiple sources confirm (BB + DOJ), OR pattern correlations reinforce (shared designer/location with other matches), OR direct communication evidence
-- MEDIUM: Single strong source (exact BB match) with some pattern support, or DOJ-only match with relevant context
-- LOW: Weak match (last_name_only, common name) with no pattern support
-- COINCIDENCE: Almost certainly a false positive — name too common, no pattern connections, context doesn't fit. **When you rate COINCIDENCE, the name will be automatically dismissed from the leads list.**
+If no images are available, set visual_analysis to null."""
 
-**CRITICAL: Temporal impossibility check — do this FIRST.**
-Before any other analysis, check if the person could have possibly interacted with Jeffrey Epstein (born 1953, active 1990s-2008, arrested 2019):
-- If the person DIED before 1980, rate COINCIDENCE immediately. A person who died decades before Epstein's social prominence cannot be a personal associate. Examples: William Randolph Hearst (d. 1951), Henri de Toulouse-Lautrec (d. 1901).
-- If the person was born after 2000, they were too young to be an associate — rate COINCIDENCE.
-- If the AD article is a historic/retrospective feature about a property built in the 1800s or early 1900s, the homeowner is likely historical, not a contemporary Epstein associate.
-- DOJ results matching a historical figure's SURNAME (e.g., "Hearst" matching Hearst family/corporation) do NOT constitute evidence of a personal connection to the deceased individual.
+        # Build message content with images
+        content = []
 
-**CRITICAL: False positive identification is one of your most important jobs.**
-You are the last line of defense before a name reaches the human. Be aggressive about rating COINCIDENCE when:
-- The person is deceased and could not have interacted with Epstein (see temporal check above)
-- The name is a hotel, palace, resort, club, or other non-person entity (e.g., "Gritti Palace" is a hotel in Venice)
-- DOJ results reference a contractor, vendor, or service worker — not a personal associate (e.g., Peter Rogers appears in Epstein docs as a construction contractor, not a social connection)
-- The DOJ result context (invoices, equipment, permits, maintenance) has nothing to do with personal relationships
-- DOJ results match a DIFFERENT person with the same surname (e.g., "Vidal" matching Jose Luis Contreras-Vidal, not Yves Vidal)
-- A common name matched coincidentally with no supporting pattern evidence
-Your job is to confirm real leads AND eliminate false positives with equal confidence.
-
-Pattern evidence can UPGRADE strength:
-- Shared designer with another confirmed match → upgrade one tier
-- Same location cluster (e.g., Palm Beach, NYC Upper East Side) → note as supporting evidence
-- AD feature from Epstein's active period (1990-2008) → note as temporal correlation
-- Multiple pattern correlations → strong signal, consider upgrading
-- Home in a known Epstein-associated enclave (Palm Beach, NYC UES, London Belgravia, Aspen) → note as lifestyle overlap
-- Same designer as a confirmed Epstein associate → strong signal, upgrade one tier
-- Cost/size consistent with ultra-high-net-worth circle → supporting context"""
-
-        user_message = f"""Investigate this lead:
+        # Text context
+        content.append({
+            "type": "text",
+            "text": f"""Investigate this lead in depth:
 
 ```json
 {json.dumps(context, indent=2, default=str)}
 ```
 
-Build a thorough dossier. Be tenacious — dig into the patterns."""
+Analyze the home, the person, and all available evidence.""",
+        })
+
+        # Add article images if available
+        image_paths = image_info.get("image_paths", [])
+        if image_paths:
+            from extract_features import make_image_content
+            content.append({
+                "type": "text",
+                "text": f"\n\nArticle page images from the magazine ({len(image_paths)} pages):",
+            })
+            for img_path in image_paths:
+                try:
+                    content.append(make_image_content(img_path))
+                except Exception:
+                    pass  # Skip unreadable images
 
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=SONNET_MODEL,
             max_tokens=4096,
             system=system_prompt,
-            messages=[{"role": "user", "content": user_message}],
+            messages=[{"role": "user", "content": content}],
         )
 
-        text = response.content[0].text.strip()
+        return self._parse_json_response(response.content[0].text)
+
+    # ── Step 3: Synthesis ──────────────────────────────────────
+
+    def _step_synthesis(self, context, step2_result, pattern_context, triage, skills):
+        """Cross-lead patterns, final strength, complete dossier. Uses Sonnet (~$0.02)."""
+        client = self._get_client()
+
+        # Build pattern section
+        pattern_prompt = ""
+        if pattern_context:
+            pattern_prompt = f"""
+## Pattern Analysis Context
+Aggregate patterns across ALL {pattern_context['total_associated']} Epstein-associated names:
+
+Design styles: {json.dumps(pattern_context['design_styles'])}
+Designers: {json.dumps(pattern_context['designers'])}
+Architects: {json.dumps(pattern_context['architects'])}
+Locations: {json.dumps(pattern_context['locations'])}
+Decades built: {json.dumps(pattern_context['decades'])}
+Issue years: {json.dumps(pattern_context['issue_years'])}
+
+Correlations for {context['name']}: {json.dumps(pattern_context['correlations_for_current'])}"""
+
+        # Summarize existing dossiers for cross-lead context
+        dossier_summaries = self._get_dossier_summaries()
+
+        system_prompt = f"""You are the Researcher agent performing final SYNTHESIS.
+
+You have the deep analysis results from Step 2 and cross-lead pattern data.
+Your job: determine final connection_strength, write key findings, and produce
+the complete dossier.
+{pattern_prompt}
+
+Connection strength guide:
+- HIGH: Multiple sources confirm (BB + DOJ), OR pattern correlations reinforce, OR direct evidence
+- MEDIUM: Single strong source with some pattern support
+- LOW: Weak match with no pattern support
+- COINCIDENCE: Almost certainly false positive
+
+**CRITICAL: False positive identification is one of your most important jobs.**
+- DOJ results referencing a DIFFERENT person with the same surname → COINCIDENCE
+- DOJ context about contractors/vendors/services → COINCIDENCE
+- Common name + no pattern correlations → LOW or COINCIDENCE
+- Person deceased before 1980 → COINCIDENCE
+
+Pattern evidence can UPGRADE strength:
+- Shared designer with confirmed match → upgrade one tier
+- Same luxury enclave (Palm Beach, UES, etc.) → supporting evidence
+- AD feature 1990-2008 → temporal correlation
+- Multiple correlations → strong signal
+
+Other dossier summaries (for cross-lead analysis):
+{dossier_summaries}
+
+Respond with the COMPLETE dossier JSON:
+{{
+  "subject_name": "Full name",
+  "combined_verdict": "from detective",
+  "confidence_score": 0.85,
+  "ad_appearance": {{...from step 2...}},
+  "home_analysis": {{...from step 2...}},
+  "visual_analysis": {{...from step 2 or null...}},
+  "epstein_connections": [...from step 2...],
+  "pattern_analysis": {{
+    "shared_designers": [],
+    "shared_locations": [],
+    "shared_styles": [],
+    "temporal_clustering": "observation",
+    "notable_correlations": []
+  }},
+  "connection_strength": "HIGH | MEDIUM | LOW | COINCIDENCE",
+  "strength_rationale": "2-3 sentences with pattern evidence",
+  "key_findings": ["bullet 1", "bullet 2"],
+  "investigation_depth": "deep",
+  "needs_manual_review": true/false,
+  "review_reason": "Why, if applicable"
+}}"""
+
+        user_msg = f"""Synthesize the final dossier for: {context['name']}
+
+Triage assessment: {json.dumps(triage, default=str)}
+
+Step 2 deep analysis results:
+```json
+{json.dumps(step2_result, indent=2, default=str)}
+```
+
+Original context:
+- Combined verdict: {context['combined_verdict']}
+- BB status: {context['black_book_status']}
+- DOJ status: {context['doj_status']}
+
+Produce the complete dossier with final connection_strength."""
+
+        response = client.messages.create(
+            model=SONNET_MODEL,
+            max_tokens=4096,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_msg}],
+        )
+
+        return self._parse_json_response(response.content[0].text)
+
+    # ── Image Extraction ───────────────────────────────────────
+
+    def _extract_article_images(self, feature_id, context):
+        """Extract article page images from the PDF for visual analysis.
+
+        Returns dict with image_paths, page_numbers, temp_dir (for cleanup).
+        """
+        result = {"image_paths": [], "page_numbers": [], "temp_dir": None}
+
+        # Get page number and PDF path
+        ad_feature = context.get("ad_feature", {})
+        page_number = ad_feature.get("page_number")
+        pdf_path = ad_feature.get("pdf_path")
+
+        if not page_number or not pdf_path or not os.path.exists(pdf_path):
+            self.log(f"  No PDF/page for images (page={page_number}, pdf={pdf_path})")
+            return result
+
+        # Convert target page + next 2 pages
+        pages = [page_number, page_number + 1, page_number + 2]
+        temp_dir = tempfile.mkdtemp(prefix="researcher_")
+
+        try:
+            from extract_features import pdf_to_images
+            image_paths = pdf_to_images(pdf_path, pages, temp_dir)
+            if image_paths:
+                result["image_paths"] = image_paths
+                result["page_numbers"] = pages[:len(image_paths)]
+                result["temp_dir"] = temp_dir
+                self.log(f"  Extracted {len(image_paths)} article images")
+            else:
+                shutil.rmtree(temp_dir, ignore_errors=True)
+        except Exception as e:
+            self.log(f"  Image extraction failed: {e}", level="WARN")
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        return result
+
+    # ── Coincidence Dossier ────────────────────────────────────
+
+    def _build_coincidence_dossier(self, match, context, triage):
+        """Build a minimal dossier for leads triaged as COINCIDENCE."""
+        name = match.get("homeowner_name", "Unknown")
+        ad_feature = context.get("ad_feature", {})
+
+        return {
+            "subject_name": name,
+            "combined_verdict": match.get("combined_verdict", ""),
+            "confidence_score": 0.0,
+            "connection_strength": "COINCIDENCE",
+            "strength_rationale": triage.get("reasoning", "Triaged as coincidence"),
+            "triage_result": "coincidence",
+            "triage_reasoning": triage.get("reasoning", ""),
+            "ad_appearance": {
+                "issue": f"{ad_feature.get('issue_month', '?')}/{ad_feature.get('issue_year', '?')}",
+                "location": f"{ad_feature.get('location_city', '')}, {ad_feature.get('location_state', ad_feature.get('location_country', ''))}".strip(", "),
+                "designer": ad_feature.get("designer_name"),
+                "architecture_firm": ad_feature.get("architecture_firm"),
+                "design_style": ad_feature.get("design_style"),
+                "year_built": ad_feature.get("year_built"),
+                "square_footage": ad_feature.get("square_footage"),
+                "cost": ad_feature.get("cost"),
+                "article_title": ad_feature.get("article_title"),
+                "notes": ad_feature.get("notes"),
+            },
+            "home_analysis": None,
+            "visual_analysis": None,
+            "epstein_connections": [],
+            "pattern_analysis": None,
+            "key_findings": [triage.get("reasoning", "Dismissed at triage")],
+            "investigation_depth": "triage_only",
+            "needs_manual_review": False,
+            "review_reason": None,
+            "investigated_at": datetime.now().isoformat(),
+        }
+
+    # ── Dossier Summaries (for cross-lead analysis) ────────────
+
+    def _get_dossier_summaries(self):
+        """Get brief summaries of existing dossiers for cross-lead analysis."""
+        try:
+            from db import list_dossiers
+            dossiers = list_dossiers()
+            if not dossiers:
+                return "No existing dossiers yet."
+            lines = []
+            for d in dossiers[:10]:  # Cap at 10 for prompt size
+                name = d.get("subject_name", "?")
+                strength = d.get("connection_strength", "?")
+                lines.append(f"- {name}: {strength}")
+            return "\n".join(lines)
+        except Exception:
+            pass
+
+        # Fallback to disk
+        master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
+        if os.path.exists(master_path):
+            try:
+                with open(master_path) as f:
+                    all_dossiers = json.load(f)
+                lines = []
+                for d in all_dossiers[:10]:
+                    name = d.get("subject_name", "?")
+                    strength = d.get("connection_strength", "?")
+                    lines.append(f"- {name}: {strength}")
+                return "\n".join(lines)
+            except Exception:
+                pass
+        return "No existing dossiers yet."
+
+    # ── JSON Parsing ───────────────────────────────────────────
+
+    def _parse_json_response(self, text):
+        """Parse JSON from an LLM response, handling markdown fences and partial JSON."""
+        text = text.strip()
         # Strip markdown code blocks
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
@@ -582,56 +882,112 @@ Build a thorough dossier. Be tenacious — dig into the patterns."""
 
         # Try direct parse first
         try:
-            dossier = json.loads(text)
+            return json.loads(text)
         except json.JSONDecodeError:
-            # Extract first complete JSON object using brace counting
-            start = text.find("{")
-            if start == -1:
-                raise ValueError(f"No JSON object found in response: {text[:200]}")
-            depth = 0
-            in_string = False
-            escape = False
-            for i in range(start, len(text)):
-                c = text[i]
-                if escape:
-                    escape = False
-                    continue
-                if c == "\\":
-                    escape = True
-                    continue
-                if c == '"' and not escape:
-                    in_string = not in_string
-                    continue
-                if in_string:
-                    continue
-                if c == "{":
-                    depth += 1
-                elif c == "}":
-                    depth -= 1
-                    if depth == 0:
-                        dossier = json.loads(text[start:i+1])
-                        break
-            else:
-                raise ValueError(f"Incomplete JSON in response (truncated at max_tokens?): {text[-200:]}")
+            pass
 
-        dossier["investigated_at"] = datetime.now().isoformat()
-        dossier["combined_verdict"] = combined_verdict
-        return dossier
+        # Extract first complete JSON object using brace counting
+        start = text.find("{")
+        if start == -1:
+            raise ValueError(f"No JSON object found in response: {text[:200]}")
+        depth = 0
+        in_string = False
+        escape = False
+        for i in range(start, len(text)):
+            c = text[i]
+            if escape:
+                escape = False
+                continue
+            if c == "\\":
+                escape = True
+                continue
+            if c == '"' and not escape:
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if c == "{":
+                depth += 1
+            elif c == "}":
+                depth -= 1
+                if depth == 0:
+                    return json.loads(text[start:i+1])
 
-    # ── Dossier Persistence ─────────────────────────────────────
+        raise ValueError(f"Incomplete JSON in response (truncated?): {text[-200:]}")
+
+    # ── Dossier Persistence (Supabase + Disk) ──────────────────
 
     def _save_dossier(self, name, dossier):
-        """Save a dossier to disk."""
+        """Save a dossier to Supabase and disk."""
+        # Pop internal metadata
+        feature_id = dossier.pop("_feature_id", None)
+        image_paths = dossier.pop("_image_paths", [])
+        page_numbers = dossier.pop("_page_numbers", [])
+        temp_dir = dossier.pop("_temp_dir", None)
+
+        # ── Supabase persistence ──
+        if feature_id:
+            try:
+                from db import upsert_dossier, upload_to_storage, insert_dossier_image
+
+                # Build row for dossiers table
+                row = {
+                    "subject_name": dossier.get("subject_name", name),
+                    "combined_verdict": dossier.get("combined_verdict"),
+                    "confidence_score": dossier.get("confidence_score"),
+                    "connection_strength": dossier.get("connection_strength"),
+                    "strength_rationale": dossier.get("strength_rationale"),
+                    "triage_result": dossier.get("triage_result"),
+                    "triage_reasoning": dossier.get("triage_reasoning"),
+                    "ad_appearance": dossier.get("ad_appearance"),
+                    "home_analysis": dossier.get("home_analysis"),
+                    "visual_analysis": dossier.get("visual_analysis"),
+                    "epstein_connections": dossier.get("epstein_connections"),
+                    "pattern_analysis": dossier.get("pattern_analysis"),
+                    "key_findings": dossier.get("key_findings"),
+                    "investigation_depth": dossier.get("investigation_depth", "standard"),
+                    "needs_manual_review": dossier.get("needs_manual_review", False),
+                    "review_reason": dossier.get("review_reason"),
+                    "investigated_at": dossier.get("investigated_at"),
+                    "editor_verdict": "PENDING_REVIEW",
+                }
+
+                result = upsert_dossier(feature_id, row)
+                dossier_id = result.get("id") if result else None
+
+                if dossier_id and image_paths:
+                    self.log(f"  Uploading {len(image_paths)} images to Storage...")
+                    for img_path, page_num in zip(image_paths, page_numbers):
+                        try:
+                            with open(img_path, "rb") as f:
+                                file_data = f.read()
+                            storage_path = f"{feature_id}/page_{page_num}.png"
+                            public_url = upload_to_storage(
+                                "dossier-images", storage_path, file_data
+                            )
+                            insert_dossier_image(
+                                dossier_id, feature_id, page_num, storage_path, public_url
+                            )
+                        except Exception as e:
+                            self.log(f"  Image upload failed (page {page_num}): {e}", level="WARN")
+
+                self.log(f"  Saved to Supabase: dossier_id={dossier_id}")
+            except Exception as e:
+                self.log(f"  Supabase save failed: {e}", level="WARN")
+
+        # ── Cleanup temp dir ──
+        if temp_dir:
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+        # ── Disk backup (unchanged) ──
         os.makedirs(DOSSIERS_DIR, exist_ok=True)
 
-        # Save individual dossier
         safe_name = "".join(c if c.isalnum() or c in " -_" else "" for c in name)
         safe_name = safe_name.strip().replace(" ", "_")
         path = os.path.join(DOSSIERS_DIR, f"{safe_name}.json")
         with open(path, "w") as f:
             json.dump(dossier, f, indent=2)
 
-        # Also append to the master dossiers list
         master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
         all_dossiers = []
         if os.path.exists(master_path):
@@ -641,7 +997,6 @@ Build a thorough dossier. Be tenacious — dig into the patterns."""
             except Exception:
                 all_dossiers = []
 
-        # Replace existing dossier for same name, or append
         replaced = False
         for i, d in enumerate(all_dossiers):
             if d.get("subject_name", "").lower() == name.lower():
@@ -744,22 +1099,23 @@ Build a thorough dossier. Be tenacious — dig into the patterns."""
 
         # Pattern detected
         pattern_analysis = dossier.get("pattern_analysis", {})
-        correlations = (
-            pattern_analysis.get("shared_designers", [])
-            + pattern_analysis.get("shared_locations", [])
-            + pattern_analysis.get("shared_styles", [])
-            + pattern_analysis.get("notable_correlations", [])
-        )
-        if correlations:
-            self._maybe_escalate(
-                "pattern_detected",
-                f"Pattern correlations found for {name}: {len(correlations)} correlation(s)",
-                {
-                    "name": name,
-                    "correlations": correlations,
-                    "temporal": pattern_analysis.get("temporal_clustering", ""),
-                },
+        if isinstance(pattern_analysis, dict):
+            correlations = (
+                pattern_analysis.get("shared_designers", [])
+                + pattern_analysis.get("shared_locations", [])
+                + pattern_analysis.get("shared_styles", [])
+                + pattern_analysis.get("notable_correlations", [])
             )
+            if correlations:
+                self._maybe_escalate(
+                    "pattern_detected",
+                    f"Pattern correlations found for {name}: {len(correlations)} correlation(s)",
+                    {
+                        "name": name,
+                        "correlations": correlations,
+                        "temporal": pattern_analysis.get("temporal_clustering", ""),
+                    },
+                )
 
         # Needs manual review
         if dossier.get("needs_manual_review"):

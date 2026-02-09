@@ -54,6 +54,7 @@ from agents.tasks import Task, TaskResult, EditorLedger
 from db import (
     get_supabase, update_issue, delete_features_for_issue, list_issues,
     count_issues_by_status, upsert_issue, get_issue_by_identifier,
+    update_editor_verdict,
 )
 
 @dataclass
@@ -97,9 +98,14 @@ PLAN_INTERVAL = 30       # seconds between planning cycles
 STRATEGIC_INTERVAL = 300  # seconds between LLM assessments
 MAX_TASK_FAILURES = 3     # before giving up on an identifier/name
 
-# Opus pricing per 1M tokens
+# Opus pricing per 1M tokens (used for strategic assessments)
 HAIKU_INPUT_COST_PER_1M = 15.00
 HAIKU_OUTPUT_COST_PER_1M = 75.00
+
+# Sonnet model for dossier review (~$0.005 per review)
+SONNET_MODEL = "claude-sonnet-4-5-20250929"
+SONNET_INPUT_COST_PER_1M = 3.00
+SONNET_OUTPUT_COST_PER_1M = 15.00
 
 
 class EditorAgent(Agent):
@@ -631,13 +637,175 @@ class EditorAgent(Agent):
         self.ledger.save()
 
     def _commit_investigation(self, data):
-        """Log Researcher's investigation result."""
+        """Review Researcher's dossier as gatekeeper — confirm or reject.
+
+        COINCIDENCE → auto-REJECTED (no LLM call).
+        HIGH/MEDIUM/LOW → Sonnet review → CONFIRMED or REJECTED.
+        Updates Supabase with final editor verdict.
+        """
         name = data.get("name", "?")
         strength = data.get("connection_strength", "UNKNOWN")
-        self.log(f"Dossier: {name} → {strength}")
-        if strength in ("HIGH", "MEDIUM"):
-            self._remember("milestone", f"Researcher dossier: {name} ({strength})")
+        triage = data.get("triage_result", "investigate")
+        feature_id = data.get("feature_id")
+        dossier = data.get("dossier", {})
+
+        # ── COINCIDENCE: auto-reject, no LLM call ──
+        if strength == "COINCIDENCE" or triage == "coincidence":
+            verdict = "REJECTED"
+            reasoning = f"Auto-rejected: triaged as COINCIDENCE — {dossier.get('strength_rationale', 'false positive')}"
+            self.log(f"Dossier: {name} → REJECTED (COINCIDENCE, no review needed)")
+        else:
+            # ── HIGH / MEDIUM / LOW: Sonnet review ──
+            try:
+                verdict, reasoning = self._review_dossier(name, strength, dossier)
+                self.log(f"Dossier: {name} → {verdict} (proposed {strength})")
+            except Exception as e:
+                verdict = "PENDING_REVIEW"
+                reasoning = f"Review failed: {e}"
+                self.log(f"Dossier review failed for {name}: {e}", level="ERROR")
+
+        # ── Update Supabase with editor verdict ──
+        if feature_id:
+            try:
+                update_editor_verdict(feature_id, verdict, reasoning)
+            except Exception as e:
+                self.log(f"Failed to update editor verdict for {name}: {e}", level="ERROR")
+
+        # ── Ledger + memory ──
+        self.ledger.record(name, "researcher", "investigate_lead", True,
+                           note=f"proposed={strength} → {verdict}")
+        if verdict == "CONFIRMED" and strength in ("HIGH", "MEDIUM"):
+            self._remember("milestone", f"CONFIRMED dossier: {name} ({strength})")
         self.ledger.save()
+
+    def _review_dossier(self, name, proposed_strength, dossier):
+        """LLM review of a Researcher dossier. Uses Sonnet (~$0.005/review).
+
+        Prompt intensity varies by proposed strength:
+          HIGH   → quick sanity check, default CONFIRMED
+          MEDIUM → judgment call, could go either way
+          LOW    → skeptical, default REJECTED
+
+        Returns:
+            (verdict, reasoning) — verdict is "CONFIRMED" or "REJECTED"
+        """
+        client = self._get_client()
+
+        if proposed_strength == "HIGH":
+            stance = (
+                "The Researcher rated this HIGH. Your default is CONFIRMED — "
+                "only reject if there's a clear factual error, misidentification, "
+                "or the evidence obviously doesn't support the rating."
+            )
+        elif proposed_strength == "MEDIUM":
+            stance = (
+                "The Researcher rated this MEDIUM. This is a judgment call. "
+                "Confirm if the evidence is credible and the reasoning is sound. "
+                "Reject if the connection seems coincidental or the evidence is thin."
+            )
+        else:  # LOW
+            stance = (
+                "The Researcher rated this LOW. Your default is REJECTED — "
+                "only confirm if you see genuine merit the Researcher may have undersold."
+            )
+
+        system_prompt = f"""You are the Editor reviewing a Researcher's dossier for the AD-Epstein Index.
+
+Your job: decide if this dossier should be CONFIRMED (real connection worth tracking)
+or REJECTED (false positive, coincidence, or insufficient evidence).
+
+{stance}
+
+Key evidence to evaluate:
+- Black Book matches (exact with address/phone = strong; last_name_only = weak)
+- DOJ Library results (direct mention = strong; same surname different person = worthless)
+- Pattern correlations (shared designer/location with confirmed matches = meaningful)
+- Temporal relevance (1990-2008 overlap with Epstein's active period)
+
+Respond with JSON only:
+{{
+  "verdict": "CONFIRMED" or "REJECTED",
+  "reasoning": "2-3 sentences explaining your decision"
+}}"""
+
+        # Build concise dossier summary for review
+        summary = {
+            "subject_name": name,
+            "proposed_strength": proposed_strength,
+            "strength_rationale": dossier.get("strength_rationale", ""),
+            "key_findings": dossier.get("key_findings", []),
+            "triage_result": dossier.get("triage_result", ""),
+            "epstein_connections": dossier.get("epstein_connections", []),
+            "pattern_analysis": dossier.get("pattern_analysis"),
+            "connection_strength": dossier.get("connection_strength", ""),
+            "confidence_score": dossier.get("confidence_score"),
+        }
+
+        response = client.messages.create(
+            model=SONNET_MODEL,
+            max_tokens=512,
+            system=system_prompt,
+            messages=[{"role": "user", "content": json.dumps(summary, indent=2, default=str)}],
+        )
+
+        # Track cost (Sonnet pricing)
+        usage = response.usage
+        cost = (usage.input_tokens / 1_000_000 * SONNET_INPUT_COST_PER_1M +
+                usage.output_tokens / 1_000_000 * SONNET_OUTPUT_COST_PER_1M)
+        self._api_calls += 1
+        self._total_input_tokens += usage.input_tokens
+        self._total_output_tokens += usage.output_tokens
+        self._total_cost += cost
+        self._save_cost_state()
+
+        # Parse response
+        text = response.content[0].text.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            if "```" in text:
+                text = text[:text.rindex("```")]
+            text = text.strip()
+
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError:
+            # Try to extract JSON object
+            start = text.find("{")
+            if start == -1:
+                return ("PENDING_REVIEW", f"Could not parse review response: {text[:200]}")
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start, len(text)):
+                c = text[i]
+                if escape:
+                    escape = False
+                    continue
+                if c == "\\":
+                    escape = True
+                    continue
+                if c == '"' and not escape:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        parsed = json.loads(text[start:i+1])
+                        break
+            else:
+                return ("PENDING_REVIEW", f"Incomplete JSON in review response: {text[:200]}")
+
+        verdict = parsed.get("verdict", "PENDING_REVIEW")
+        reasoning = parsed.get("reasoning", "No reasoning provided")
+
+        if verdict not in ("CONFIRMED", "REJECTED"):
+            verdict = "PENDING_REVIEW"
+
+        return (verdict, reasoning)
 
     def _handle_failure(self, agent_name, result):
         """Handle a failed task — log to ledger, maybe reassign."""
