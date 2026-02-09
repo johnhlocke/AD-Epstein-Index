@@ -84,12 +84,31 @@ The system runs as 7 autonomous agents coordinated by an orchestrator:
 | Agent | Interval | AI Model | Key Behavior |
 |-------|----------|----------|-------------|
 | Scout | 60s | None (API calls) | Discovers issues on archive.org, fixes dates, multi-strategy |
-| Courier | 45s | None (downloads) | Downloads PDFs with rate limiting, priority sorting |
-| Reader | 90s | Claude Sonnet | Extracts homeowner data via Vision API, TOC + article pages |
-| Detective | 60s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright (batched) |
+| Courier | 5s | None (downloads) | Downloads PDFs with rate limiting, priority sorting |
+| Reader | 30s | Claude Sonnet | Extracts homeowner data via Vision API, TOC + article pages |
+| Detective | 180s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright (batched) |
 | Researcher | 120s | Claude Haiku | Builds dossiers with pattern analysis + home analysis |
-| Editor | 30s | Claude Haiku | Pipeline health, human messages, escalation handling |
-| Designer | 300s | Claude Haiku | Learns design patterns from training sources |
+| Editor | 5s | Claude Haiku | Event-driven pipeline health, human messages, escalation handling |
+| Designer | 600s | Claude Haiku | Learns design patterns from training sources |
+
+### Editor Event-Driven Model
+The Editor does NOT poll agents for status. Instead:
+1. **Event detection** — Monitors the shared activity log for milestone keywords (`loaded`, `match`, `dossier complete`, etc.)
+2. **Escalation handling** — Reads agent-written escalation files (e.g., `reader_escalations.json`)
+3. **Human messages** — Processes messages from the dashboard inbox immediately
+4. **Health checks** — Periodic full assessment every 300s
+5. **Cooldowns** — Minimum 30s between escalation responses, 90s between milestone responses
+6. **Verdict restrictions** — Editor ONLY overrides detective verdicts when explicitly instructed by a human. Leads are the Researcher's responsibility.
+
+### Researcher Investigation Pipeline
+1. Picks up non-`no_match` leads from `results.json` that haven't been investigated
+2. Gathers AD feature context from Supabase (all 14 fields)
+3. Builds investigation context: BB matches, DOJ snippets, AD appearance details
+4. Calls Claude Haiku with structured dossier prompt → JSON output
+5. Robust JSON parsing with brace-counting fallback for truncated responses
+6. Rates connection strength: HIGH / MEDIUM / LOW / COINCIDENCE
+7. COINCIDENCE results auto-dismissed via verdict override
+8. Saves dossier to `data/dossiers/{Name}.json` and master `all_dossiers.json`
 
 ### Agent Base Class (`src/agents/base.py`)
 - Async work loop with configurable interval
@@ -102,8 +121,17 @@ The system runs as 7 autonomous agents coordinated by an orchestrator:
 ### Orchestrator (`src/orchestrator.py`)
 - Launches all 7 agents as async tasks
 - Writes `status.json` every 5 seconds (merges live agent data with disk-based stats)
+- Overlays `editor_state` for dashboard sprite animation
+- Injects Researcher's live task into notable_finds for "investigating" status
 - Processes pause/resume commands from `data/agent_commands.json`
 - Graceful shutdown on SIGINT
+
+### Agent Status (`src/agent_status.py`)
+- Reads pipeline state from manifest, extractions, cross-references, dossiers
+- Pulls real-time feature counts from **Supabase** (source of truth, not local JSON)
+- Generates `status.json` for the Agent Office dashboard
+- Notable finds: filters out no_match names, shows xref verdict + research status
+- Confirmed associates: HIGH and MEDIUM dossier connections with names and rationale
 
 ### Dashboard Server (`src/dashboard_server.py`)
 - HTTP server for Agent Office frontend

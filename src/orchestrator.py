@@ -114,6 +114,9 @@ async def write_status(agents):
             agent_data["errors"] = live.get("errors", 0)
             if live.get("paused"):
                 agent_data["status"] = "paused"
+            # Overlay editor_state for sprite animation
+            if "editor_state" in live:
+                agent_data["editor_state"] = live["editor_state"]
 
     # Add editor and designer if not already present
     for extra in ["editor", "designer"]:
@@ -133,6 +136,15 @@ async def write_status(agents):
                     "deskItems": [],
                     "progress": live["progress"],
                 })
+
+    # Overlay Researcher's live task into notable_finds for "investigating" status
+    if "researcher" in live_agents:
+        r_task = live_agents["researcher"].get("message", "")
+        if "Investigating" in r_task:
+            investigating_name = r_task.split("Investigating ")[-1].split(" (")[0].lower().strip()
+            for find in status.get("notable_finds", []):
+                if find["name"].lower().strip().startswith(investigating_name[:8]):
+                    find["research"] = "investigating"
 
     # Add live activity log entries
     if os.path.exists(LOG_PATH):

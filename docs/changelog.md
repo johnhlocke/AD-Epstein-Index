@@ -6,6 +6,50 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 6)
+
+### Fixed — Researcher Agent (3 bugs)
+- **NoneType crash**: `black_book_matches` was `null` in results.json, causing `'NoneType' object is not iterable` when iterating. Fixed with `match.get("black_book_matches") or []`
+- **Supabase key**: Was using `SUPABASE_KEY` (doesn't exist) instead of `SUPABASE_ANON_KEY` in both `_find_ad_context()` and `_fetch_features_batch()`
+- **JSON parsing**: Increased `max_tokens` from 2048 to 4096, added brace-counting JSON extraction fallback for truncated Haiku responses
+
+### Fixed — Reader Agent (2 bugs)
+- **413 infinite loop**: Re-extraction crashes (413 Request Too Large) were uncaught, leaving queue items as "pending" forever. Added try/except in `_run_reextraction()` that marks items as failed on crash
+- **Pre-1988 crash loop**: Hardened `pdf_to_images()` and Reader's `work()` with try/except around subprocess/extraction calls
+
+### Fixed — Editor Agent (3 issues)
+- **Unauthorized verdict overrides**: Editor was dismissing detective leads (7 names including a BB match) before Researcher could investigate. Added explicit prompt restriction: only override verdicts when human instructs or Researcher rates COINCIDENCE
+- **Over-frequent Haiku calls**: Added minimum cooldowns — 30s for escalations, 90s for milestones, instant for human messages
+- **Quality report wrong path**: `_build_quality_report()` was looking in wrong directory. Fixed to read correct extraction path AND check Supabase for NULL homeowners
+
+### Changed — Dashboard Stats (Supabase-backed)
+- "Downloaded" → "Downloaded Issues" (now includes both `downloaded` + `extracted` manifest statuses = all issues with PDFs)
+- "Extracted" → "Extracted Issues" (pulls distinct issue count from Supabase, not local JSON)
+- "Features" now pulls total count from Supabase (source of truth)
+- Added "Confirmed" stat showing HIGH + MEDIUM connection strength dossier count
+- Right-click context menu on "Confirmed" stat shows names, strength, and rationale
+
+### Changed — Dashboard Editor Behavior
+- Editor sprite no longer walks to each agent saying "Report?" on every assessment (looked like soliciting)
+- Instead: Editor stays at desk during routine assessments, shows "thinking" pose
+- Event-driven visits: dashboard detects agent state changes (new task, error, status change) and queues editor visits to specific agents
+- `editorGatherReports()` now includes collab-glow on both editor and visited agent, with 90s cooldown
+- Behavior timer shortens (5-10s) when agents need attention, lengthens (35-55s) when idle
+
+### Changed — Notable Finds
+- Filters out names checked as `no_match` by Detective
+- Shows xref verdict status (likely_match, confirmed_match, etc.) with colored badges
+- Shows research status: "queued", "investigating", "dossier_complete" with animated indicators
+- Orchestrator overlays Researcher's live task for real-time "investigating" status
+
+### Progress
+- **Researcher operational**: First-ever dossier built (Yves Vidal → COINCIDENCE). 6 total dossiers built
+- **2 confirmed associates**: William Randolph Hearst (MEDIUM), Henri Samuel (MEDIUM — Black Book match)
+- **4 false positives dismissed**: Yves Vidal, Fernando Botero, Jiří Mucha, Botero (all COINCIDENCE)
+- **Pipeline stats**: 164 discovered → 80 downloaded → 15 extracted → 87 features in Supabase
+
+---
+
 ## 2026-02-08 (Session 5)
 
 ### Added — Multi-Agent System

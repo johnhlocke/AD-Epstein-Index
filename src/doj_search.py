@@ -27,6 +27,14 @@ HIGH_SIGNAL_KEYWORDS = {
     "butler", "housekeeper", "employee", "associate",
 }
 
+# Keywords suggesting the DOJ match is about a service worker / contractor, NOT a principal
+LOW_RELEVANCE_CONTEXT = {
+    "contractor", "construction", "invoice", "plumbing", "electrical",
+    "maintenance", "repair", "equipment", "supplies", "vendor",
+    "delivery", "installation", "permit", "building permit",
+    "landscaping", "painting", "flooring", "hvac", "roofing",
+}
+
 HONORIFICS = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "esq", "esq.", "phd"}
 
 
@@ -228,6 +236,7 @@ class DOJSearchClient:
                 )
                 result["confidence"] = confidence
                 result["confidence_rationale"] = rationale
+                result["snippets"] = [r.get("snippet", "") for r in top_results if r.get("snippet")]
                 result["search_successful"] = True
                 result["error"] = None
                 return result
@@ -382,7 +391,20 @@ class DOJSearchClient:
         # Check for high-signal keywords
         found_keywords = [kw for kw in HIGH_SIGNAL_KEYWORDS if kw in all_snippets]
 
+        # Check for low-relevance context (contractor, invoice, equipment, etc.)
+        found_low_relevance = [kw for kw in LOW_RELEVANCE_CONTEXT if kw in all_snippets]
+
+        # If snippets are dominated by contractor/vendor language, downgrade confidence
+        if found_low_relevance and not found_keywords:
+            low_context = ', '.join(found_low_relevance[:3])
+            if full_name_in_snippets:
+                return "low", f"Full name found but context suggests service/contractor role ({low_context}), not a personal connection"
+            return "low", f"Results reference {low_context} — likely a contractor/vendor, not a personal Epstein connection"
+
         if full_name_in_snippets and found_keywords:
+            # Even with high-signal keywords, downgrade if also contractor-context
+            if found_low_relevance:
+                return "medium", f"Full name with keywords ({', '.join(found_keywords[:3])}) but also contractor context ({', '.join(found_low_relevance[:2])})"
             return "high", f"Full name found with high-signal keywords: {', '.join(found_keywords[:3])}"
 
         if full_name_in_snippets:

@@ -53,6 +53,8 @@ Flag these indicators:
 - Short last name (<5 chars) in last_name_only match
 - DOJ returned 50+ results (likely matching common terms)
 - DOJ results present but no high-signal keyword context
+- **Non-person entities**: Name contains words like hotel, palace, resort, club, foundation, museum, etc. These are businesses/landmarks, not people. Auto-detected and flagged.
+- **Unrelated roles**: DOJ results mention roles like contractor, construction worker, electrician, driver, security guard. The DOJ match may be a different person (staff/worker on Epstein properties) rather than the AD homeowner.
 
 ## Failure Tracking
 - **Per-name**: After 3 failures on the same name, skip it (until Editor retries)

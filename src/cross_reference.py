@@ -37,6 +37,21 @@ SKIP_NAMES = {"anonymous", "unknown", "none", "n/a", "", "others", "and others",
               "house", "estate", "residence", "apartment", "villa", "palace",
               "design", "modern", "classic", "gallery"}
 
+# Words that indicate a name is a business, hotel, or landmark — not a person
+NON_PERSON_INDICATORS = {"hotel", "palace", "resort", "inn", "lodge", "manor",
+                         "club", "foundation", "museum", "gallery", "studio",
+                         "associates", "group", "corporation", "corp", "inc",
+                         "llc", "ltd", "company", "partners", "estate",
+                         "chateau", "castle", "tower", "plaza", "center",
+                         "institute", "academy", "church", "temple",
+                         "ranch", "farm", "vineyard", "winery"}
+
+# DOJ context keywords that suggest a person is staff/contractor, not a principal
+DOJ_UNRELATED_ROLES = {"contractor", "construction", "electrician", "plumber",
+                       "maintenance", "security", "guard", "driver", "chef",
+                       "housekeeper", "gardener", "landscaper", "painter",
+                       "carpenter", "mechanic", "worker", "employee", "staff"}
+
 # Minimum name length to search (avoids matching single first names like "Kevin")
 MIN_NAME_LENGTH = 2  # Must have at least first + last name
 
@@ -189,21 +204,44 @@ def _get_context(search_term, text, context_lines=5):
 
 
 def get_unchecked_features():
-    """Get features from Supabase that haven't been cross-referenced yet."""
-    # Get all features
+    """Get features from Supabase that haven't been cross-referenced yet.
+
+    Supabase is the source of truth. A feature is only considered "checked" if:
+    1. It has an entry in results.json (even with pending DOJ), OR
+    2. It has no homeowner_name / name is in SKIP_NAMES (nothing to check)
+
+    This prevents names from falling through the cracks if checked_features.json
+    got out of sync with results.json (e.g., crash between marking checked and
+    saving results).
+    """
+    # Get all features from Supabase (source of truth)
     result = supabase.table("features").select("*").execute()
     features = result.data
 
-    # Load existing cross-reference results
     os.makedirs(XREF_DIR, exist_ok=True)
-    checked_path = os.path.join(XREF_DIR, "checked_features.json")
-    if os.path.exists(checked_path):
-        with open(checked_path) as f:
-            checked_ids = set(json.load(f))
-    else:
-        checked_ids = set()
 
-    unchecked = [f for f in features if f["id"] not in checked_ids]
+    # Build set of feature IDs that have ANY entry in results.json
+    # (BB pass done, DOJ may still be pending — that's fine, DOJ pass handles it)
+    results_path = os.path.join(XREF_DIR, "results.json")
+    has_result_ids = set()
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            results = json.load(f)
+        for r in results:
+            has_result_ids.add(r["feature_id"])
+
+    # Features that don't need checking (no name or skip-listed)
+    skip_ids = set(
+        f["id"] for f in features
+        if not f.get("homeowner_name") or f["homeowner_name"].strip().lower() in SKIP_NAMES
+    )
+
+    truly_done = has_result_ids | skip_ids
+    unchecked = [f for f in features if f["id"] not in truly_done]
+
+    # Rebuild checked_ids to match reality
+    checked_ids = truly_done
+
     return unchecked, checked_ids
 
 
@@ -472,6 +510,13 @@ def _determine_verdict(bb_has_match, bb_best, doj_confidence, doj_total, fp_indi
     """Core verdict logic. Returns (verdict, confidence_score, rationale)."""
     has_fp_risk = len(fp_indicators) > 0
 
+    # Non-person entity (hotel, palace, resort, etc.) — downgrade to needs_review
+    # Always route through Researcher for final confirmation/dismissal
+    is_non_person = any("non-person entity" in ind for ind in fp_indicators)
+    if is_non_person:
+        return ("needs_review", 0.10,
+                "Name appears to be a business/hotel/landmark, not a person — routing to Researcher for confirmation")
+
     # Both strong: confirmed
     if bb_best in ("last_first",) and doj_confidence == "high":
         return ("confirmed_match", 0.95,
@@ -543,6 +588,12 @@ def detect_false_positive_indicators(name: str, bb_matches, doj_result) -> list:
 
     parts = name.strip().split()
     last_name = parts[-1].lower() if parts else ""
+    name_words = {w.lower() for w in parts}
+
+    # Non-person entity check (hotel, palace, resort, etc.)
+    entity_words = name_words & NON_PERSON_INDICATORS
+    if entity_words:
+        indicators.append(f"Name contains non-person entity words: {', '.join(entity_words)} — likely a business/hotel/landmark, not a person")
 
     # Common last name
     if last_name in COMMON_LAST_NAMES:
@@ -570,6 +621,13 @@ def detect_false_positive_indicators(name: str, bb_matches, doj_result) -> list:
             indicators.append(f"DOJ returned {total} results — likely matching common terms")
         if confidence == "low" and total > 0:
             indicators.append("DOJ results present but no high-signal keyword context")
+
+        # Check DOJ result snippets for unrelated-role context
+        snippets = doj_result.get("snippets", [])
+        snippet_text = " ".join(s.lower() for s in snippets if isinstance(s, str))
+        role_matches = DOJ_UNRELATED_ROLES & set(snippet_text.split())
+        if role_matches and confidence in ("low", "medium"):
+            indicators.append(f"DOJ results reference roles ({', '.join(role_matches)}) — name may be staff/contractor, not a principal")
 
     return indicators
 

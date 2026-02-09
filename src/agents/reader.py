@@ -271,7 +271,16 @@ class ReaderAgent(Agent):
         self.log(f"Re-extracting {identifier} with strategy: {strategy}")
 
         from extract_features import process_issue_reextract
-        output_path = await asyncio.to_thread(process_issue_reextract, issue, strategy)
+        try:
+            output_path = await asyncio.to_thread(process_issue_reextract, issue, strategy)
+        except Exception as e:
+            self.log(f"Re-extraction crashed for {identifier}: {e}", level="ERROR")
+            self._mark_reextraction_done(identifier, False, f"Crashed: {e}")
+            # Restore backup if it exists
+            if os.path.exists(backup_path):
+                shutil.copy2(backup_path, old_path)
+                self.log(f"Restored backup for {identifier}")
+            return None
 
         # If re-extraction failed and we have a backup, restore it
         if not output_path and os.path.exists(backup_path):
@@ -472,7 +481,11 @@ class ReaderAgent(Agent):
 
         # Run extraction in thread (blocking, takes minutes)
         from extract_features import process_issue
-        output_path = await asyncio.to_thread(process_issue, issue)
+        try:
+            output_path = await asyncio.to_thread(process_issue, issue)
+        except Exception as e:
+            output_path = None
+            self.log(f"Extraction crashed for {identifier}: {e}", level="ERROR")
 
         if not output_path:
             # Extraction returned None — record failure

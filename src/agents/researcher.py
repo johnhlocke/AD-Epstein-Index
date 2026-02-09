@@ -170,7 +170,7 @@ class ResearcherAgent(Agent):
         try:
             from supabase import create_client
             url = os.environ.get("SUPABASE_URL")
-            key = os.environ.get("SUPABASE_KEY")
+            key = os.environ.get("SUPABASE_ANON_KEY")
             if url and key:
                 sb = create_client(url, key)
                 resp = sb.table("features").select("*").eq("id", feature_id).execute()
@@ -234,7 +234,7 @@ class ResearcherAgent(Agent):
         try:
             from supabase import create_client
             url = os.environ.get("SUPABASE_URL")
-            key = os.environ.get("SUPABASE_KEY")
+            key = os.environ.get("SUPABASE_ANON_KEY")
             if url and key:
                 sb = create_client(url, key)
                 # Supabase IN filter
@@ -346,7 +346,7 @@ class ResearcherAgent(Agent):
     def _investigate_match(self, match, skills):
         """Build a dossier for a lead using Claude Haiku with full context + pattern analysis."""
         name = match.get("homeowner_name", "Unknown")
-        bb_matches = match.get("black_book_matches", [])
+        bb_matches = match.get("black_book_matches") or []
         doj_results = match.get("doj_results")
         feature_id = match.get("feature_id")
         combined_verdict = match.get("combined_verdict", "")
@@ -472,7 +472,24 @@ Connection strength guide:
 - HIGH: Multiple sources confirm (BB + DOJ), OR pattern correlations reinforce (shared designer/location with other matches), OR direct communication evidence
 - MEDIUM: Single strong source (exact BB match) with some pattern support, or DOJ-only match with relevant context
 - LOW: Weak match (last_name_only, common name) with no pattern support
-- COINCIDENCE: Almost certainly a false positive — name too common, no pattern connections, context doesn't fit
+- COINCIDENCE: Almost certainly a false positive — name too common, no pattern connections, context doesn't fit. **When you rate COINCIDENCE, the name will be automatically dismissed from the leads list.**
+
+**CRITICAL: Temporal impossibility check — do this FIRST.**
+Before any other analysis, check if the person could have possibly interacted with Jeffrey Epstein (born 1953, active 1990s-2008, arrested 2019):
+- If the person DIED before 1980, rate COINCIDENCE immediately. A person who died decades before Epstein's social prominence cannot be a personal associate. Examples: William Randolph Hearst (d. 1951), Henri de Toulouse-Lautrec (d. 1901).
+- If the person was born after 2000, they were too young to be an associate — rate COINCIDENCE.
+- If the AD article is a historic/retrospective feature about a property built in the 1800s or early 1900s, the homeowner is likely historical, not a contemporary Epstein associate.
+- DOJ results matching a historical figure's SURNAME (e.g., "Hearst" matching Hearst family/corporation) do NOT constitute evidence of a personal connection to the deceased individual.
+
+**CRITICAL: False positive identification is one of your most important jobs.**
+You are the last line of defense before a name reaches the human. Be aggressive about rating COINCIDENCE when:
+- The person is deceased and could not have interacted with Epstein (see temporal check above)
+- The name is a hotel, palace, resort, club, or other non-person entity (e.g., "Gritti Palace" is a hotel in Venice)
+- DOJ results reference a contractor, vendor, or service worker — not a personal associate (e.g., Peter Rogers appears in Epstein docs as a construction contractor, not a social connection)
+- The DOJ result context (invoices, equipment, permits, maintenance) has nothing to do with personal relationships
+- DOJ results match a DIFFERENT person with the same surname (e.g., "Vidal" matching Jose Luis Contreras-Vidal, not Yves Vidal)
+- A common name matched coincidentally with no supporting pattern evidence
+Your job is to confirm real leads AND eliminate false positives with equal confidence.
 
 Pattern evidence can UPGRADE strength:
 - Shared designer with another confirmed match → upgrade one tier
@@ -493,18 +510,53 @@ Build a thorough dossier. Be tenacious — dig into the patterns."""
 
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=2048,
+            max_tokens=4096,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
 
         text = response.content[0].text.strip()
+        # Strip markdown code blocks
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
-            if text.endswith("```"):
-                text = text[:-3]
+            if "```" in text:
+                text = text[:text.rindex("```")]
+            text = text.strip()
 
-        dossier = json.loads(text)
+        # Try direct parse first
+        try:
+            dossier = json.loads(text)
+        except json.JSONDecodeError:
+            # Extract first complete JSON object using brace counting
+            start = text.find("{")
+            if start == -1:
+                raise ValueError(f"No JSON object found in response: {text[:200]}")
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start, len(text)):
+                c = text[i]
+                if escape:
+                    escape = False
+                    continue
+                if c == "\\":
+                    escape = True
+                    continue
+                if c == '"' and not escape:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        dossier = json.loads(text[start:i+1])
+                        break
+            else:
+                raise ValueError(f"Incomplete JSON in response (truncated at max_tokens?): {text[-200:]}")
+
         dossier["investigated_at"] = datetime.now().isoformat()
         dossier["combined_verdict"] = combined_verdict
         return dossier
@@ -595,9 +647,30 @@ Build a thorough dossier. Be tenacious — dig into the patterns."""
         self._save_escalations(escalations)
         self.log(f"Escalated to Editor: {message}", level="WARN")
 
+    def _dismiss_as_no_match(self, name, rationale):
+        """Issue a verdict override to dismiss a name as no_match after investigation."""
+        from agents.base import update_json_locked
+        verdicts_path = os.path.join(DATA_DIR, "detective_verdicts.json")
+        override = {
+            "name": name,
+            "verdict": "no_match",
+            "reason": f"Researcher dismissed as COINCIDENCE: {rationale}",
+            "queued_by": "researcher",
+            "queued_time": datetime.now().isoformat(),
+            "applied": False,
+        }
+        update_json_locked(verdicts_path, lambda data: data.append(override), default=[])
+        self.log(f"Dismissed {name} as no_match (COINCIDENCE)")
+
     def _maybe_escalate_findings(self, name, dossier):
         """Escalate based on dossier findings."""
         strength = dossier.get("connection_strength", "").upper()
+
+        # COINCIDENCE — auto-dismiss via verdict override
+        if strength == "COINCIDENCE":
+            rationale = dossier.get("strength_rationale", "False positive confirmed by Researcher")
+            self._dismiss_as_no_match(name, rationale)
+            return  # No need to escalate
 
         # High-value lead
         if strength == "HIGH":

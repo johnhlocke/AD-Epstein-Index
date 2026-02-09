@@ -27,6 +27,9 @@ This file should be automatically updated when necessary to answer three key que
 | Add article author (byline) extraction | Phase 1 | Done |
 | Researcher: home analysis + failure tracking | Phase 2 | Done |
 | Agent Office real-time status fixes | Tooling | Done |
+| Researcher: dossier building + false positive detection | Phase 2 | Done |
+| Dashboard: Supabase-backed stats + confirmed associates | Tooling | Done |
+| Editor: event-driven behavior + verdict restrictions | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -64,7 +67,7 @@ This file should be automatically updated when necessary to answer three key que
 - `src/pipeline.py` — CLI orchestrator (`discover`, `download`, `extract`, `load`, `run`, `status`)
 - Pipeline tested end-to-end on 15+ issues
 - Extraction quality improvements: auto page offset detection, expanded TOC scanning (1-20 pages), nearby-page retry for NULLs, minimum 3 features per issue threshold, supplemental page scanning
-- 32 PDFs downloaded from archive.org (16 post-1988 usable issues)
+- 80 PDFs downloaded from archive.org (15 extracted into Supabase, 61 skipped pre-1988)
 
 ### Phase 2: Epstein Cross-Reference
 
@@ -84,7 +87,8 @@ This file should be automatically updated when necessary to answer three key que
 - Word-boundary matching prevents false positives (e.g., Bush≠Bushnell)
 - Detective two-pass system: BB (instant, local) → DOJ (batched, browser) with combined verdicts
 - Verdict system: `confirmed_match` / `likely_match` / `possible_match` / `no_match` / `needs_review`
-- Miranda Brooks is the only confirmed Black Book match so far
+- Miranda Brooks and Henri Samuel are Black Book matches
+- Researcher dossiers: 6 built, 2 confirmed associates (Hearst, Samuel), 4 false positives dismissed (Vidal, Botero, Mucha)
 
 **Researcher Dossier System:**
 - Researcher agent builds thorough dossiers on all flagged leads using Claude Haiku

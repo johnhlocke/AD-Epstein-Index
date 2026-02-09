@@ -78,3 +78,28 @@ Re-extractions take priority over normal extraction work.
 - After 3 consecutive failures across different issues, escalates `extraction_stuck`
 - Failed issues are skipped in `_find_next_issue()` to prevent infinite loops
 - All tracking persisted in `data/reader_log.json`
+
+
+## Update — 2026-02-08 22:26
+
+## Handling pdftoppm Failures
+When pdftoppm fails with a non-zero exit status on a specific PDF:
+1. Do NOT retry the same PDF immediately — mark it as `extraction_failed` and move to the next issue in the queue.
+2. Early Architectural Digest scans (pre-1950) may have format/quality issues that pdftoppm cannot handle. Skip these gracefully.
+3. After skipping a failed PDF, log the identifier so it can be retried later with manual intervention.
+4. The priority is throughput — there are 130+ PDFs waiting. Do not block the entire pipeline on one bad file.
+
+
+
+## Update — 2026-02-08 22:50
+
+
+## Known Issue: pdftoppm Crashes on Corrupt PDFs
+Some vintage PDFs (especially 1920s scans) cause `pdftoppm` to return non-zero exit status. Unlike extraction returning `None`, these crashes do NOT currently trigger the `extraction_error` auto-marking logic. The Reader will loop indefinitely on such PDFs.
+
+**Recommended fix:** In the extraction code, wrap the `pdftoppm` subprocess call in a try/except for `subprocess.CalledProcessError`. After 3 consecutive failures on the same identifier, mark the issue as `extraction_error` in the database and move on. This mirrors the existing self-heal behavior for extraction returning None.
+
+**Workaround until fixed:** The Editor or human must manually run:
+```sql
+UPDATE issues SET status = 'extraction_error' WHERE identifier = '<stuck_identifier>';
+```

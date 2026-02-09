@@ -41,6 +41,31 @@ def count_downloads():
     return len([f for f in os.listdir(ISSUES_DIR) if f.endswith(".pdf")])
 
 
+def read_supabase_stats():
+    """Read feature counts from Supabase (source of truth)."""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(BASE_DIR, ".env"))
+        from supabase import create_client
+        url = os.environ.get("SUPABASE_URL")
+        key = os.environ.get("SUPABASE_ANON_KEY")
+        if not url or not key:
+            return None
+        sb = create_client(url, key)
+        result = sb.table("features").select("id,homeowner_name,issue_id", count="exact").execute()
+        total = result.count or len(result.data)
+        with_name = sum(1 for r in result.data if r.get("homeowner_name"))
+        distinct_issues = len(set(r["issue_id"] for r in result.data if r.get("issue_id")))
+        return {
+            "total_features": total,
+            "with_homeowner": with_name,
+            "null_homeowners": total - with_name,
+            "distinct_issues": distinct_issues,
+        }
+    except Exception:
+        return None
+
+
 def read_manifest():
     """Read the archive manifest and return summary stats."""
     if not os.path.exists(MANIFEST_PATH):
@@ -52,7 +77,8 @@ def read_manifest():
     issues = manifest.get("issues", [])
     return {
         "total": len(issues),
-        "downloaded": sum(1 for i in issues if i.get("status") == "downloaded"),
+        "downloaded": sum(1 for i in issues if i.get("status") in ("downloaded", "extracted") and i.get("year", 0) >= 1988),
+        "extracted": sum(1 for i in issues if i.get("status") == "extracted"),
         "skipped": sum(1 for i in issues if i.get("status") == "skipped_pre1988"),
         "errors": sum(1 for i in issues if i.get("status") == "error"),
         "no_pdf": sum(1 for i in issues if i.get("status") == "no_pdf"),
@@ -111,7 +137,7 @@ def read_xref():
     """Read cross-reference results from results.json and return summary."""
     results_path = os.path.join(XREF_DIR, "results.json")
     if not os.path.exists(results_path):
-        return {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}}
+        return {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
     try:
         with open(results_path) as f:
             results = json.load(f)
@@ -124,39 +150,63 @@ def read_xref():
                     or r.get("black_book_status") == "match")
         # Verdict breakdown
         verdicts = {}
+        # Per-name lookup for notable finds
+        by_name = {}
         for r in results:
             v = r.get("combined_verdict", "no_match")
             verdicts[v] = verdicts.get(v, 0) + 1
-        return {"checked": checked, "matches": matches, "leads": leads, "verdicts": verdicts}
+            name = r.get("homeowner_name", "").lower().strip()
+            if name:
+                by_name[name] = {
+                    "verdict": v,
+                    "bb_status": r.get("black_book_status", "no_match"),
+                    "confidence": r.get("confidence_score", 0.0),
+                }
+        return {"checked": checked, "matches": matches, "leads": leads,
+                "verdicts": verdicts, "by_name": by_name}
     except Exception:
-        return {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}}
+        return {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
 
 
 def read_dossiers():
-    """Read dossier stats."""
+    """Read dossier stats and per-name results."""
+    empty = {"investigated": 0, "high": 0, "medium": 0, "low": 0, "by_name": {}}
     if not os.path.exists(DOSSIERS_DIR):
-        return {"investigated": 0, "high": 0, "medium": 0, "low": 0}
+        return empty
 
     master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
     if not os.path.exists(master_path):
-        return {"investigated": 0, "high": 0, "medium": 0, "low": 0}
+        return empty
 
     try:
         with open(master_path) as f:
             dossiers = json.load(f)
         strengths = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+        by_name = {}
+        confirmed_names = []
         for d in dossiers:
             s = d.get("connection_strength", "").upper()
             if s in strengths:
                 strengths[s] += 1
+            name = d.get("subject_name", "").strip()
+            if name:
+                by_name[name.lower()] = s.lower()
+            if s in ("HIGH", "MEDIUM") and name:
+                confirmed_names.append({
+                    "name": name,
+                    "strength": s.lower(),
+                    "rationale": (d.get("strength_rationale") or "")[:120],
+                })
         return {
             "investigated": len(dossiers),
             "high": strengths["HIGH"],
             "medium": strengths["MEDIUM"],
             "low": strengths["LOW"],
+            "by_name": by_name,
+            "confirmed_names": confirmed_names,
         }
     except Exception:
-        return {"investigated": 0, "high": 0, "medium": 0, "low": 0}
+        return empty
 
 
 def read_activity_log(max_lines=20):
@@ -503,7 +553,7 @@ def build_queue_depths(manifest_stats, extraction_stats, xref_stats):
     ]
 
 
-def build_now_processing(manifest_stats, extraction_stats, xref_stats):
+def build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_stats):
     """Infer what each agent is currently doing."""
     now = {}
     awaiting_download = (manifest_stats["total"]
@@ -542,6 +592,15 @@ def build_now_processing(manifest_stats, extraction_stats, xref_stats):
     else:
         now["detective"] = {"task": "Waiting for Reader", "active": False}
 
+    # Researcher
+    researcher_leads = xref_stats.get("leads", xref_stats.get("matches", 0))
+    if dossier_stats["investigated"] > 0:
+        now["researcher"] = {"task": f"{dossier_stats['investigated']} dossiers built", "active": dossier_stats["investigated"] < researcher_leads}
+    elif researcher_leads > 0:
+        now["researcher"] = {"task": f"{researcher_leads} leads to investigate", "active": True}
+    else:
+        now["researcher"] = {"task": "Waiting for Detective leads", "active": False}
+
     # Editor
     editor_briefing = read_editor_briefing()
     if editor_briefing:
@@ -575,10 +634,27 @@ CELEBRITY_NAMES = [
 ]
 
 
-def build_notable_finds(extraction_stats, xref_stats):
-    """Scan features for notable/celebrity names and Epstein matches."""
+def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, researcher_live_task=""):
+    """Scan features for notable/celebrity names and Epstein matches.
+
+    Names that have been checked by the Detective and found to be no_match
+    are removed. Names with matches are shown with their verdict.
+    Research status shows whether the Researcher is investigating each lead.
+    """
     finds = []
     seen = set()
+    by_name = xref_stats.get("by_name", {})
+    dossier_by_name = (dossier_stats or {}).get("by_name", {})
+
+    # Parse Researcher's current task to find who's being investigated right now
+    investigating_now = ""
+    if researcher_live_task:
+        # Format: "Investigating Name (verdict)..." or "Dossier: Name (strength)"
+        lt = researcher_live_task.lower()
+        if "investigating" in lt:
+            investigating_now = researcher_live_task.split("Investigating ")[-1].split(" (")[0].lower().strip()
+        elif "dossier:" in lt:
+            investigating_now = researcher_live_task.split("Dossier: ")[-1].split(" (")[0].lower().strip()
 
     for feat in extraction_stats.get("feature_list", []):
         name = feat.get("homeowner_name")
@@ -591,6 +667,11 @@ def build_notable_finds(extraction_stats, xref_stats):
             continue
         seen.add(key)
 
+        # Check xref status — skip names already cleared as no_match
+        xref_entry = by_name.get(key)
+        if xref_entry and xref_entry["verdict"] == "no_match" and xref_entry["bb_status"] == "no_match":
+            continue  # Cleared by Detective — remove from notable finds
+
         location_parts = [
             feat.get("location_city"),
             feat.get("location_state"),
@@ -598,17 +679,42 @@ def build_notable_finds(extraction_stats, xref_stats):
         ]
         location = ", ".join(p for p in location_parts if p)
 
-        # Check if celebrity
-        name_lower = name.lower()
-        is_celebrity = any(celeb in name_lower for celeb in CELEBRITY_NAMES)
+        # Determine type: Epstein match > celebrity > notable
+        if xref_entry and xref_entry["verdict"] not in ("no_match", None):
+            find_type = "epstein_match"
+            status = xref_entry["verdict"]
+        elif any(celeb in key for celeb in CELEBRITY_NAMES):
+            find_type = "celebrity"
+            status = "pending" if not xref_entry else "cleared"
+        else:
+            continue  # Not a celebrity and not an Epstein match — skip
 
-        if is_celebrity:
-            finds.append({
-                "name": name,
-                "issue": feat.get("issue", ""),
-                "location": location,
-                "type": "celebrity",
-            })
+        if status == "cleared":
+            continue  # Celebrity checked and cleared
+
+        # Determine research status
+        if key in dossier_by_name:
+            research = "dossier_complete"
+            research_detail = dossier_by_name[key]  # connection strength
+        elif investigating_now and key.startswith(investigating_now[:8]):
+            research = "investigating"
+            research_detail = None
+        elif find_type == "epstein_match":
+            research = "queued"
+            research_detail = None
+        else:
+            research = None
+            research_detail = None
+
+        finds.append({
+            "name": name,
+            "issue": feat.get("issue", ""),
+            "location": location,
+            "type": find_type,
+            "status": status,
+            "research": research,
+            "research_detail": research_detail,
+        })
 
     # Sort: epstein matches first, then celebrities
     type_order = {"epstein_match": 0, "celebrity": 1, "notable": 2}
@@ -648,6 +754,10 @@ def generate_status():
     xref_stats = read_xref()
     dossier_stats = read_dossiers()
     download_count = count_downloads()
+    supabase_stats = read_supabase_stats()
+
+    # Count confirmed Epstein associates from dossiers
+    confirmed_associates = dossier_stats.get("high", 0) + dossier_stats.get("medium", 0)
 
     # Determine statuses
     scout_status = "working" if 0 < manifest_stats["total"] < TOTAL_EXPECTED_ISSUES else (
@@ -770,7 +880,7 @@ def generate_status():
                 "message": reader_msg,
                 "color": "#2ecc71",
                 "deskItems": ["book", "pencil"],
-                "progress": {"current": extraction_stats["extracted"], "total": manifest_stats["downloaded"]}
+                "progress": {"current": supabase_stats["distinct_issues"] if supabase_stats else manifest_stats.get("extracted", extraction_stats["extracted"]), "total": manifest_stats["downloaded"]}
             },
             {
                 "id": "detective",
@@ -780,7 +890,7 @@ def generate_status():
                 "message": detective_msg,
                 "color": "#9b59b6",
                 "deskItems": ["detective-hat", "clipboard"],
-                "progress": {"current": xref_stats["checked"], "total": extraction_stats["features"]}
+                "progress": {"current": xref_stats["checked"], "total": supabase_stats["total_features"] if supabase_stats else extraction_stats["features"]}
             },
             {
                 "id": "researcher",
@@ -815,19 +925,20 @@ def generate_status():
         ],
         "stats": [
             {"label": "Discovered", "value": manifest_stats["total"], "total": TOTAL_EXPECTED_ISSUES},
-            {"label": "Downloaded", "value": manifest_stats["downloaded"]},
-            {"label": "Extracted", "value": extraction_stats["extracted"]},
-            {"label": "Features", "value": extraction_stats["features"]},
+            {"label": "Downloaded Issues", "value": manifest_stats["downloaded"]},
+            {"label": "Extracted Issues", "value": supabase_stats["distinct_issues"] if supabase_stats else manifest_stats.get("extracted", extraction_stats["extracted"])},
+            {"label": "Features", "value": supabase_stats["total_features"] if supabase_stats else extraction_stats["features"]},
             {"label": "XRef Leads", "value": xref_stats.get("leads", xref_stats.get("matches", 0))},
-            {"label": "Dossiers", "value": dossier_stats["investigated"]}
+            {"label": "Dossiers", "value": dossier_stats["investigated"]},
+            {"label": "Confirmed", "value": confirmed_associates, "details": dossier_stats.get("confirmed_names", [])},
         ],
         "collaborations": build_collaborations(manifest_stats, extraction_stats, xref_stats),
         "log": build_log(manifest_stats, extraction_stats, xref_stats),
         "pipeline": build_pipeline(manifest_stats, extraction_stats, xref_stats, dossier_stats),
         "queue_depths": build_queue_depths(manifest_stats, extraction_stats, xref_stats),
-        "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats),
+        "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_stats),
         "editor_inbox": read_combined_inbox(),
-        "notable_finds": build_notable_finds(extraction_stats, xref_stats),
+        "notable_finds": build_notable_finds(extraction_stats, xref_stats, dossier_stats),
         "quality": build_quality(extraction_stats),
         "throughput": throughput,
         "cost": cost_data,

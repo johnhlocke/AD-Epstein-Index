@@ -104,6 +104,14 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
+.top-stat.has-details {
+  cursor: context-menu;
+  border-color: rgba(245,200,66,0.5);
+}
+.top-stat.has-details:hover {
+  border-color: var(--gold);
+  background: rgba(245,200,66,0.08);
+}
 
 /* ── Left Panel ── */
 .panel-left {
@@ -220,12 +228,12 @@ body {
   overflow-y: auto;
 }
 .inbox-msg {
-  padding: 6px 8px;
-  margin-bottom: 5px;
+  padding: 5px 7px;
+  margin-bottom: 4px;
   background: rgba(245,200,66,0.04);
   border-left: 3px solid var(--gold-dark);
-  font-size: 14px;
-  line-height: 1.7;
+  font-size: 10px;
+  line-height: 1.6;
 }
 .inbox-msg.alert {
   border-left-color: #e74c3c;
@@ -233,7 +241,7 @@ body {
 }
 .inbox-msg-time {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: 9px;
   margin-bottom: 2px;
 }
 .inbox-msg-text {
@@ -246,6 +254,14 @@ body {
 .inbox-msg.human .inbox-msg-time::before {
   content: 'YOU  ';
   color: #3498db;
+}
+.inbox-msg.reply {
+  border-left-color: #2ecc71;
+  background: rgba(46,204,113,0.08);
+}
+.inbox-msg.reply .inbox-msg-time::before {
+  content: 'EDITOR  ';
+  color: #2ecc71;
 }
 .inbox-empty {
   font-size: 6px;
@@ -373,9 +389,15 @@ body {
   margin-bottom: 5px;
   background: rgba(255,255,255,0.02);
   border-left: 3px solid #555;
+  transition: all 0.4s ease;
 }
 .find-card.celebrity { border-left-color: var(--gold); }
-.find-card.epstein_match { border-left-color: #e74c3c; }
+.find-card.epstein_match { border-left-color: #e74c3c; background: rgba(231,76,60,0.06); }
+.find-card.epstein_match.new-find { animation: findPulse 1.5s ease 2; }
+@keyframes findPulse {
+  0%, 100% { background: rgba(231,76,60,0.06); }
+  50% { background: rgba(231,76,60,0.18); }
+}
 .find-name {
   font-size: 8px;
   color: var(--text);
@@ -386,6 +408,47 @@ body {
 .find-meta {
   font-size: 7px;
   color: var(--text-dim);
+}
+.find-status {
+  font-size: 6px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 2px;
+}
+.find-status.pending { color: #888; }
+.find-status.pending::before { content: '\25CB '; }
+.find-status.likely_match { color: #e67e22; }
+.find-status.likely_match::before { content: '\25CF '; }
+.find-status.confirmed_match { color: #e74c3c; }
+.find-status.confirmed_match::before { content: '\25CF '; }
+.find-status.possible_match { color: #f1c40f; }
+.find-status.possible_match::before { content: '\25CB '; }
+.find-status.needs_review { color: #3498db; }
+.find-status.needs_review::before { content: '? '; }
+.find-research {
+  font-size: 6px;
+  font-weight: 500;
+  letter-spacing: 0.3px;
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.find-research.research-active {
+  color: #e67e22;
+  background: rgba(230,126,34,0.12);
+  animation: researchPulse 2s ease infinite;
+}
+@keyframes researchPulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+.find-research.research-done {
+  color: #2ecc71;
+  background: rgba(46,204,113,0.12);
+}
+.find-research.research-queued {
+  color: #666;
+  background: rgba(255,255,255,0.04);
 }
 
 /* ══════════════════════════════════════
@@ -770,14 +833,13 @@ body {
 /* ── Collaboration Glow — traces sprite silhouette in initiator's color ── */
 .agent-char.collab-glow {
   filter:
-    drop-shadow(0 0 6px var(--glow-color, #f5c842))
-    drop-shadow(0 0 14px var(--glow-color, #f5c842))
-    drop-shadow(0 0 28px var(--glow-color, #f5c842))
-    drop-shadow(0 0 42px var(--glow-color, #f5c842));
+    drop-shadow(0 0 3px var(--glow-color, #f5c842))
+    drop-shadow(0 0 7px var(--glow-color, #f5c842))
+    drop-shadow(0 0 14px var(--glow-color, #f5c842));
   animation: collab-glow-pulse 1.2s ease-in-out infinite;
 }
 @keyframes collab-glow-pulse {
-  0%, 100% { opacity: 0.75; }
+  0%, 100% { opacity: 0.8; }
   50% { opacity: 1; }
 }
 
@@ -1396,6 +1458,14 @@ function init() {
   document.getElementById('inbox-input').addEventListener('keydown', (e) => {
     if (e.key === 'Enter') sendInboxMessage();
   });
+  // Track user scroll in inbox to avoid forced auto-scroll to top
+  const inboxScroll = document.querySelector('.inbox-scroll') || document.getElementById('inbox-content');
+  if (inboxScroll) {
+    inboxScroll.addEventListener('scroll', function() {
+      // User has scrolled away from top (reading older messages)
+      this._userScrolled = this.scrollTop > 80;
+    });
+  }
 }
 
 function initBackground() {
@@ -1625,7 +1695,11 @@ function updateAgent(agentData) {
           updateSpeechBubble('editor', 'Got it! Instructions acknowledged.');
           break;
         case 'assessing':
-          if (!editorBusy) editorGatherReports();
+          // Editor reviews at desk — no walking around. Visits happen via behavior loop.
+          if (!editorBusy) {
+            editorSetSprite('tap');
+            updateSpeechBubble('editor', 'Reviewing reports...');
+          }
           break;
         case 'monitoring':
           // Stay in current idle pose
@@ -1809,11 +1883,60 @@ function renderTopStats(stats) {
   }
   container.innerHTML = stats.map(s => {
     const display = s.total ? `${s.value}/${s.total}` : String(s.value);
-    return `<div class="top-stat">
+    const hasDetails = s.details && s.details.length > 0;
+    const cls = hasDetails ? 'top-stat has-details' : 'top-stat';
+    return `<div class="${cls}" ${hasDetails ? `data-details='${JSON.stringify(s.details).replace(/'/g, "&#39;")}'` : ''}>
       <span class="top-stat-value">${escHtml(display)}</span>
       <span class="top-stat-label">${escHtml(s.label)}</span>
     </div>`;
   }).join('');
+
+  // Attach right-click handler to stats with details
+  container.querySelectorAll('.has-details').forEach(el => {
+    el.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      const details = JSON.parse(el.dataset.details);
+      showStatPopup(e, details);
+    });
+  });
+}
+
+/** Show a popup with stat details near the cursor. */
+function showStatPopup(event, details) {
+  // Remove any existing popup
+  const old = document.getElementById('stat-popup');
+  if (old) old.remove();
+
+  const popup = document.createElement('div');
+  popup.id = 'stat-popup';
+  popup.style.cssText = `
+    position: fixed; z-index: 9999;
+    left: ${event.clientX + 4}px; top: ${event.clientY + 4}px;
+    background: #1a0e2e; border: 2px solid var(--gold);
+    padding: 12px 16px; min-width: 220px; max-width: 400px;
+    font-family: 'Press Start 2P', monospace;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.6);
+  `;
+
+  let html = '<div style="font-size:8px; color:var(--gold); margin-bottom:10px; letter-spacing:1px;">CONFIRMED ASSOCIATES</div>';
+  if (details.length === 0) {
+    html += '<div style="font-size:8px; color:var(--text-dim);">None yet</div>';
+  } else {
+    for (const d of details) {
+      const color = d.strength === 'high' ? '#e74c3c' : '#e67e22';
+      html += `<div style="margin-bottom:8px; padding:6px 8px; border-left:3px solid ${color}; background:rgba(255,255,255,0.03);">
+        <div style="font-size:9px; color:var(--text);">${escHtml(d.name)}</div>
+        <div style="font-size:7px; color:${color}; margin-top:3px; text-transform:uppercase;">${escHtml(d.strength)} connection</div>
+        <div style="font-size:7px; color:var(--text-dim); margin-top:3px; line-height:1.5;">${escHtml(d.rationale)}</div>
+      </div>`;
+    }
+  }
+  popup.innerHTML = html;
+  document.body.appendChild(popup);
+
+  // Close on any click
+  const close = () => { popup.remove(); document.removeEventListener('click', close); };
+  setTimeout(() => document.addEventListener('click', close), 100);
 }
 
 // ══════════════════════════════════════
@@ -1884,6 +2007,7 @@ function renderInbox(messages) {
     const isHuman = m.sender === 'human';
     let cls = 'inbox-msg';
     if (isHuman) cls += ' human';
+    else if (m.is_reply) cls += ' reply';
     else if (m.type === 'alert') cls += ' alert';
     const opacity = m.pending ? ' style="opacity:0.6"' : '';
     return `<div class="${cls}"${opacity}>
@@ -1891,6 +2015,12 @@ function renderInbox(messages) {
       <div class="inbox-msg-text">${escHtml(m.text || '')}</div>
     </div>`;
   }).join('');
+
+  // Auto-scroll to top (newest messages are first) unless user has scrolled down
+  const scrollParent = container.closest('.inbox-scroll') || container;
+  if (!scrollParent._userScrolled || scrollParent.scrollTop < 80) {
+    scrollParent.scrollTop = 0;
+  }
 }
 
 async function sendInboxMessage() {
@@ -1935,7 +2065,7 @@ function renderNowProcessing(now) {
     container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">Idle</div>';
     return;
   }
-  const agentColors = { editor: '#f5c842', scout: '#e74c3c', courier: '#3498db', reader: '#2ecc71', detective: '#9b59b6', designer: '#e91e63' };
+  const agentColors = { editor: '#f5c842', scout: '#e74c3c', courier: '#3498db', reader: '#2ecc71', detective: '#9b59b6', researcher: '#e67e22', designer: '#e91e63' };
   container.innerHTML = Object.entries(now).map(([id, info]) => {
     const color = agentColors[id] || '#888';
     const activeClass = info.active ? ' active' : '';
@@ -1967,7 +2097,7 @@ function renderLogFiltered() {
     container.innerHTML = '<div class="log-entry"><span class="log-event">No activity yet...</span></div>';
     return;
   }
-  const agentColors = { Editor: '#f5c842', Scout: '#e74c3c', Courier: '#3498db', Reader: '#2ecc71', Detective: '#9b59b6', Designer: '#e91e63' };
+  const agentColors = { Editor: '#f5c842', Scout: '#e74c3c', Courier: '#3498db', Reader: '#2ecc71', Detective: '#9b59b6', Researcher: '#e67e22', Designer: '#e91e63' };
   container.innerHTML = filtered.map(entry => {
     const color = agentColors[entry.agent] || 'var(--gold)';
     return `<div class="log-entry">
@@ -1978,20 +2108,46 @@ function renderLogFiltered() {
   }).join('');
 }
 
+const _prevFinds = new Set();
 function renderNotableFinds(finds) {
   const container = document.getElementById('finds-content');
   if (!finds || !finds.length) {
     container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No notable finds yet</div>';
     return;
   }
+  const currentKeys = new Set(finds.map(f => f.name));
   container.innerHTML = finds.map(f => {
     const typeClass = f.type || '';
+    const isNew = !_prevFinds.has(f.name) && _prevFinds.size > 0;
     const meta = [f.issue, f.location].filter(Boolean).join(' \u00B7 ');
-    return `<div class="find-card ${typeClass}">
+    const status = f.status || '';
+    const statusLabel = status === 'pending' ? 'Awaiting check'
+      : status === 'likely_match' ? 'LIKELY MATCH'
+      : status === 'confirmed_match' ? 'CONFIRMED MATCH'
+      : status === 'possible_match' ? 'Possible match'
+      : status === 'needs_review' ? 'Needs review'
+      : '';
+    const research = f.research || '';
+    const researchLabel = research === 'investigating' ? 'Researcher investigating...'
+      : research === 'dossier_complete' ? `Dossier: ${f.research_detail || 'complete'}`
+      : research === 'queued' ? 'Queued for research'
+      : '';
+    const researchClass = research === 'investigating' ? 'research-active'
+      : research === 'dossier_complete' ? 'research-done'
+      : research === 'queued' ? 'research-queued'
+      : '';
+    return `<div class="find-card ${typeClass}${isNew ? ' new-find' : ''}">
       <div class="find-name">${escHtml(f.name)}</div>
       ${meta ? `<div class="find-meta">${escHtml(meta)}</div>` : ''}
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        ${statusLabel ? `<div class="find-status ${status}">${statusLabel}</div>` : ''}
+        ${researchLabel ? `<div class="find-research ${researchClass}">${researchLabel}</div>` : ''}
+      </div>
     </div>`;
   }).join('');
+  // Track for next render — detect new arrivals
+  _prevFinds.clear();
+  currentKeys.forEach(k => _prevFinds.add(k));
 }
 
 function renderQuality(quality) {
@@ -2559,6 +2715,13 @@ async function editorVisitAgent(agentId) {
   if (!target) { editorBusy = false; return; }
   const cfg = AGENT_CONFIG.editor;
 
+  // Glow both editor and target agent with the agent's color
+  const agentColor = target.color || '#f5c842';
+  const editorChar = document.getElementById('char-editor');
+  const targetChar = document.getElementById('char-' + agentId);
+  if (editorChar) { editorChar.style.setProperty('--glow-color', agentColor); editorChar.classList.add('collab-glow'); }
+  if (targetChar) { targetChar.style.setProperty('--glow-color', agentColor); targetChar.classList.add('collab-glow'); }
+
   // Determine direction
   const goingUp = target.homeY < cfg.homeY;
 
@@ -2573,7 +2736,10 @@ async function editorVisitAgent(agentId) {
   updateSpeechBubble('editor', `Checking in with ${agentId}...`);
   await sleep(2000);
 
-  // Walk back home
+  // Walk back home, remove glow
+  if (editorChar) { editorChar.classList.remove('collab-glow'); editorChar.style.removeProperty('--glow-color'); }
+  if (targetChar) { targetChar.classList.remove('collab-glow'); targetChar.style.removeProperty('--glow-color'); }
+
   const goingHome = cfg.homeY > target.homeY;
   editorSetSprite(goingHome ? 'front' : 'back');
   moveAgentTo('editor', cfg.homeX, cfg.homeY, goingHome);
@@ -2585,12 +2751,18 @@ async function editorVisitAgent(agentId) {
 }
 
 /** Gather reports — visit all workers in sequence (triggered by working status). */
+let lastGatherTime = 0;
 async function editorGatherReports() {
   if (editorBusy) return;
+  // Cooldown: don't gather more than once every 90 seconds
+  const now = Date.now();
+  if (now - lastGatherTime < 90000) return;
+  lastGatherTime = now;
   editorBusy = true;
 
   const workers = ['scout', 'courier', 'reader', 'detective'];
   const cfg = AGENT_CONFIG.editor;
+  const editorChar = document.getElementById('char-editor');
 
   updateSpeechBubble('editor', 'Time for status reports!');
   await sleep(1000);
@@ -2598,6 +2770,12 @@ async function editorGatherReports() {
   for (const agentId of workers) {
     const target = AGENT_CONFIG[agentId];
     if (!target) continue;
+
+    // Glow both editor and target agent
+    const agentColor = target.color || '#f5c842';
+    const targetChar = document.getElementById('char-' + agentId);
+    if (editorChar) { editorChar.style.setProperty('--glow-color', agentColor); editorChar.classList.add('collab-glow'); }
+    if (targetChar) { targetChar.style.setProperty('--glow-color', agentColor); targetChar.classList.add('collab-glow'); }
 
     // Walk toward this agent's row
     const goingUp = target.homeY < cfg.homeY;
@@ -2610,6 +2788,10 @@ async function editorGatherReports() {
     editorSetSprite('front');
     updateSpeechBubble('editor', `Report, ${agentId}?`);
     await sleep(1500);
+
+    // Remove glow before moving to next
+    if (editorChar) { editorChar.classList.remove('collab-glow'); editorChar.style.removeProperty('--glow-color'); }
+    if (targetChar) { targetChar.classList.remove('collab-glow'); targetChar.style.removeProperty('--glow-color'); }
   }
 
   // Return home
@@ -2630,29 +2812,67 @@ function initEditorBehavior() {
 
 /** Schedule the next random behavior after a random delay. */
 function scheduleEditorBehavior() {
-  const delay = 5000 + Math.random() * 8000; // 5–13 seconds
+  // Shorter delay if there are queued visits (agents waiting for attention)
+  const hasQueue = _editorVisitQueue.length > 0;
+  const delay = hasQueue
+    ? 5000 + Math.random() * 5000    // 5-10s when agents need attention
+    : 35000 + Math.random() * 20000; // 35-55s when idle
   editorBehaviorTimer = setTimeout(doEditorBehavior, delay);
 }
 
-/** Pick and execute a random editor behavior. */
+/** Track previous agent states for change detection. */
+let _prevAgentSnapshots = {};
+let _editorVisitQueue = [];
+
+/** Detect which agent had a meaningful state change and queue a visit. */
+function detectAgentChanges() {
+  if (!currentState?.agents) return;
+  const workers = ['scout', 'courier', 'reader', 'detective', 'researcher'];
+  for (const agentId of workers) {
+    const agent = currentState.agents.find(a => a.id === agentId);
+    if (!agent) continue;
+    const prev = _prevAgentSnapshots[agentId];
+    const curr = {
+      status: agent.status,
+      liveTask: agent.liveTask || agent.message || '',
+      errors: agent.errors || 0,
+    };
+    if (prev) {
+      // Visit if: agent started working, got a new error, or has a new liveTask
+      const becameActive = prev.status !== 'working' && curr.status === 'working';
+      const newError = curr.errors > prev.errors;
+      const newTask = curr.liveTask !== prev.liveTask && curr.liveTask;
+      if (becameActive || newError || newTask) {
+        // Don't queue duplicates
+        if (!_editorVisitQueue.includes(agentId)) {
+          _editorVisitQueue.push(agentId);
+        }
+      }
+    }
+    _prevAgentSnapshots[agentId] = curr;
+  }
+}
+
+/** Pick and execute a random editor behavior based on current state. */
 async function doEditorBehavior() {
   if (editorBusy) {
     scheduleEditorBehavior();
     return;
   }
 
-  const roll = Math.random();
-  if (roll < 0.25) {
-    await editorTapFoot();
-  } else if (roll < 0.40) {
-    await editorCheckWatch();
-  } else if (roll < 0.65) {
-    await editorPatrol();
+  // Check for queued agent visits (event-driven)
+  detectAgentChanges();
+  if (_editorVisitQueue.length > 0) {
+    const agentId = _editorVisitQueue.shift();
+    await editorVisitAgent(agentId);
   } else {
-    // Visit a random worker
-    const workers = ['scout', 'courier', 'reader', 'detective'];
-    const pick = workers[Math.floor(Math.random() * workers.length)];
-    await editorVisitAgent(pick);
+    // Idle: stay in center, occasional subtle animation
+    const roll = Math.random();
+    if (roll < 0.50) {
+      await editorTapFoot();
+    } else {
+      await editorCheckWatch();
+    }
   }
 
   scheduleEditorBehavior();

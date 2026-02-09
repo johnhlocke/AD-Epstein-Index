@@ -53,7 +53,7 @@ MAX_SEARCH_ATTEMPTS = 5  # After this many failures, stop trying until manual re
 
 class ScoutAgent(Agent):
     def __init__(self):
-        super().__init__("scout", interval=900)
+        super().__init__("scout", interval=60)
         self._cycle_count = 0
         self._search_attempts = {}  # "YYYY-MM" -> {"attempts": N, "last_searched": ISO}
         self._recent_strategy_results = []  # Track last N strategy outcomes for escalation

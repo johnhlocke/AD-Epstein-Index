@@ -1,11 +1,11 @@
 """
 Editor Agent — LLM-powered pipeline supervisor.
 
-Calls Claude Haiku for strategic reasoning about pipeline health.
+Calls Claude Opus for strategic reasoning about pipeline health.
 Reads situation reports from all agents, writes briefings for the human,
 and reads directives from the human inbox.
 
-Interval: 45s — cheap Haiku calls (~$0.03/hour).
+Interval: 45s.
 """
 
 import asyncio
@@ -28,9 +28,9 @@ REEXTRACT_QUEUE_PATH = os.path.join(DATA_DIR, "reader_reextract_queue.json")
 MAX_MESSAGES = 50
 MAX_MEMORY_ENTRIES = 100
 
-# Haiku pricing per 1M tokens (as of 2025)
-HAIKU_INPUT_COST_PER_1M = 0.80   # $0.80/1M input tokens
-HAIKU_OUTPUT_COST_PER_1M = 4.00  # $4.00/1M output tokens
+# Opus pricing per 1M tokens (as of 2025)
+HAIKU_INPUT_COST_PER_1M = 15.00   # $15/1M input tokens
+HAIKU_OUTPUT_COST_PER_1M = 75.00  # $75/1M output tokens
 
 
 class EditorAgent(Agent):
@@ -43,9 +43,12 @@ class EditorAgent(Agent):
         self.workers = workers or {}
         self._last_assessment = None
         self._last_haiku_time = 0
-        self._haiku_interval = 45  # Regular assessment every 45s
+        self._health_check_interval = 300  # Safety net health check every 5 minutes
+        self._last_escalation_snapshot = {}  # Track seen escalation counts per agent
+        self._last_log_line_count = 0  # Track activity log length for milestone detection
         self._client = None
         self._editor_state = "idle"  # idle, monitoring, listening, assessing, happy
+        self._happy_until = 0  # Timestamp until which "happy" state persists
         self._api_calls = 0
         self._total_input_tokens = 0
         self._total_output_tokens = 0
@@ -151,47 +154,134 @@ class EditorAgent(Agent):
     # ── Quality Control ────────────────────────────────────
 
     def _build_quality_report(self):
-        """Scan extractions for quality issues. Returns dict for the situation report."""
-        report = {"null_homeowners": [], "low_quality_issues": [], "total_features": 0}
+        """Audit Supabase (source of truth) for data quality issues.
 
-        extractions_dir = os.path.join(DATA_DIR, "..", "extractions")
-        if not os.path.exists(extractions_dir):
-            return report
+        Checks for:
+        - NULL homeowner_name entries (should be deleted or re-extracted)
+        - Exact duplicates (same name + same issue_id)
+        - Near-duplicates (similar names in the same issue)
+        - Issues with high null rates that need re-extraction
+        """
+        report = {
+            "total_features": 0,
+            "supabase_nulls": [],
+            "duplicates": [],
+            "near_duplicates": [],
+            "issues_needing_reextraction": [],
+            "issue_identifier_map": {},  # issue_id → archive.org identifier
+        }
 
-        for issue_dir in os.listdir(extractions_dir):
-            features_path = os.path.join(extractions_dir, issue_dir, "features.json")
-            if not os.path.exists(features_path):
-                continue
-            try:
-                with open(features_path) as f:
-                    features = json.load(f)
-            except Exception:
-                continue
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            from supabase import create_client
+            sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
 
-            if not isinstance(features, list):
-                continue
+            # Get all features from Supabase
+            all_features = sb.table("features").select("id,homeowner_name,article_title,issue_id,page_number").execute()
+            features = all_features.data
+            report["total_features"] = len(features)
 
-            report["total_features"] += len(features)
-            for feat in features:
-                name = feat.get("homeowner_name")
-                if not name or name.lower() in ("null", "none", "unknown"):
-                    report["null_homeowners"].append({
-                        "issue": issue_dir,
-                        "page": feat.get("pdf_page_number"),
-                        "article": feat.get("article_title", "?"),
+            # Get issues for identifier mapping
+            all_issues = sb.table("issues").select("id,month,year").execute()
+            issue_map = {row["id"]: row for row in all_issues.data}
+
+            # Build identifier map (issue_id → archive.org identifier)
+            manifest_path = os.path.join(DATA_DIR, "archive_manifest.json")
+            if os.path.exists(manifest_path):
+                with open(manifest_path) as f:
+                    manifest = json.load(f)
+                for item in manifest.get("issues", []):
+                    m, y = item.get("month"), item.get("year")
+                    if m and y:
+                        for iid, iss in issue_map.items():
+                            if iss.get("month") == m and iss.get("year") == y:
+                                report["issue_identifier_map"][str(iid)] = item["identifier"]
+
+            # 1. NULL homeowner_name
+            for f in features:
+                name = f.get("homeowner_name")
+                if not name or str(name).lower() in ("null", "none", "unknown"):
+                    iss = issue_map.get(f["issue_id"], {})
+                    identifier = report["issue_identifier_map"].get(str(f["issue_id"]), "?")
+                    report["supabase_nulls"].append({
+                        "id": f["id"],
+                        "issue_id": f["issue_id"],
+                        "issue": f"{iss.get('year','?')}-{iss.get('month','?'):02d}" if isinstance(iss.get('month'), int) else "?",
+                        "identifier": identifier,
+                        "article": f.get("article_title", "?"),
                     })
 
-                # Count filled fields to measure quality
-                qc_fields = ["homeowner_name", "location_city", "designer_name",
-                             "year_built", "design_style", "square_footage"]
-                filled = sum(1 for k in qc_fields if feat.get(k))
-                if filled <= 2 and name:  # Has a name but barely any other data
-                    report["low_quality_issues"].append({
-                        "issue": issue_dir,
+            # 2. Exact duplicates (same homeowner_name + same issue_id)
+            from collections import defaultdict
+            by_key = defaultdict(list)
+            for f in features:
+                name = f.get("homeowner_name")
+                if name and str(name).lower() not in ("null", "none"):
+                    by_key[(name, f["issue_id"])].append(f)
+            for (name, issue_id), group in by_key.items():
+                if len(group) > 1:
+                    iss = issue_map.get(issue_id, {})
+                    ids = [g["id"] for g in group]
+                    report["duplicates"].append({
                         "name": name,
-                        "filled_fields": filled,
-                        "total_fields": len(qc_fields),
+                        "issue_id": issue_id,
+                        "issue": f"{iss.get('year','?')}-{iss.get('month','?'):02d}" if isinstance(iss.get('month'), int) else "?",
+                        "feature_ids": ids,
+                        "keep_id": ids[0],
+                        "delete_ids": ids[1:],
                     })
+
+            # 3. Near-duplicates (similar names in the same issue)
+            by_issue = defaultdict(list)
+            for f in features:
+                name = f.get("homeowner_name")
+                if name and str(name).lower() not in ("null", "none"):
+                    by_issue[f["issue_id"]].append(f)
+            for issue_id, group in by_issue.items():
+                names = [(g["id"], g["homeowner_name"]) for g in group]
+                for i in range(len(names)):
+                    for j in range(i + 1, len(names)):
+                        id_a, name_a = names[i]
+                        id_b, name_b = names[j]
+                        # Skip if already an exact duplicate (handled above)
+                        if name_a == name_b:
+                            continue
+                        # Check if one name contains the other (e.g., "Botero" in "Fernando Botero")
+                        la, lb = name_a.lower().strip(), name_b.lower().strip()
+                        if la in lb or lb in la:
+                            iss = issue_map.get(issue_id, {})
+                            report["near_duplicates"].append({
+                                "name_a": name_a, "id_a": id_a,
+                                "name_b": name_b, "id_b": id_b,
+                                "issue_id": issue_id,
+                                "issue": f"{iss.get('year','?')}-{iss.get('month','?'):02d}" if isinstance(iss.get('month'), int) else "?",
+                                "suggestion": f"Keep '{name_a if len(name_a) > len(name_b) else name_b}' (longer/fuller name), delete the other",
+                            })
+
+            # 4. Issues needing re-extraction (high null count)
+            null_by_issue = defaultdict(lambda: {"nulls": 0, "total": 0})
+            for f in features:
+                iid = f["issue_id"]
+                null_by_issue[iid]["total"] += 1
+                name = f.get("homeowner_name")
+                if not name or str(name).lower() in ("null", "none", "unknown"):
+                    null_by_issue[iid]["nulls"] += 1
+            for iid, counts in null_by_issue.items():
+                if counts["nulls"] > 0:
+                    iss = issue_map.get(iid, {})
+                    identifier = report["issue_identifier_map"].get(str(iid), "?")
+                    report["issues_needing_reextraction"].append({
+                        "issue_id": iid,
+                        "issue": f"{iss.get('year','?')}-{iss.get('month','?'):02d}" if isinstance(iss.get('month'), int) else "?",
+                        "identifier": identifier,
+                        "null_count": counts["nulls"],
+                        "total_features": counts["total"],
+                        "null_pct": round(100 * counts["nulls"] / counts["total"]),
+                    })
+
+        except Exception as e:
+            self.log(f"Quality audit failed: {e}", level="ERROR")
 
         return report
 
@@ -338,29 +428,91 @@ class EditorAgent(Agent):
         except Exception as e:
             self.log(f"Failed to resolve {agent_name} escalation: {e}", level="ERROR")
 
+    def _detect_events(self):
+        """Cheap file reads to detect if anything meaningful happened.
+
+        Returns (trigger_reason, details) or (None, None) if no events.
+        """
+        # 1. New escalations from any agent
+        agents_to_check = list(self.workers.keys()) + ["researcher"]
+        for agent_name in agents_to_check:
+            unresolved = self._read_escalations(agent_name)
+            prev_count = self._last_escalation_snapshot.get(agent_name, 0)
+            current_count = len(unresolved)
+            if current_count > prev_count:
+                self._last_escalation_snapshot[agent_name] = current_count
+                return ("escalation", f"New escalation from {agent_name}")
+
+        # 2. Milestones in activity log (new INFO-level entries since last check)
+        if os.path.exists(LOG_PATH):
+            try:
+                with open(LOG_PATH) as f:
+                    lines = f.readlines()
+                new_count = len(lines)
+                if new_count > self._last_log_line_count:
+                    # Check new lines for milestone keywords
+                    new_lines = lines[self._last_log_line_count:]
+                    self._last_log_line_count = new_count
+                    for line in new_lines:
+                        low = line.lower()
+                        if any(kw in low for kw in (
+                            "loaded", "dossier complete", "match",
+                            "extraction complete", "downloaded",
+                            "scout complete", "features extracted",
+                        )):
+                            return ("milestone", line.strip().split("|")[-1][:80] if "|" in line else line.strip()[:80])
+                else:
+                    self._last_log_line_count = new_count
+            except Exception:
+                pass
+
+        return (None, None)
+
     async def work(self):
         import time as _time
 
-        # Check if there are unread human messages (urgent — respond immediately)
+        # Check for events (cheap file reads every 5s)
         has_human_messages = bool(self._read_human_messages())
         now = _time.time()
         elapsed = now - self._last_haiku_time
 
-        # Only call Haiku if:
-        # 1. There are unread human messages (respond ASAP), OR
-        # 2. Enough time has passed for a regular assessment
-        if not has_human_messages and elapsed < self._haiku_interval:
-            self._editor_state = "monitoring"
-            self._current_task = "Monitoring — listening for messages"
-            return False  # No work needed this cycle
+        # Determine if we should call the LLM this cycle
+        # Minimum cooldowns: human messages are instant, escalations need 30s, milestones 90s
+        trigger = None
+        if has_human_messages:
+            trigger = "human_message"
+        else:
+            event_type, event_detail = self._detect_events()
+            if event_type == "escalation" and elapsed >= 30:
+                trigger = event_type
+            elif event_type == "milestone" and elapsed >= 90:
+                trigger = event_type
+            elif elapsed >= self._health_check_interval:
+                trigger = "health_check"
+
+        # No trigger — stay idle
+        if not trigger:
+            if _time.time() < self._happy_until:
+                self._editor_state = "happy"
+                self._current_task = "Instructions acknowledged!"
+            else:
+                self._editor_state = "idle"
+                self._current_task = "Waiting for events..."
+            return False
 
         # Set state based on trigger
-        if has_human_messages:
+        if trigger == "human_message":
             self._editor_state = "listening"
-            self._current_task = "Listening to human message..."
+            self._current_task = "Reading human message..."
+        elif trigger == "escalation":
+            self._editor_state = "assessing"
+            self._current_task = "Reviewing escalation..."
+        elif trigger == "milestone":
+            self._editor_state = "assessing"
+            self._current_task = "Agent reported progress..."
         else:
             self._editor_state = "assessing"
-            self._current_task = "Assessing pipeline..."
+            self._current_task = "Routine health check..."
 
         skills = self.load_skills()
         report = self._build_situation_report()
@@ -386,7 +538,7 @@ class EditorAgent(Agent):
         self._write_briefing(assessment)
 
         # Write inbox message
-        self._write_inbox_message(assessment)
+        self._write_inbox_message(assessment, is_reply=has_human_messages)
 
         # Mark human messages as read
         self._mark_messages_read()
@@ -394,6 +546,7 @@ class EditorAgent(Agent):
         # Set state after successful processing
         if has_human_messages:
             self._editor_state = "happy"
+            self._happy_until = _time.time() + 20  # Stay happy for 20 seconds
             self._current_task = "Instructions acknowledged!"
         else:
             self._editor_state = "idle"
@@ -429,6 +582,8 @@ Respond with JSON only. Schema:
   "actions": [
     {{"type": "pause"|"resume"|"log"|"remember"|"update_skills"|"queue_reextraction"|"set_designer_mode"|"clear_load_failures", "agent": "agent_name", "reason": "why"}},
     {{"type": "queue_reextraction", "identifier": "...", "strategy": "wider_scan"|"extended_toc"|"full_scan", "reason": "why"}},
+    {{"type": "delete_features", "feature_ids": [1, 2, 3], "reason": "why"}},
+    {{"type": "reset_issue_pipeline", "issue_id": 12, "identifier": "ArchitecturalDigestNovember2013", "reason": "why"}},
     {{"type": "set_designer_mode", "mode": "training"|"creating", "reason": "why"}},
     {{"type": "clear_load_failures", "identifier": "ArchitecturalDigest..." or null for all, "reason": "why"}}
   ],
@@ -446,14 +601,34 @@ The situation report includes "editor_memory" — your past observations. Use th
 To save a new memory, add an action: {{"type": "remember", "category": "decision|observation|milestone|issue", "reason": "What to remember"}}
 Use sparingly — only record things worth remembering across restarts.
 
-## Quality Control
-The situation report includes "quality_audit" with:
-- null_homeowners: features with missing names (candidates for re-extraction)
-- low_quality_issues: features with names but very few other filled fields
-When quality issues exist:
-- Flag them in your briefing
-- If null_homeowners > 20%, recommend re-extraction in your asks
-- Track quality trends in memory (is it improving or degrading?)
+## Quality Control (CRITICAL — proactive Supabase cleanup)
+The situation report includes "quality_audit" with Supabase data quality issues:
+- supabase_nulls: rows with NULL homeowner_name (includes issue_id and identifier)
+- duplicates: exact duplicate entries (same name + same issue_id) — includes keep_id and delete_ids
+- near_duplicates: similar names in same issue (e.g., "Botero" and "Fernando Botero") — review and delete the shorter/partial name
+- issues_needing_reextraction: issues with high null counts
+- issue_identifier_map: maps issue_id → archive.org identifier (for re-extraction)
+
+**Proactive cleanup actions (take these EVERY cycle when issues exist):**
+
+1. **Delete exact duplicates immediately:** Use {{"type": "delete_features", "feature_ids": [id1, id2], "reason": "Duplicate of feature #N"}}
+   The quality_audit provides `delete_ids` for each duplicate group — delete those IDs, keeping the `keep_id`.
+
+2. **Review and delete near-duplicates:** If one name is a subset of another (e.g., "Botero" vs "Fernando Botero"), delete the shorter/partial one.
+   Use {{"type": "delete_features", "feature_ids": [shorter_id], "reason": "Near-duplicate of #N (fuller name)"}}
+
+3. **Handle NULL homeowner entries:**
+   - If an issue has mostly NULLs (>50%), do a FULL PIPELINE RESET — this wipes Supabase features, resets the manifest so Courier re-downloads, and deletes the extraction so Reader starts fresh:
+     {{"type": "reset_issue_pipeline", "issue_id": N, "identifier": "ArchitecturalDigest...", "reason": "N of M features are NULL — full reset"}}
+   - If an issue has only 1-2 NULLs among mostly good features, just delete the NULL rows: {{"type": "delete_features", "feature_ids": [null_id], "reason": "NULL homeowner — no useful data"}}
+   - Use the identifier from issue_identifier_map for the identifier field
+
+4. **You are the central coordinator.** When data quality is bad, you feed orders down the pipeline:
+   - reset_issue_pipeline: Wipes Supabase + resets manifest → Courier re-downloads → Reader re-extracts → Loader re-loads → Detective re-checks
+   - delete_features: Surgical removal of specific junk/duplicate rows
+   - queue_reextraction: Re-extract without re-downloading (when the PDF is fine but extraction was bad)
+
+5. **Track cleanup progress in memory** — remember which issues you've already cleaned up to avoid repeating work. Only take 2-3 cleanup actions per cycle to avoid overwhelming the pipeline.
 
 ## Cross-Reference Results
 The situation report includes "xref_summary" with:
@@ -465,11 +640,27 @@ Track match counts in memory to notice trends.
 
 ## Human Communication
 If the situation report includes "human_messages", the human is talking to you via the dashboard inbox.
-Always respond to their messages in your inbox_message. You can:
+**THIS IS YOUR HIGHEST PRIORITY.** Always respond conversationally in your inbox_message — address the human directly, not with a status update.
+
+You can:
 - Answer questions about pipeline state
 - Update agent skills by adding an action: {{"type": "update_skills", "agent": "agent_name", "content": "New section or instructions to append to the agent's skills file", "reason": "what changed"}}
 - Pause/resume agents as requested
 - Acknowledge feedback and adjust strategy
+
+**Translating human instructions into actions (CRITICAL):**
+When the human tells you to dismiss, ignore, or override something, you MUST emit the corresponding action:
+- "ignore X" / "dismiss X" / "X is a false positive" / "X is not a match" → {{"type": "override_verdict", "name": "X", "verdict": "no_match", "reason": "Human instructed to dismiss"}}
+- "retry X" / "search X again" → {{"type": "retry_doj_search", "name": "X", "reason": "Human requested retry"}}
+- "re-extract [issue]" → {{"type": "queue_reextraction", "identifier": "...", "strategy": "wider_scan", "reason": "Human requested"}}
+- "pause [agent]" / "stop [agent]" → {{"type": "pause", "agent": "agent_name", "reason": "Human requested"}}
+- "resume [agent]" / "start [agent]" → {{"type": "resume", "agent": "agent_name", "reason": "Human requested"}}
+
+**Conversational reply examples:**
+- Human: "ignore Gritti Palace" → inbox_message: "Got it — I've dismissed Gritti Palace as a false positive." + override_verdict action
+- Human: "how's the pipeline?" → inbox_message: "All systems running smoothly! We've extracted 85 features from 12 issues so far."
+- Human: "pause the detective" → inbox_message: "Done — Detective is paused. Say 'resume detective' when you're ready." + pause action
+Do NOT just repeat status numbers when the human sends a message. Talk to them like a person.
 
 ## Agent Escalations
 If the situation report includes "agent_escalations" with entries, one or more agents are stuck and need your help.
@@ -509,11 +700,16 @@ Available strategies (prefer in this order): `wider_scan` → `extended_toc` →
 - `search_stuck`: Multiple consecutive DOJ search failures — the browser or DOJ site may be having issues. Alert the human.
 
 **Detective action formats:**
-- Override a verdict: {{"type": "override_verdict", "name": "Robert Smith", "verdict": "no_match", "reason": "Common name, DOJ results unrelated to Epstein context"}}
+- Override a verdict: {{"type": "override_verdict", "name": "Robert Smith", "verdict": "no_match", "reason": "Human instructed to dismiss"}}
 - Retry a DOJ search: {{"type": "retry_doj_search", "name": "Miranda Brooks", "reason": "Previous search timed out, worth retrying"}}
 
 Verdict options: confirmed_match, likely_match, possible_match, no_match
-Guidance: err on the side of caution — don't override to no_match unless the false positive evidence is clear. It's better to flag a possible match for human review than to dismiss it.
+
+**CRITICAL: Do NOT override verdicts on your own initiative.**
+The Researcher agent is responsible for investigating leads and building dossiers. Only use override_verdict when:
+1. The HUMAN explicitly tells you to dismiss a name (e.g., "ignore X", "dismiss X")
+2. The RESEARCHER rates a lead as COINCIDENCE (the Researcher auto-dismisses these)
+Never pre-emptively dismiss leads — even obvious false positives should go through the Researcher first. Your job is to SUPERVISE, not to INVESTIGATE.
 
 **Researcher escalations** (investigating leads & building dossiers): The Researcher investigates all Detective leads and builds dossiers with pattern analysis. Escalation types:
 - `high_value_lead`: A HIGH connection strength dossier was built. **Alert the human immediately** — this is the project's most important output. Include the subject name, strength rationale, and key findings with inbox_type "alert".
@@ -538,7 +734,7 @@ To switch Designer to creation mode: {{"type": "set_designer_mode", "mode": "cre
 Analyze the pipeline state and provide your assessment."""
 
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model="claude-opus-4-6",
             max_tokens=4096,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
@@ -632,6 +828,16 @@ Analyze the pipeline state and provide your assessment."""
             # clear_load_failures resets the Reader's failure counter so it retries loading
             if action_type == "clear_load_failures":
                 self._clear_load_failures(action)
+                continue
+
+            # delete_features removes specific feature rows from Supabase
+            if action_type == "delete_features":
+                self._delete_features(action)
+                continue
+
+            # reset_issue_pipeline: full reset — wipe Supabase, reset manifest, delete extraction
+            if action_type == "reset_issue_pipeline":
+                self._reset_issue_pipeline(action)
                 continue
 
             # set_designer_mode switches the Designer between training/creating
@@ -738,6 +944,148 @@ Analyze the pipeline state and provide your assessment."""
 
         except Exception as e:
             self.log(f"clear_load_failures failed: {e}", level="ERROR")
+
+    def _delete_features(self, action):
+        """Delete specific feature rows from Supabase (for duplicates, junk entries)."""
+        feature_ids = action.get("feature_ids", [])
+        reason = action.get("reason", "Editor cleanup")
+
+        if not feature_ids:
+            self.log("delete_features: no feature_ids provided", level="WARN")
+            return
+
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            from supabase import create_client
+            sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+
+            for fid in feature_ids:
+                sb.table("features").delete().eq("id", fid).execute()
+            self.log(f"Deleted {len(feature_ids)} features from Supabase: {feature_ids} — {reason}")
+        except Exception as e:
+            self.log(f"delete_features failed: {e}", level="ERROR")
+
+    def _reset_issue_pipeline(self, action):
+        """Full pipeline reset for an issue: wipe Supabase → reset manifest → delete extraction.
+
+        This sends the issue back through the full pipeline:
+        Courier re-downloads → Reader re-extracts → Loader re-loads → Detective re-checks.
+        """
+        issue_id = action.get("issue_id")
+        identifier = action.get("identifier")
+        reason = action.get("reason", "Editor reset issue for full reprocessing")
+
+        if not identifier or identifier == "?":
+            self.log("reset_issue_pipeline: no identifier provided", level="WARN")
+            return
+
+        steps_done = []
+
+        # Step 1: Delete all features for this issue from Supabase
+        if issue_id:
+            try:
+                from dotenv import load_dotenv
+                load_dotenv()
+                from supabase import create_client
+                sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+                existing = sb.table("features").select("id").eq("issue_id", issue_id).execute()
+                count = len(existing.data)
+                if count > 0:
+                    sb.table("features").delete().eq("issue_id", issue_id).execute()
+                    steps_done.append(f"Deleted {count} features from Supabase")
+
+                    # Also remove from cross-reference results and checked_features
+                    deleted_ids = {row["id"] for row in existing.data}
+                    self._remove_from_xref(deleted_ids)
+                    steps_done.append(f"Removed {len(deleted_ids)} IDs from cross-reference tracking")
+            except Exception as e:
+                self.log(f"reset_issue_pipeline: Supabase cleanup failed: {e}", level="ERROR")
+
+        # Step 2: Delete local extraction JSON (so Reader starts fresh)
+        extraction_path = os.path.join(DATA_DIR, "extractions", f"{identifier}.json")
+        if os.path.exists(extraction_path):
+            os.remove(extraction_path)
+            steps_done.append("Deleted local extraction file")
+        backup_path = extraction_path + ".backup"
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+            steps_done.append("Deleted extraction backup")
+
+        # Step 3: Delete the PDF so Courier re-downloads a fresh copy
+        issues_dir = os.path.join(DATA_DIR, "issues")
+        if os.path.exists(issues_dir):
+            for fname in os.listdir(issues_dir):
+                # PDF filenames are like "2013_11_ArchitecturalDigest.pdf"
+                if identifier.lower() in fname.lower() or fname.startswith(identifier):
+                    pdf_path = os.path.join(issues_dir, fname)
+                    os.remove(pdf_path)
+                    steps_done.append(f"Deleted PDF: {fname}")
+                    break
+            else:
+                # Try matching by month/year from manifest
+                manifest_path = os.path.join(DATA_DIR, "archive_manifest.json")
+                if os.path.exists(manifest_path):
+                    try:
+                        with open(manifest_path) as f:
+                            manifest = json.load(f)
+                        for item in manifest.get("issues", []):
+                            if item.get("identifier") == identifier and item.get("pdf_path"):
+                                old_pdf = item["pdf_path"]
+                                if os.path.exists(old_pdf):
+                                    os.remove(old_pdf)
+                                    steps_done.append(f"Deleted PDF: {os.path.basename(old_pdf)}")
+                                break
+                    except Exception:
+                        pass
+
+        # Step 4: Reset manifest status to "discovered" so Courier re-downloads
+        manifest_path = os.path.join(DATA_DIR, "archive_manifest.json")
+        if os.path.exists(manifest_path):
+            try:
+                with open(manifest_path) as f:
+                    manifest = json.load(f)
+                for item in manifest.get("issues", []):
+                    if item.get("identifier") == identifier:
+                        old_status = item.get("status")
+                        item["status"] = "discovered"
+                        item.pop("pdf_path", None)  # Clear stale PDF path
+                        steps_done.append(f"Reset manifest: {old_status} → discovered")
+                        break
+                with open(manifest_path, "w") as f:
+                    json.dump(manifest, f, indent=2)
+            except Exception as e:
+                self.log(f"reset_issue_pipeline: manifest reset failed: {e}", level="ERROR")
+
+        self.log(f"Reset issue {identifier}: {' | '.join(steps_done)} — {reason}")
+
+    def _remove_from_xref(self, feature_ids):
+        """Remove feature IDs from cross-reference tracking so Detective re-checks them."""
+        xref_dir = os.path.join(DATA_DIR, "cross_references")
+
+        # Remove from results.json
+        results_path = os.path.join(xref_dir, "results.json")
+        if os.path.exists(results_path):
+            try:
+                with open(results_path) as f:
+                    results = json.load(f)
+                results = [r for r in results if r.get("feature_id") not in feature_ids]
+                with open(results_path, "w") as f:
+                    json.dump(results, f, indent=2)
+            except Exception:
+                pass
+
+        # Remove from checked_features.json
+        checked_path = os.path.join(xref_dir, "checked_features.json")
+        if os.path.exists(checked_path):
+            try:
+                with open(checked_path) as f:
+                    checked = set(json.load(f))
+                checked -= feature_ids
+                with open(checked_path, "w") as f:
+                    json.dump(sorted(checked), f)
+            except Exception:
+                pass
 
     def _override_detective_verdict(self, action):
         """Queue a verdict override for the Detective to apply."""
@@ -858,7 +1206,7 @@ Analyze the pipeline state and provide your assessment."""
         with open(BRIEFING_PATH, "w") as f:
             f.write(briefing)
 
-    def _write_inbox_message(self, assessment):
+    def _write_inbox_message(self, assessment, is_reply=False):
         """Append a structured message to the inbox JSON file."""
         msg_text = assessment.get("inbox_message")
         if not msg_text:
@@ -877,6 +1225,7 @@ Analyze the pipeline state and provide your assessment."""
             "timestamp": now.isoformat(),
             "type": msg_type,
             "text": msg_text,
+            "is_reply": is_reply,
         }
 
         # Read existing messages
@@ -900,8 +1249,13 @@ Analyze the pipeline state and provide your assessment."""
 
     def get_dashboard_status(self):
         """Override to include editor-specific fields."""
+        import time as _time
         base = super().get_dashboard_status()
-        base["editor_state"] = self._editor_state
+        # Override editor_state if within happy window
+        if _time.time() < self._happy_until:
+            base["editor_state"] = "happy"
+        else:
+            base["editor_state"] = self._editor_state
         base["cost"] = {
             "api_calls": self._api_calls,
             "input_tokens": self._total_input_tokens,

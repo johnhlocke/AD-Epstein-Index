@@ -96,7 +96,7 @@ Look at this magazine page and extract the following information. Use null for a
 
 Return a JSON object with these fields:
 - "article_title": the title of the article
-- "homeowner_name": the name of the person(s) whose home is featured
+- "homeowner_name": the CURRENT or most recent owner/resident of the home. For historic or retrospective articles about estates (e.g., "Historic Architecture: Wyntoon"), identify who currently owns or occupies the property, NOT the historical figure who originally built it. If the current owner is not stated, use the name most prominently associated with the home in the article, but add a note explaining the historical context.
 - "designer_name": the interior designer
 - "architecture_firm": the architect or architecture firm
 - "year_built": year the home was built or renovated (integer or null)
@@ -108,7 +108,7 @@ Return a JSON object with these fields:
 - "design_style": architectural/design style (e.g., "Mid-Century Modern", "Mediterranean")
 - "article_author": the writer/journalist who authored this article (check the byline)
 - "page_number": the page number visible on this page (integer)
-- "notes": any other notable details
+- "notes": any other notable details. For historic/retrospective articles, note that this is a historical feature and mention the original builder/commissioner if different from the current owner.
 
 Return ONLY valid JSON, no markdown code blocks, no explanation.
 If this page is NOT a featured home article (e.g., it's an ad or editorial), return: {"skip": true}
@@ -129,30 +129,38 @@ def pdf_to_images(pdf_path, pages, output_dir):
     os.makedirs(output_dir, exist_ok=True)
     image_paths = []
 
-    if isinstance(pages, tuple) and len(pages) == 2:
-        # Range of pages
-        first, last = pages
-        prefix = os.path.join(output_dir, "page")
-        subprocess.run(
-            ["pdftoppm", "-png", "-f", str(first), "-l", str(last), "-r", "150", pdf_path, prefix],
-            check=True, capture_output=True,
-        )
-        # pdftoppm creates files like page-01.png, page-02.png, etc.
-        for f in sorted(os.listdir(output_dir)):
-            if f.startswith("page") and f.endswith(".png"):
-                image_paths.append(os.path.join(output_dir, f))
-    else:
-        # Individual pages
-        for page_num in pages:
-            prefix = os.path.join(output_dir, f"p{page_num:04d}")
+    try:
+        if isinstance(pages, tuple) and len(pages) == 2:
+            # Range of pages
+            first, last = pages
+            prefix = os.path.join(output_dir, "page")
             subprocess.run(
-                ["pdftoppm", "-png", "-f", str(page_num), "-l", str(page_num), "-r", "150", pdf_path, prefix],
+                ["pdftoppm", "-png", "-f", str(first), "-l", str(last), "-r", "150", pdf_path, prefix],
                 check=True, capture_output=True,
             )
+            # pdftoppm creates files like page-01.png, page-02.png, etc.
             for f in sorted(os.listdir(output_dir)):
-                fpath = os.path.join(output_dir, f)
-                if f.startswith(f"p{page_num:04d}") and f.endswith(".png") and fpath not in image_paths:
-                    image_paths.append(fpath)
+                if f.startswith("page") and f.endswith(".png"):
+                    image_paths.append(os.path.join(output_dir, f))
+        else:
+            # Individual pages
+            for page_num in pages:
+                prefix = os.path.join(output_dir, f"p{page_num:04d}")
+                subprocess.run(
+                    ["pdftoppm", "-png", "-f", str(page_num), "-l", str(page_num), "-r", "150", pdf_path, prefix],
+                    check=True, capture_output=True,
+                )
+                for f in sorted(os.listdir(output_dir)):
+                    fpath = os.path.join(output_dir, f)
+                    if f.startswith(f"p{page_num:04d}") and f.endswith(".png") and fpath not in image_paths:
+                        image_paths.append(fpath)
+    except subprocess.CalledProcessError as e:
+        stderr_msg = e.stderr.decode() if e.stderr else str(e)
+        print(f"  pdftoppm error on {pdf_path}: {stderr_msg}")
+        return []
+    except FileNotFoundError:
+        print("  pdftoppm not found — is poppler-utils installed?")
+        return []
 
     return image_paths
 
