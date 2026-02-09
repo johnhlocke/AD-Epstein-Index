@@ -1,6 +1,10 @@
 """
 Researcher Agent — tenacious investigator that builds dossiers on Epstein-linked leads.
 
+Hub-and-spoke model: Editor can assign investigate_lead tasks via inbox.
+When no task is assigned, falls back to legacy work() loop which
+self-manages lead discovery and investigation.
+
 Picks up ALL leads from the Detective's combined verdicts (confirmed_match,
 likely_match, possible_match, needs_review) plus legacy BB matches. Enriches
 each investigation with full Supabase feature data and cross-lead pattern
@@ -19,6 +23,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.base import Agent, DATA_DIR
+from agents.tasks import TaskResult
 
 XREF_DIR = os.path.join(DATA_DIR, "cross_references")
 DOSSIERS_DIR = os.path.join(DATA_DIR, "dossiers")
@@ -54,6 +59,58 @@ class ResearcherAgent(Agent):
             import anthropic
             self._client = anthropic.Anthropic()
         return self._client
+
+    # ═══════════════════════════════════════════════════════════
+    # HUB-AND-SPOKE: execute() — for targeted investigation tasks
+    # ═══════════════════════════════════════════════════════════
+
+    async def execute(self, task):
+        """Execute an investigate_lead task from the Editor."""
+        if task.type != "investigate_lead":
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={}, error=f"Researcher doesn't handle '{task.type}'",
+                agent=self.name,
+            )
+
+        name = task.params.get("name", "")
+        lead = task.params.get("lead", {})
+        if not name:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"name": name}, error="No name provided",
+                agent=self.name,
+            )
+
+        self._current_task = f"Investigating {name}..."
+        skills = self.load_skills()
+
+        try:
+            dossier = await asyncio.to_thread(
+                self._investigate_match, lead, skills
+            )
+            self._save_dossier(name, dossier)
+            if lead.get("feature_id"):
+                self._mark_investigated(lead["feature_id"])
+            self._dossiers_built += 1
+
+            strength = dossier.get("connection_strength", "UNKNOWN")
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="success",
+                result={
+                    "name": name,
+                    "dossier": dossier,
+                    "connection_strength": strength,
+                },
+                agent=self.name,
+            )
+
+        except Exception as e:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"name": name}, error=str(e),
+                agent=self.name,
+            )
 
     # ── Main Work Loop ──────────────────────────────────────────
 

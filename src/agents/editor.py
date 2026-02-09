@@ -1,22 +1,39 @@
 """
-Editor Agent — LLM-powered pipeline supervisor.
+Editor Agent — Central coordinator for the hub-and-spoke pipeline.
 
-Calls Claude Opus for strategic reasoning about pipeline health.
-Reads situation reports from all agents, writes briefings for the human,
-and reads directives from the human inbox.
+The Editor is the ONLY agent that writes pipeline state to Supabase.
+Worker agents (Scout, Courier, Reader, Detective, Researcher) receive
+tasks via their inbox queues and report results via outbox queues.
 
-Interval: 45s.
+Main loop (every 5s):
+  1. Collect results from all agent outboxes
+  2. Validate results, commit to Supabase or reject
+  3. Handle failures (log to ledger, maybe reassign)
+
+Planning loop (every 30s):
+  4. Scan Supabase state → create tasks → push to agent inboxes
+
+Strategic assessment (every 5 min or on human message):
+  5. Call Claude for complex decisions, handle human messages
+
+Interval: 5s (fast poll for results + human messages).
 """
 
 import asyncio
 import json
 import os
 import sys
+import time as _time
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.base import Agent, DATA_DIR, LOG_PATH, update_json_locked, read_json_locked
+from agents.tasks import Task, TaskResult, EditorLedger
+from db import (
+    get_supabase, update_issue, delete_features_for_issue, list_issues,
+    count_issues_by_status, upsert_issue, get_issue_by_identifier,
+)
 
 BRIEFING_PATH = os.path.join(DATA_DIR, "editor_briefing.md")
 INBOX_PATH = os.path.join(DATA_DIR, "editor_inbox.md")
@@ -24,51 +41,76 @@ MESSAGES_PATH = os.path.join(DATA_DIR, "editor_messages.json")
 HUMAN_MESSAGES_PATH = os.path.join(DATA_DIR, "human_messages.json")
 COST_PATH = os.path.join(DATA_DIR, "editor_cost.json")
 MEMORY_PATH = os.path.join(DATA_DIR, "editor_memory.json")
-REEXTRACT_QUEUE_PATH = os.path.join(DATA_DIR, "reader_reextract_queue.json")
+EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
+XREF_DIR = os.path.join(DATA_DIR, "cross_references")
 MAX_MESSAGES = 50
 MAX_MEMORY_ENTRIES = 100
 
-# Opus pricing per 1M tokens (as of 2025)
-HAIKU_INPUT_COST_PER_1M = 15.00   # $15/1M input tokens
-HAIKU_OUTPUT_COST_PER_1M = 75.00  # $75/1M output tokens
+MIN_YEAR = 1988
+MAX_YEAR = 2025
+TOTAL_EXPECTED = (MAX_YEAR - MIN_YEAR + 1) * 12  # 456
+
+# Quality gates (moved from Reader)
+NULL_RATE_THRESHOLD = 0.50
+MIN_FEATURES_FOR_LOAD = 2
+QC_FIELDS = ["homeowner_name", "designer_name", "location_city",
+             "location_country", "design_style", "year_built"]
+
+# Timing intervals
+PLAN_INTERVAL = 30       # seconds between planning cycles
+STRATEGIC_INTERVAL = 300  # seconds between LLM assessments
+MAX_TASK_FAILURES = 3     # before giving up on an identifier/name
+
+# Opus pricing per 1M tokens
+HAIKU_INPUT_COST_PER_1M = 15.00
+HAIKU_OUTPUT_COST_PER_1M = 75.00
 
 
 class EditorAgent(Agent):
     def __init__(self, workers=None):
-        """
-        Args:
-            workers: Dict of agent_name -> Agent instance (the agents to supervise)
-        """
-        super().__init__("editor", interval=5)  # Fast poll — checks for human messages
+        super().__init__("editor", interval=5)
         self.workers = workers or {}
-        self._last_assessment = None
+        self.ledger = EditorLedger()
+
+        # Timing
+        self._last_plan_time = 0
+        self._last_strategic_time = 0
         self._last_haiku_time = 0
-        self._health_check_interval = 300  # Safety net health check every 5 minutes
-        self._last_escalation_snapshot = {}  # Track seen escalation counts per agent
-        self._last_log_line_count = 0  # Track activity log length for milestone detection
+
+        # State
+        self._last_assessment = None
+        self._editor_state = "idle"
+        self._happy_until = 0
+        self._last_health = None
+
+        # Cost tracking
         self._client = None
-        self._editor_state = "idle"  # idle, monitoring, listening, assessing, happy
-        self._happy_until = 0  # Timestamp until which "happy" state persists
         self._api_calls = 0
         self._total_input_tokens = 0
         self._total_output_tokens = 0
         self._total_cost = 0.0
         self._load_cost_state()
-        # Track restart in memory
+
+        # Track assigned tasks (so we can see what's in flight)
+        self._tasks_in_flight = {}  # task_id -> {"agent": name, "task": Task, "assigned_at": iso}
+        self._tasks_completed = 0
+        self._tasks_failed = 0
+
+        # Memory
         memory = self._load_memory()
         memory["restart_count"] = memory.get("restart_count", 0) + 1
         self._last_health = memory.get("last_assessment_health")
         self._save_memory(memory)
 
+    # ── Anthropic Client ────────────────────────────────────────
+
     def _get_client(self):
-        """Lazy-init the Anthropic client."""
         if self._client is None:
             import anthropic
             self._client = anthropic.Anthropic()
         return self._client
 
     def _load_cost_state(self):
-        """Load persisted cost tracking from disk."""
         if os.path.exists(COST_PATH):
             try:
                 with open(COST_PATH) as f:
@@ -81,7 +123,6 @@ class EditorAgent(Agent):
                 pass
 
     def _save_cost_state(self):
-        """Persist cost tracking to disk."""
         data = {
             "api_calls": self._api_calls,
             "input_tokens": self._total_input_tokens,
@@ -94,7 +135,6 @@ class EditorAgent(Agent):
             json.dump(data, f)
 
     def _track_usage(self, response):
-        """Track token usage and cost from an API response."""
         usage = response.usage
         input_tokens = usage.input_tokens
         output_tokens = usage.output_tokens
@@ -106,10 +146,9 @@ class EditorAgent(Agent):
         self._total_cost += cost
         self._save_cost_state()
 
-    # ── Memory ──────────────────────────────────────────────
+    # ── Memory ──────────────────────────────────────────────────
 
     def _load_memory(self):
-        """Load the Editor's persistent memory (observations, decisions, learnings)."""
         if os.path.exists(MEMORY_PATH):
             try:
                 with open(MEMORY_PATH) as f:
@@ -119,8 +158,6 @@ class EditorAgent(Agent):
         return {"entries": [], "last_assessment_health": None, "restart_count": 0}
 
     def _save_memory(self, memory):
-        """Persist the Editor's memory to disk."""
-        # Cap entries to prevent unbounded growth
         if len(memory.get("entries", [])) > MAX_MEMORY_ENTRIES:
             memory["entries"] = memory["entries"][-MAX_MEMORY_ENTRIES:]
         os.makedirs(os.path.dirname(MEMORY_PATH), exist_ok=True)
@@ -128,7 +165,6 @@ class EditorAgent(Agent):
             json.dump(memory, f, indent=2)
 
     def _remember(self, category, text):
-        """Add an entry to persistent memory."""
         memory = self._load_memory()
         memory["entries"].append({
             "time": datetime.now().isoformat(),
@@ -138,67 +174,656 @@ class EditorAgent(Agent):
         self._save_memory(memory)
 
     def _get_memory_summary(self):
-        """Build a concise summary of recent memory for the situation report."""
         memory = self._load_memory()
         entries = memory.get("entries", [])
         if not entries:
             return "No prior observations recorded."
-
-        # Last 15 entries, grouped by category
         recent = entries[-15:]
-        lines = []
-        for e in recent:
-            lines.append(f"[{e['category']}] {e['text']}")
-        return "\n".join(lines)
+        return "\n".join(f"[{e['category']}] {e['text']}" for e in recent)
 
-    # ── Quality Control ────────────────────────────────────
+    # ── Human Messages ──────────────────────────────────────────
+
+    def _read_human_messages(self):
+        if not os.path.exists(HUMAN_MESSAGES_PATH):
+            return []
+        try:
+            with open(HUMAN_MESSAGES_PATH) as f:
+                messages = json.load(f)
+            return [m for m in messages if not m.get("read")]
+        except Exception:
+            return []
+
+    def _mark_messages_read(self):
+        if not os.path.exists(HUMAN_MESSAGES_PATH):
+            return
+        try:
+            with open(HUMAN_MESSAGES_PATH) as f:
+                messages = json.load(f)
+            for m in messages:
+                m["read"] = True
+            with open(HUMAN_MESSAGES_PATH, "w") as f:
+                json.dump(messages, f)
+        except Exception:
+            pass
+
+    # ═══════════════════════════════════════════════════════════
+    # MAIN WORK LOOP — the Editor's heartbeat
+    # ═══════════════════════════════════════════════════════════
+
+    async def work(self):
+        now = _time.time()
+
+        # ── Phase 1: Collect results from all agent outboxes (every cycle) ──
+        results_collected = self._collect_results()
+
+        # ── Phase 2: Process collected results ──
+        if results_collected:
+            self._process_results(results_collected)
+
+        # ── Phase 3: Plan and assign tasks (every PLAN_INTERVAL) ──
+        if now - self._last_plan_time >= PLAN_INTERVAL:
+            self._last_plan_time = now
+            await self._plan_and_assign()
+
+        # ── Phase 4: Strategic assessment (every STRATEGIC_INTERVAL or on human message) ──
+        has_human_messages = bool(self._read_human_messages())
+        if has_human_messages or now - self._last_strategic_time >= STRATEGIC_INTERVAL:
+            self._last_strategic_time = now
+            await self._strategic_assessment(has_human_messages)
+
+        # Update state display
+        if _time.time() < self._happy_until:
+            self._editor_state = "happy"
+            self._current_task = "Instructions acknowledged!"
+        elif not results_collected and now - self._last_plan_time < 5:
+            self._editor_state = "idle"
+            self._current_task = f"Coordinating — {self._tasks_completed} tasks done, {len(self._tasks_in_flight)} in flight"
+        return bool(results_collected)
+
+    # ═══════════════════════════════════════════════════════════
+    # PHASE 1: COLLECT RESULTS
+    # ═══════════════════════════════════════════════════════════
+
+    def _collect_results(self):
+        """Drain all worker outboxes. Returns list of (agent_name, TaskResult)."""
+        collected = []
+        for name, agent in self.workers.items():
+            while True:
+                try:
+                    result = agent.outbox.get_nowait()
+                    collected.append((name, result))
+                except asyncio.QueueEmpty:
+                    break
+        return collected
+
+    # ═══════════════════════════════════════════════════════════
+    # PHASE 2: PROCESS RESULTS — validate and commit to Supabase
+    # ═══════════════════════════════════════════════════════════
+
+    def _process_results(self, collected):
+        """Validate each result and commit to Supabase or handle failure."""
+        for agent_name, result in collected:
+            # Remove from in-flight tracking
+            self._tasks_in_flight.pop(result.task_id, None)
+
+            if result.status == "success":
+                self._tasks_completed += 1
+                self._handle_success(agent_name, result)
+            else:
+                self._tasks_failed += 1
+                self._handle_failure(agent_name, result)
+
+    def _handle_success(self, agent_name, result):
+        """Process a successful task result — validate and commit to Supabase."""
+        task_type = result.task_type
+        data = result.result
+
+        if task_type == "discover_issues":
+            self._commit_discovered_issues(data)
+        elif task_type == "fix_dates":
+            self._commit_fixed_dates(data)
+        elif task_type == "download_pdf":
+            self._commit_download(data)
+        elif task_type == "extract_features":
+            self._commit_extraction(data)
+        elif task_type == "reextract_features":
+            self._commit_extraction(data)
+        elif task_type == "cross_reference":
+            self._commit_cross_reference(data)
+        elif task_type == "investigate_lead":
+            self._commit_investigation(data)
+        else:
+            self.log(f"Unknown task type '{task_type}' from {agent_name}", level="WARN")
+
+    def _commit_discovered_issues(self, data):
+        """Commit Scout's discovered issues to Supabase."""
+        found = data.get("found_issues", [])
+        for issue in found:
+            ident = issue.get("identifier", "")
+            if not ident:
+                continue
+            year = issue.get("year")
+            month = issue.get("month")
+            if not year or year < MIN_YEAR or year > MAX_YEAR:
+                continue
+
+            source = issue.get("source", "archive.org")
+            db_source = "ad_archive" if "ad_archive" in source else "archive.org"
+
+            upsert_issue(ident, {
+                "title": issue.get("title", ""),
+                "month": month,
+                "year": year,
+                "status": "discovered",
+                "needs_review": issue.get("confidence", "low") == "low",
+                "date_confidence": issue.get("confidence", "medium"),
+                "date_source": source,
+                "source": db_source,
+                "source_url": issue.get("url"),
+            })
+            self.ledger.record(ident, "scout", "discover_issues", True)
+            self.log(f"Committed: {year}-{month:02d} ({ident[:40]})")
+
+        not_found = data.get("not_found", [])
+        for month_key in not_found:
+            self.ledger.record(month_key, "scout", "discover_issues", False,
+                               note="not found")
+        self.ledger.save()
+
+    def _commit_fixed_dates(self, data):
+        """Commit Scout's date fixes to Supabase."""
+        for verified in data.get("verified_issues", []):
+            ident = verified.get("identifier")
+            year = verified.get("year")
+            month = verified.get("month")
+            if not ident or not year:
+                continue
+            updates = {
+                "year": year,
+                "month": month,
+                "date_confidence": verified.get("confidence", "low"),
+                "date_source": verified.get("source", "scout_verified"),
+                "needs_review": verified.get("confidence", "low") == "low",
+            }
+            update_issue(ident, updates)
+            self.ledger.record(ident, "scout", "fix_dates", True)
+            self.log(f"Date fixed: {ident} → {year}-{month or '??'}")
+        self.ledger.save()
+
+    def _commit_download(self, data):
+        """Commit Courier's download result to Supabase."""
+        identifier = data.get("identifier", "")
+        pdf_path = data.get("pdf_path", "")
+        if identifier and pdf_path:
+            update_issue(identifier, {"status": "downloaded", "pdf_path": pdf_path})
+            self.ledger.record(identifier, "courier", "download_pdf", True)
+            self.log(f"Downloaded: {identifier}")
+        self.ledger.save()
+
+    def _commit_extraction(self, data):
+        """Validate Reader's extraction and load into Supabase if quality passes."""
+        identifier = data.get("identifier", "")
+        features = data.get("features", [])
+        output_path = data.get("extraction_path", "")
+        quality_metrics = data.get("quality_metrics", {})
+
+        if not identifier:
+            return
+
+        # Quality gate (moved from Reader)
+        verdict = self._quality_gate(features, quality_metrics)
+
+        if verdict == "load":
+            # Load into Supabase
+            try:
+                from load_features import load_extraction
+                inserted = load_extraction(output_path)
+                update_issue(identifier, {"status": "extracted"})
+                self.ledger.record(identifier, "reader", "extract_features", True,
+                                   note=f"Loaded {inserted} features")
+                self.log(f"Loaded {inserted} features for {identifier}")
+            except Exception as e:
+                self.ledger.record(identifier, "reader", "extract_features", False,
+                                   error=str(e))
+                self.log(f"Supabase load failed for {identifier}: {e}", level="ERROR")
+        else:
+            # Quality hold — log it, don't load
+            esc_type = quality_metrics.get("escalation_type", "unknown")
+            self.ledger.record(identifier, "reader", "extract_features", False,
+                               note=f"Quality hold: {esc_type}")
+            self.log(f"HELD {identifier}: {esc_type} — {quality_metrics}", level="WARN")
+
+        self.ledger.save()
+
+    def _quality_gate(self, features, metrics):
+        """Rule-based extraction quality check. Returns 'load' or 'hold'."""
+        feature_count = len(features)
+        if feature_count == 0:
+            metrics["escalation_type"] = "zero_features"
+            return "hold"
+        if feature_count <= 1:
+            metrics["escalation_type"] = "insufficient_features"
+            return "hold"
+
+        null_count = sum(
+            1 for f in features
+            if not f.get("homeowner_name") or f["homeowner_name"] in ("null", "None")
+        )
+        null_rate = null_count / feature_count
+        if null_rate > NULL_RATE_THRESHOLD:
+            metrics["escalation_type"] = "high_null_rate"
+            metrics["null_homeowner_rate"] = round(null_rate, 2)
+            return "hold"
+
+        return "load"
+
+    def _commit_cross_reference(self, data):
+        """Save Detective's cross-reference results."""
+        checked = data.get("checked", [])
+        if not checked:
+            return
+
+        # Detective writes results to its own file (analysis output, not pipeline state)
+        # The Editor just logs the event
+        for entry in checked:
+            name = entry.get("name", "?")
+            verdict = entry.get("combined", "unknown")
+            if verdict in ("confirmed_match", "likely_match"):
+                self.log(f"MATCH: {name} → {verdict}")
+                self._remember("milestone", f"Detective found {verdict}: {name}")
+
+        self.ledger.save()
+
+    def _commit_investigation(self, data):
+        """Log Researcher's investigation result."""
+        name = data.get("name", "?")
+        strength = data.get("connection_strength", "UNKNOWN")
+        self.log(f"Dossier: {name} → {strength}")
+        if strength in ("HIGH", "MEDIUM"):
+            self._remember("milestone", f"Researcher dossier: {name} ({strength})")
+        self.ledger.save()
+
+    def _handle_failure(self, agent_name, result):
+        """Handle a failed task — log to ledger, maybe reassign."""
+        task_id = result.task_id
+        task_type = result.task_type
+        error = result.error or "unknown error"
+
+        # Extract identifier/key from result data for ledger
+        key = result.result.get("identifier") or result.result.get("name") or task_id
+
+        self.ledger.record(key, agent_name, task_type, False, error=error)
+        self.ledger.save()
+        self.log(f"Task {task_id} failed ({agent_name}/{task_type}): {error}", level="WARN")
+
+    # ═══════════════════════════════════════════════════════════
+    # PHASE 3: PLAN AND ASSIGN — scan Supabase, create tasks
+    # ═══════════════════════════════════════════════════════════
+
+    async def _plan_and_assign(self):
+        """Scan Supabase state, figure out what needs doing, assign tasks to agents."""
+        self._editor_state = "assessing"
+        self._current_task = "Planning next tasks..."
+
+        try:
+            counts = count_issues_by_status()
+            all_issues = list_issues()
+        except Exception as e:
+            self.log(f"Planning failed — Supabase error: {e}", level="ERROR")
+            return
+
+        # Assign work to each agent (if they have capacity — inbox empty)
+        self._plan_scout_tasks(all_issues, counts)
+        self._plan_courier_tasks(counts)
+        self._plan_reader_tasks(counts)
+        self._plan_detective_tasks()
+        self._plan_researcher_tasks()
+
+    def _assign_task(self, agent_name, task):
+        """Push a task to an agent's inbox if the agent exists and inbox is empty."""
+        agent = self.workers.get(agent_name)
+        if not agent:
+            return False
+        if agent.is_paused:
+            return False
+        # Don't overload: only assign if inbox is empty
+        if not agent.inbox.empty():
+            return False
+
+        agent.inbox.put_nowait(task)
+        self._tasks_in_flight[task.id] = {
+            "agent": agent_name,
+            "task": task.to_dict(),
+            "assigned_at": datetime.now().isoformat(),
+        }
+        self.log(f"Assigned {agent_name}: {task.goal[:60]}", level="DEBUG")
+        return True
+
+    def _plan_scout_tasks(self, all_issues, counts):
+        """Gap analysis — what issues are missing? Assign Scout to find them."""
+        if "scout" not in self.workers:
+            return
+
+        # Don't assign if Scout already has a task
+        if not self.workers["scout"].inbox.empty():
+            return
+
+        # Build gap analysis
+        confirmed = {}
+        misdated = []
+        for issue in all_issues:
+            year = issue.get("year")
+            month = issue.get("month")
+            if year and MIN_YEAR <= year <= MAX_YEAR and month:
+                confirmed[(year, month)] = issue
+            elif year and (year < MIN_YEAR or year > MAX_YEAR):
+                # Could be misdated
+                misdated.append(issue)
+
+        # Priority 1: Fix misdated issues
+        if misdated:
+            batch = misdated[:10]
+            task = Task(
+                type="fix_dates",
+                goal=f"Verify dates on {len(batch)} misdated issues",
+                params={"batch": [{"identifier": i["identifier"], "title": i.get("title", ""),
+                                    "year": i.get("year"), "month": i.get("month")} for i in batch]},
+                priority=3,  # LOW priority — don't block discovery
+            )
+            self._assign_task("scout", task)
+            return
+
+        # Priority 2: Discover missing issues
+        missing_months = []
+        for year in range(MIN_YEAR, MAX_YEAR + 1):
+            for month in range(1, 13):
+                if (year, month) not in confirmed:
+                    month_key = f"{year}-{month:02d}"
+                    # Check ledger — skip if exhausted
+                    if self.ledger.should_retry(month_key, "discover_issues", max_failures=5):
+                        missing_months.append(month_key)
+
+        if missing_months:
+            # Assign a batch of 6 months
+            batch = missing_months[:6]
+            context = self.ledger.get_context_for_agent(batch[0])
+            task = Task(
+                type="discover_issues",
+                goal=f"Find AD issues for {', '.join(batch[:3])}{'...' if len(batch) > 3 else ''}",
+                params={
+                    "missing_months": batch,
+                    "total_missing": len(missing_months),
+                    "previous_failures": context,
+                },
+                priority=1,  # HIGH — this is the main bottleneck
+            )
+            self._assign_task("scout", task)
+
+    def _plan_courier_tasks(self, counts):
+        """What's discovered but not downloaded? Assign Courier."""
+        if "courier" not in self.workers:
+            return
+        if not self.workers["courier"].inbox.empty():
+            return
+
+        # Find next issue to download
+        issues = list_issues(status="discovered")
+        downloadable = [
+            i for i in issues
+            if i.get("month") and i.get("year")
+            and self.ledger.should_retry(i["identifier"], "download_pdf", max_failures=MAX_TASK_FAILURES)
+        ]
+
+        if not downloadable:
+            return
+
+        issue = downloadable[0]
+        ident = issue["identifier"]
+        context = self.ledger.get_context_for_agent(ident)
+
+        task = Task(
+            type="download_pdf",
+            goal=f"Download {issue.get('year')}-{issue.get('month', '?'):02d} ({ident[:30]})",
+            params={
+                "identifier": ident,
+                "title": issue.get("title", ""),
+                "year": issue.get("year"),
+                "month": issue.get("month"),
+                "source": issue.get("source", "archive.org"),
+                "source_url": issue.get("source_url"),
+                "previous_failures": context,
+            },
+            priority=2,
+        )
+        self._assign_task("courier", task)
+
+    def _plan_reader_tasks(self, counts):
+        """What's downloaded but not extracted? Assign Reader."""
+        if "reader" not in self.workers:
+            return
+        if not self.workers["reader"].inbox.empty():
+            return
+
+        issues = list_issues(status="downloaded")
+        for issue in issues:
+            ident = issue["identifier"]
+            # Check if extraction already exists on disk
+            output_path = os.path.join(EXTRACTIONS_DIR, f"{ident}.json")
+            if os.path.exists(output_path):
+                # Already extracted on disk — maybe needs loading
+                # Check if it was already loaded (status would be 'extracted')
+                continue
+
+            if not self.ledger.should_retry(ident, "extract_features", max_failures=MAX_TASK_FAILURES):
+                continue
+
+            context = self.ledger.get_context_for_agent(ident)
+            task = Task(
+                type="extract_features",
+                goal=f"Extract features from {issue.get('year', '?')}-{issue.get('month', '?'):02d}",
+                params={
+                    "identifier": ident,
+                    "pdf_path": issue.get("pdf_path", ""),
+                    "title": issue.get("title", ""),
+                    "year": issue.get("year"),
+                    "month": issue.get("month"),
+                    "previous_failures": context,
+                },
+                priority=2,
+            )
+            self._assign_task("reader", task)
+            return
+
+        # Also check for extractions on disk that need loading
+        for issue in issues:
+            ident = issue["identifier"]
+            output_path = os.path.join(EXTRACTIONS_DIR, f"{ident}.json")
+            if os.path.exists(output_path):
+                try:
+                    with open(output_path) as f:
+                        data = json.load(f)
+                    if data.get("skipped"):
+                        continue
+                    features = data.get("features", [])
+                    quality_metrics = {
+                        "feature_count": len(features),
+                    }
+                    verdict = self._quality_gate(features, quality_metrics)
+                    if verdict == "load":
+                        from load_features import load_extraction
+                        inserted = load_extraction(output_path)
+                        update_issue(ident, {"status": "extracted"})
+                        self.log(f"Loaded {inserted} features for {ident} (disk retry)")
+                except Exception as e:
+                    self.log(f"Failed to load extraction for {ident}: {e}", level="ERROR")
+
+    def _plan_detective_tasks(self):
+        """What features need cross-referencing? Assign Detective."""
+        if "detective" not in self.workers:
+            return
+        if not self.workers["detective"].inbox.empty():
+            return
+
+        # Detective's work() already handles this well — just let it run
+        # The Detective checks for unchecked features on its own
+        # We only assign explicit tasks when we need targeted re-checks
+
+    def _plan_researcher_tasks(self):
+        """What leads need investigation? Assign Researcher."""
+        if "researcher" not in self.workers:
+            return
+        if not self.workers["researcher"].inbox.empty():
+            return
+
+        # Researcher's work() already handles this well — just let it run
+
+    # ═══════════════════════════════════════════════════════════
+    # PHASE 4: STRATEGIC ASSESSMENT (periodic LLM call)
+    # ═══════════════════════════════════════════════════════════
+
+    async def _strategic_assessment(self, has_human_messages):
+        """Call Claude for complex decisions and human interaction."""
+        if has_human_messages:
+            self._editor_state = "listening"
+            self._current_task = "Reading human message..."
+        else:
+            self._editor_state = "assessing"
+            self._current_task = "Strategic assessment..."
+
+        skills = self.load_skills()
+        report = self._build_situation_report()
+
+        try:
+            assessment = await asyncio.to_thread(
+                self._call_haiku, skills, report
+            )
+        except Exception as e:
+            self._editor_state = "idle"
+            self.log(f"Assessment failed: {e}", level="ERROR")
+            return
+
+        self._last_assessment = assessment
+        self._last_haiku_time = _time.time()
+
+        # Execute actions from assessment
+        self._execute_actions(assessment)
+
+        # Write briefing
+        self._write_briefing(assessment)
+
+        # Write inbox message
+        self._write_inbox_message(assessment, is_reply=has_human_messages)
+
+        # Mark human messages as read
+        self._mark_messages_read()
+
+        # Update state
+        if has_human_messages:
+            self._editor_state = "happy"
+            self._happy_until = _time.time() + 20
+            self._current_task = "Instructions acknowledged!"
+        else:
+            self._editor_state = "idle"
+
+        # Persist health to memory
+        health = assessment.get("health", "UNKNOWN")
+        memory = self._load_memory()
+        memory["last_assessment_health"] = health
+        memory["last_assessment_time"] = datetime.now().isoformat()
+        self._save_memory(memory)
+        self._last_health = health
+
+        summary = assessment.get("summary", "No summary")
+        self._current_task = f"Pipeline: {health} — {summary}"
+        self.log(f"Assessment: {health} — {summary}")
+
+    def _build_situation_report(self):
+        """Gather status from all agents + pipeline state + memory."""
+        report = {
+            "timestamp": datetime.now().isoformat(),
+            "agents": {},
+            "recent_log": [],
+            "inbox": "",
+            "task_board": {
+                "in_flight": len(self._tasks_in_flight),
+                "completed": self._tasks_completed,
+                "failed": self._tasks_failed,
+                "details": list(self._tasks_in_flight.values())[:10],
+            },
+        }
+
+        # Agent statuses
+        for name, agent in self.workers.items():
+            report["agents"][name] = agent.get_dashboard_status()
+
+        # Recent activity log (last 30 lines)
+        if os.path.exists(LOG_PATH):
+            with open(LOG_PATH) as f:
+                lines = f.readlines()
+            report["recent_log"] = [line.strip() for line in lines[-30:]]
+
+        # Human messages
+        report["human_messages"] = self._read_human_messages()
+
+        # Memory
+        report["editor_memory"] = self._get_memory_summary()
+
+        # Quality audit
+        report["quality_audit"] = self._build_quality_report()
+
+        # Cross-reference summary
+        report["xref_summary"] = self._build_xref_summary()
+
+        # Ledger summary (recent failures)
+        report["ledger_summary"] = self._build_ledger_summary()
+
+        return report
+
+    def _build_ledger_summary(self):
+        """Build a summary of recent failures from the ledger."""
+        summary = {"total_keys": 0, "keys_with_failures": 0, "recent_failures": []}
+        for key, entries in self.ledger._data.items():
+            summary["total_keys"] += 1
+            failures = [e for e in entries if not e["success"]]
+            if failures:
+                summary["keys_with_failures"] += 1
+                last_fail = failures[-1]
+                summary["recent_failures"].append({
+                    "key": key[:40],
+                    "count": len(failures),
+                    "last_error": last_fail.get("error", "")[:80],
+                    "agent": last_fail.get("agent", ""),
+                })
+        # Sort by failure count descending, keep top 10
+        summary["recent_failures"].sort(key=lambda x: x["count"], reverse=True)
+        summary["recent_failures"] = summary["recent_failures"][:10]
+        return summary
 
     def _build_quality_report(self):
-        """Audit Supabase (source of truth) for data quality issues.
-
-        Checks for:
-        - NULL homeowner_name entries (should be deleted or re-extracted)
-        - Exact duplicates (same name + same issue_id)
-        - Near-duplicates (similar names in the same issue)
-        - Issues with high null rates that need re-extraction
-        """
+        """Audit Supabase for data quality issues."""
         report = {
             "total_features": 0,
             "supabase_nulls": [],
             "duplicates": [],
             "near_duplicates": [],
             "issues_needing_reextraction": [],
-            "issue_identifier_map": {},  # issue_id → archive.org identifier
+            "issue_identifier_map": {},
         }
 
         try:
-            from dotenv import load_dotenv
-            load_dotenv()
-            from supabase import create_client
-            sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
-
-            # Get all features from Supabase
+            sb = get_supabase()
             all_features = sb.table("features").select("id,homeowner_name,article_title,issue_id,page_number").execute()
             features = all_features.data
             report["total_features"] = len(features)
 
-            # Get issues for identifier mapping
-            all_issues = sb.table("issues").select("id,month,year").execute()
+            all_issues = sb.table("issues").select("id,month,year,identifier").execute()
             issue_map = {row["id"]: row for row in all_issues.data}
 
-            # Build identifier map (issue_id → archive.org identifier)
-            manifest_path = os.path.join(DATA_DIR, "archive_manifest.json")
-            if os.path.exists(manifest_path):
-                with open(manifest_path) as f:
-                    manifest = json.load(f)
-                for item in manifest.get("issues", []):
-                    m, y = item.get("month"), item.get("year")
-                    if m and y:
-                        for iid, iss in issue_map.items():
-                            if iss.get("month") == m and iss.get("year") == y:
-                                report["issue_identifier_map"][str(iid)] = item["identifier"]
+            for iid, iss in issue_map.items():
+                if iss.get("identifier"):
+                    report["issue_identifier_map"][str(iid)] = iss["identifier"]
 
-            # 1. NULL homeowner_name
+            # NULL homeowner_name
             for f in features:
                 name = f.get("homeowner_name")
                 if not name or str(name).lower() in ("null", "none", "unknown"):
@@ -212,7 +837,7 @@ class EditorAgent(Agent):
                         "article": f.get("article_title", "?"),
                     })
 
-            # 2. Exact duplicates (same homeowner_name + same issue_id)
+            # Exact duplicates
             from collections import defaultdict
             by_key = defaultdict(list)
             for f in features:
@@ -232,7 +857,7 @@ class EditorAgent(Agent):
                         "delete_ids": ids[1:],
                     })
 
-            # 3. Near-duplicates (similar names in the same issue)
+            # Near-duplicates
             by_issue = defaultdict(list)
             for f in features:
                 name = f.get("homeowner_name")
@@ -244,10 +869,8 @@ class EditorAgent(Agent):
                     for j in range(i + 1, len(names)):
                         id_a, name_a = names[i]
                         id_b, name_b = names[j]
-                        # Skip if already an exact duplicate (handled above)
                         if name_a == name_b:
                             continue
-                        # Check if one name contains the other (e.g., "Botero" in "Fernando Botero")
                         la, lb = name_a.lower().strip(), name_b.lower().strip()
                         if la in lb or lb in la:
                             iss = issue_map.get(issue_id, {})
@@ -259,7 +882,7 @@ class EditorAgent(Agent):
                                 "suggestion": f"Keep '{name_a if len(name_a) > len(name_b) else name_b}' (longer/fuller name), delete the other",
                             })
 
-            # 4. Issues needing re-extraction (high null count)
+            # Issues needing re-extraction
             null_by_issue = defaultdict(lambda: {"nulls": 0, "total": 0})
             for f in features:
                 iid = f["issue_id"]
@@ -267,17 +890,17 @@ class EditorAgent(Agent):
                 name = f.get("homeowner_name")
                 if not name or str(name).lower() in ("null", "none", "unknown"):
                     null_by_issue[iid]["nulls"] += 1
-            for iid, counts in null_by_issue.items():
-                if counts["nulls"] > 0:
+            for iid, counts_data in null_by_issue.items():
+                if counts_data["nulls"] > 0:
                     iss = issue_map.get(iid, {})
                     identifier = report["issue_identifier_map"].get(str(iid), "?")
                     report["issues_needing_reextraction"].append({
                         "issue_id": iid,
                         "issue": f"{iss.get('year','?')}-{iss.get('month','?'):02d}" if isinstance(iss.get('month'), int) else "?",
                         "identifier": identifier,
-                        "null_count": counts["nulls"],
-                        "total_features": counts["total"],
-                        "null_pct": round(100 * counts["nulls"] / counts["total"]),
+                        "null_count": counts_data["nulls"],
+                        "total_features": counts_data["total"],
+                        "null_pct": round(100 * counts_data["nulls"] / counts_data["total"]),
                     })
 
         except Exception as e:
@@ -286,12 +909,10 @@ class EditorAgent(Agent):
         return report
 
     def _build_xref_summary(self):
-        """Read cross-reference results and build a summary for the situation report."""
-        xref_dir = os.path.join(DATA_DIR, "cross_references")
+        """Read cross-reference results summary."""
         summary = {"total_checked": 0, "total_matches": 0, "recent_matches": []}
-
-        checked_path = os.path.join(xref_dir, "checked_features.json")
-        results_path = os.path.join(xref_dir, "results.json")
+        checked_path = os.path.join(XREF_DIR, "checked_features.json")
+        results_path = os.path.join(XREF_DIR, "results.json")
 
         try:
             if os.path.exists(checked_path):
@@ -306,7 +927,6 @@ class EditorAgent(Agent):
                     results = json.load(f)
                 matches = [r for r in results if r.get("black_book_status") == "match"]
                 summary["total_matches"] = len(matches)
-                # Last 5 matches for visibility
                 for m in matches[-5:]:
                     summary["recent_matches"].append({
                         "name": m.get("homeowner_name", "?"),
@@ -318,259 +938,16 @@ class EditorAgent(Agent):
 
         return summary
 
-    def _read_human_messages(self):
-        """Read unread human messages."""
-        if not os.path.exists(HUMAN_MESSAGES_PATH):
-            return []
-        try:
-            with open(HUMAN_MESSAGES_PATH) as f:
-                messages = json.load(f)
-            return [m for m in messages if not m.get("read")]
-        except Exception:
-            return []
-
-    def _mark_messages_read(self):
-        """Mark all human messages as read."""
-        if not os.path.exists(HUMAN_MESSAGES_PATH):
-            return
-        try:
-            with open(HUMAN_MESSAGES_PATH) as f:
-                messages = json.load(f)
-            for m in messages:
-                m["read"] = True
-            with open(HUMAN_MESSAGES_PATH, "w") as f:
-                json.dump(messages, f)
-        except Exception:
-            pass
-
-    def _build_situation_report(self):
-        """Gather status from all agents + recent activity log + memory + QC."""
-        report = {
-            "timestamp": datetime.now().isoformat(),
-            "agents": {},
-            "recent_log": [],
-            "inbox": "",
-        }
-
-        # Agent statuses
-        for name, agent in self.workers.items():
-            report["agents"][name] = agent.get_dashboard_status()
-
-        # Recent activity log (last 30 lines)
-        if os.path.exists(LOG_PATH):
-            with open(LOG_PATH) as f:
-                lines = f.readlines()
-            report["recent_log"] = [line.strip() for line in lines[-30:]]
-
-        # Human inbox (legacy markdown)
-        if os.path.exists(INBOX_PATH):
-            with open(INBOX_PATH) as f:
-                report["inbox"] = f.read().strip()
-
-        # Human messages from dashboard
-        report["human_messages"] = self._read_human_messages()
-
-        # Persistent memory — past observations and decisions
-        report["editor_memory"] = self._get_memory_summary()
-
-        # Quality control audit
-        report["quality_audit"] = self._build_quality_report()
-
-        # Agent escalations — unresolved requests for help from any agent
-        report["agent_escalations"] = {}
-        for agent_name in list(self.workers.keys()) + ["scout", "courier", "reader", "detective", "researcher", "designer"]:
-            escs = self._read_escalations(agent_name)
-            if escs:
-                report["agent_escalations"][agent_name] = escs
-
-        # Cross-reference results summary
-        report["xref_summary"] = self._build_xref_summary()
-
-        return report
-
-    def _escalation_path(self, agent_name):
-        """Return the escalation file path for a given agent."""
-        return os.path.join(DATA_DIR, f"{agent_name}_escalations.json")
-
-    def _read_escalations(self, agent_name):
-        """Read unresolved escalations for a given agent."""
-        path = self._escalation_path(agent_name)
-        if not os.path.exists(path):
-            return []
-        try:
-            with open(path) as f:
-                escalations = json.load(f)
-            return [e for e in escalations if not e.get("resolved")]
-        except Exception:
-            return []
-
-    def _resolve_escalation(self, agent_name, index):
-        """Mark an agent's escalation as resolved by index."""
-        path = self._escalation_path(agent_name)
-        if not os.path.exists(path):
-            return
-        try:
-            with open(path) as f:
-                escalations = json.load(f)
-            # Find the Nth unresolved escalation
-            unresolved_idx = 0
-            for i, esc in enumerate(escalations):
-                if not esc.get("resolved"):
-                    if unresolved_idx == index:
-                        escalations[i]["resolved"] = True
-                        escalations[i]["resolved_time"] = datetime.now().isoformat()
-                        escalations[i]["resolved_by"] = "editor"
-                        self.log(f"Resolved {agent_name} escalation #{index}: {esc.get('message', '')[:60]}")
-                        break
-                    unresolved_idx += 1
-            with open(path, "w") as f:
-                json.dump(escalations, f, indent=2)
-        except Exception as e:
-            self.log(f"Failed to resolve {agent_name} escalation: {e}", level="ERROR")
-
-    def _detect_events(self):
-        """Cheap file reads to detect if anything meaningful happened.
-
-        Returns (trigger_reason, details) or (None, None) if no events.
-        """
-        # 1. New escalations from any agent
-        agents_to_check = list(self.workers.keys()) + ["researcher"]
-        for agent_name in agents_to_check:
-            unresolved = self._read_escalations(agent_name)
-            prev_count = self._last_escalation_snapshot.get(agent_name, 0)
-            current_count = len(unresolved)
-            if current_count > prev_count:
-                self._last_escalation_snapshot[agent_name] = current_count
-                return ("escalation", f"New escalation from {agent_name}")
-
-        # 2. Milestones in activity log (new INFO-level entries since last check)
-        if os.path.exists(LOG_PATH):
-            try:
-                with open(LOG_PATH) as f:
-                    lines = f.readlines()
-                new_count = len(lines)
-                if new_count > self._last_log_line_count:
-                    # Check new lines for milestone keywords
-                    new_lines = lines[self._last_log_line_count:]
-                    self._last_log_line_count = new_count
-                    for line in new_lines:
-                        low = line.lower()
-                        if any(kw in low for kw in (
-                            "loaded", "dossier complete", "match",
-                            "extraction complete", "downloaded",
-                            "scout complete", "features extracted",
-                        )):
-                            return ("milestone", line.strip().split("|")[-1][:80] if "|" in line else line.strip()[:80])
-                else:
-                    self._last_log_line_count = new_count
-            except Exception:
-                pass
-
-        return (None, None)
-
-    async def work(self):
-        import time as _time
-
-        # Check for events (cheap file reads every 5s)
-        has_human_messages = bool(self._read_human_messages())
-        now = _time.time()
-        elapsed = now - self._last_haiku_time
-
-        # Determine if we should call the LLM this cycle
-        # Minimum cooldowns: human messages are instant, escalations need 30s, milestones 90s
-        trigger = None
-        if has_human_messages:
-            trigger = "human_message"
-        else:
-            event_type, event_detail = self._detect_events()
-            if event_type == "escalation" and elapsed >= 30:
-                trigger = event_type
-            elif event_type == "milestone" and elapsed >= 90:
-                trigger = event_type
-            elif elapsed >= self._health_check_interval:
-                trigger = "health_check"
-
-        # No trigger — stay idle
-        if not trigger:
-            if _time.time() < self._happy_until:
-                self._editor_state = "happy"
-                self._current_task = "Instructions acknowledged!"
-            else:
-                self._editor_state = "idle"
-                self._current_task = "Waiting for events..."
-            return False
-
-        # Set state based on trigger
-        if trigger == "human_message":
-            self._editor_state = "listening"
-            self._current_task = "Reading human message..."
-        elif trigger == "escalation":
-            self._editor_state = "assessing"
-            self._current_task = "Reviewing escalation..."
-        elif trigger == "milestone":
-            self._editor_state = "assessing"
-            self._current_task = "Agent reported progress..."
-        else:
-            self._editor_state = "assessing"
-            self._current_task = "Routine health check..."
-
-        skills = self.load_skills()
-        report = self._build_situation_report()
-
-        # Call Claude Haiku for strategic analysis
-        self._last_haiku_time = now
-        try:
-            assessment = await asyncio.to_thread(
-                self._call_haiku, skills, report
-            )
-        except Exception as e:
-            self._editor_state = "idle"
-            self.log(f"Haiku assessment failed: {e}", level="ERROR")
-            self._current_task = "Assessment failed — will retry"
-            return False
-
-        self._last_assessment = assessment
-
-        # Execute any actions from the assessment
-        self._execute_actions(assessment)
-
-        # Write briefing
-        self._write_briefing(assessment)
-
-        # Write inbox message
-        self._write_inbox_message(assessment, is_reply=has_human_messages)
-
-        # Mark human messages as read
-        self._mark_messages_read()
-
-        # Set state after successful processing
-        if has_human_messages:
-            self._editor_state = "happy"
-            self._happy_until = _time.time() + 20  # Stay happy for 20 seconds
-            self._current_task = "Instructions acknowledged!"
-        else:
-            self._editor_state = "idle"
-
-        # Persist health to memory for cross-restart continuity
-        health = assessment.get("health", "UNKNOWN")
-        memory = self._load_memory()
-        memory["last_assessment_health"] = health
-        memory["last_assessment_time"] = datetime.now().isoformat()
-        self._save_memory(memory)
-        self._last_health = health
-
-        # Log summary
-        summary = assessment.get("summary", "No summary")
-        self._current_task = f"Pipeline: {health} — {summary}"
-        self.log(f"Assessment: {health} — {summary}")
-
-        return True
+    # ═══════════════════════════════════════════════════════════
+    # LLM CALL — Strategic assessment
+    # ═══════════════════════════════════════════════════════════
 
     def _call_haiku(self, skills, report):
-        """Call Claude Haiku with the situation report. Returns parsed JSON."""
+        """Call Claude with the situation report. Returns parsed JSON."""
         client = self._get_client()
 
         system_prompt = f"""You are the Editor agent for the AD-Epstein Index pipeline.
+You are the CENTRAL COORDINATOR — all pipeline state changes go through you.
 
 {skills}
 
@@ -580,158 +957,59 @@ Respond with JSON only. Schema:
   "summary": "One-line summary of pipeline state",
   "observations": ["observation 1", "observation 2", ...],
   "actions": [
-    {{"type": "pause"|"resume"|"log"|"remember"|"update_skills"|"queue_reextraction"|"set_designer_mode"|"clear_load_failures", "agent": "agent_name", "reason": "why"}},
-    {{"type": "queue_reextraction", "identifier": "...", "strategy": "wider_scan"|"extended_toc"|"full_scan", "reason": "why"}},
-    {{"type": "delete_features", "feature_ids": [1, 2, 3], "reason": "why"}},
-    {{"type": "reset_issue_pipeline", "issue_id": 12, "identifier": "ArchitecturalDigestNovember2013", "reason": "why"}},
-    {{"type": "set_designer_mode", "mode": "training"|"creating", "reason": "why"}},
-    {{"type": "clear_load_failures", "identifier": "ArchitecturalDigest..." or null for all, "reason": "why"}}
+    {{"type": "pause"|"resume"|"log"|"remember"|"update_skills"|"delete_features"|"reset_issue_pipeline"|"set_designer_mode"|"override_verdict"|"retry_doj_search", ...}}
   ],
   "briefing": "Full markdown briefing text for the human researcher",
-  "inbox_message": "A concise 1-2 sentence update for the human's inbox dashboard. Focus on high-level progress, milestones, or issues that need attention. Write conversationally. If the human sent you a message, address it directly here.",
-  "inbox_type": "status" or "alert" (use alert only for matches, errors, or urgent issues),
+  "inbox_message": "A concise 1-2 sentence update for the human's inbox dashboard.",
+  "inbox_type": "status" or "alert",
   "asks": ["Question for human, if any"]
 }}
 
+## Task Board
+The situation report includes "task_board" — your current task assignments:
+- in_flight: tasks currently being executed by agents
+- completed/failed: total counts
+- details: what's currently assigned
+Use this to track progress and detect stuck agents.
+
 ## Memory
-The situation report includes "editor_memory" — your past observations. Use this to:
-- Avoid repeating the same observations cycle after cycle
-- Track decisions you've made and why
-- Notice trends over time (improving/worsening metrics)
-To save a new memory, add an action: {{"type": "remember", "category": "decision|observation|milestone|issue", "reason": "What to remember"}}
-Use sparingly — only record things worth remembering across restarts.
+Past observations in "editor_memory". Add new: {{"type": "remember", "category": "...", "reason": "..."}}
 
-## Quality Control (CRITICAL — proactive Supabase cleanup)
-The situation report includes "quality_audit" with Supabase data quality issues:
-- supabase_nulls: rows with NULL homeowner_name (includes issue_id and identifier)
-- duplicates: exact duplicate entries (same name + same issue_id) — includes keep_id and delete_ids
-- near_duplicates: similar names in same issue (e.g., "Botero" and "Fernando Botero") — review and delete the shorter/partial name
-- issues_needing_reextraction: issues with high null counts
-- issue_identifier_map: maps issue_id → archive.org identifier (for re-extraction)
+## Quality Control
+"quality_audit" has Supabase data quality issues. Take cleanup actions:
+- Delete exact duplicates: {{"type": "delete_features", "feature_ids": [id1], "reason": "Duplicate"}}
+- Delete near-duplicates: keep the longer name
+- Handle NULLs: delete if 1-2, reset_issue_pipeline if >50%
+- {{"type": "reset_issue_pipeline", "issue_id": N, "identifier": "...", "reason": "..."}}
+Only 2-3 cleanup actions per cycle.
 
-**Proactive cleanup actions (take these EVERY cycle when issues exist):**
-
-1. **Delete exact duplicates immediately:** Use {{"type": "delete_features", "feature_ids": [id1, id2], "reason": "Duplicate of feature #N"}}
-   The quality_audit provides `delete_ids` for each duplicate group — delete those IDs, keeping the `keep_id`.
-
-2. **Review and delete near-duplicates:** If one name is a subset of another (e.g., "Botero" vs "Fernando Botero"), delete the shorter/partial one.
-   Use {{"type": "delete_features", "feature_ids": [shorter_id], "reason": "Near-duplicate of #N (fuller name)"}}
-
-3. **Handle NULL homeowner entries:**
-   - If an issue has mostly NULLs (>50%), do a FULL PIPELINE RESET — this wipes Supabase features, resets the manifest so Courier re-downloads, and deletes the extraction so Reader starts fresh:
-     {{"type": "reset_issue_pipeline", "issue_id": N, "identifier": "ArchitecturalDigest...", "reason": "N of M features are NULL — full reset"}}
-   - If an issue has only 1-2 NULLs among mostly good features, just delete the NULL rows: {{"type": "delete_features", "feature_ids": [null_id], "reason": "NULL homeowner — no useful data"}}
-   - Use the identifier from issue_identifier_map for the identifier field
-
-4. **You are the central coordinator.** When data quality is bad, you feed orders down the pipeline:
-   - reset_issue_pipeline: Wipes Supabase + resets manifest → Courier re-downloads → Reader re-extracts → Loader re-loads → Detective re-checks
-   - delete_features: Surgical removal of specific junk/duplicate rows
-   - queue_reextraction: Re-extract without re-downloading (when the PDF is fine but extraction was bad)
-
-5. **Track cleanup progress in memory** — remember which issues you've already cleaned up to avoid repeating work. Only take 2-3 cleanup actions per cycle to avoid overwhelming the pipeline.
-
-## Cross-Reference Results
-The situation report includes "xref_summary" with:
-- total_checked: how many features the Detective has cross-referenced
-- total_matches: how many names matched the Epstein records
-- recent_matches: last 5 matches with name, match_type, and issue
-When new matches appear, flag them in your inbox_message with inbox_type "alert" — these are the project's most important output.
-Track match counts in memory to notice trends.
+## Ledger Summary
+"ledger_summary" shows identifiers/names with the most failures. Use this to:
+- Identify stuck items
+- Avoid retrying exhausted items
+- Report systemic issues
 
 ## Human Communication
-If the situation report includes "human_messages", the human is talking to you via the dashboard inbox.
-**THIS IS YOUR HIGHEST PRIORITY.** Always respond conversationally in your inbox_message — address the human directly, not with a status update.
+If "human_messages" exist, RESPOND DIRECTLY. This is highest priority.
+{{"type": "override_verdict", "name": "X", "verdict": "no_match", "reason": "Human instructed"}}
+{{"type": "retry_doj_search", "name": "X", "reason": "Human requested"}}
 
-You can:
-- Answer questions about pipeline state
-- Update agent skills by adding an action: {{"type": "update_skills", "agent": "agent_name", "content": "New section or instructions to append to the agent's skills file", "reason": "what changed"}}
-- Pause/resume agents as requested
-- Acknowledge feedback and adjust strategy
+## Cross-Reference Results
+"xref_summary" — flag new matches with inbox_type "alert".
 
-**Translating human instructions into actions (CRITICAL):**
-When the human tells you to dismiss, ignore, or override something, you MUST emit the corresponding action:
-- "ignore X" / "dismiss X" / "X is a false positive" / "X is not a match" → {{"type": "override_verdict", "name": "X", "verdict": "no_match", "reason": "Human instructed to dismiss"}}
-- "retry X" / "search X again" → {{"type": "retry_doj_search", "name": "X", "reason": "Human requested retry"}}
-- "re-extract [issue]" → {{"type": "queue_reextraction", "identifier": "...", "strategy": "wider_scan", "reason": "Human requested"}}
-- "pause [agent]" / "stop [agent]" → {{"type": "pause", "agent": "agent_name", "reason": "Human requested"}}
-- "resume [agent]" / "start [agent]" → {{"type": "resume", "agent": "agent_name", "reason": "Human requested"}}
+## Agent Actions
+- {{"type": "pause", "agent": "agent_name", "reason": "..."}}
+- {{"type": "resume", "agent": "agent_name", "reason": "..."}}
+- {{"type": "update_skills", "agent": "agent_name", "content": "...", "reason": "..."}}
+- {{"type": "set_designer_mode", "mode": "training"|"creating", "reason": "..."}}"""
 
-**Conversational reply examples:**
-- Human: "ignore Gritti Palace" → inbox_message: "Got it — I've dismissed Gritti Palace as a false positive." + override_verdict action
-- Human: "how's the pipeline?" → inbox_message: "All systems running smoothly! We've extracted 85 features from 12 issues so far."
-- Human: "pause the detective" → inbox_message: "Done — Detective is paused. Say 'resume detective' when you're ready." + pause action
-Do NOT just repeat status numbers when the human sends a message. Talk to them like a person.
-
-## Agent Escalations
-If the situation report includes "agent_escalations" with entries, one or more agents are stuck and need your help.
-The dict is keyed by agent name — each value is a list of unresolved escalations.
-
-When you see escalations:
-1. Analyze what's stuck and why (check the "type" and "context" fields)
-2. Think about solutions specific to the agent and failure type
-3. Update the agent's skills file if needed: {{"type": "update_skills", "agent": "agent_name", "content": "New instructions", "reason": "responding to escalation"}}
-4. Alert the human via inbox_message — they may be able to help
-5. Mark escalations as resolved: {{"type": "resolve_escalation", "agent": "agent_name", "index": 0}}
-Use inbox_type "alert" for escalations so the human notices.
-
-**Scout escalations** (finding issues): new search terms, alternative archives, credential-gated sources (ProQuest, EBSCO, Gale).
-**Courier escalations** (downloading PDFs): retry strategies, alternative download sources, credential setup (AD_ARCHIVE_EMAIL/PASSWORD in .env), install poppler-utils for pdfunite, manual PDF uploads for stubborn issues.
-**Reader escalations** (extracting features): The Reader has quality gates — it holds extractions that fail QC instead of loading bad data into Supabase. Escalation types:
-- `zero_features`: Extraction found no features at all. Try `wider_scan` or `extended_toc` strategy.
-- `insufficient_features`: Only 0-1 features found (major red flag). Try `wider_scan` first, then `full_scan`.
-- `high_null_rate`: >50% of features have NULL homeowner_name. Try `wider_scan` strategy.
-- `extraction_failed`: process_issue() returned None (PDF may be corrupt). Alert the human.
-- `extraction_stuck`: Multiple consecutive failures across different issues. The extraction pipeline itself may be broken. Alert the human urgently.
-- `reextraction_*`: A re-extraction attempt also failed QC. Consider escalating to `full_scan` or alerting the human.
-- `supabase_load_failed`: **SELF-HEALABLE — do NOT pause the Reader or alert the human.** The `_sanitize_integer()` function in load_features.py now handles comma-formatted numbers (e.g., "35,000" → 35000). To fix: (1) clear_load_failures, (2) resolve_escalation, (3) resume reader if paused. The retry will succeed.
-
-To queue a re-extraction, use: {{"type": "queue_reextraction", "identifier": "ArchitecturalDigestMarch2020", "strategy": "wider_scan", "reason": "High null rate"}}
-To clear load failures, use: {{"type": "clear_load_failures", "identifier": "ArchitecturalDigest...", "reason": "Integer sanitization handles this"}}
-Available strategies (prefer in this order): `wider_scan` → `extended_toc` → `full_scan`
-- `wider_scan`: Normal TOC + scan every 3 pages from page 20 (good first retry)
-- `extended_toc`: Read TOC from pages 1-30, scan every 3 from page 20
-- `full_scan`: Skip TOC entirely, scan every 3 pages (most expensive, last resort)
-
-**Detective escalations** (cross-referencing names): The Detective searches both the Black Book and DOJ Epstein Library, then produces combined verdicts. Escalation types:
-- `high_value_match`: A name matched with confirmed_match or likely_match verdict. This is the project's core output — alert the human immediately.
-- `false_positive_review`: A possible_match has false positive indicators (common name, last_name_only, etc.). Review the evidence carefully before confirming or dismissing.
-- `needs_review`: Ambiguous evidence that the Detective can't resolve automatically. Look at the evidence_summary in the context.
-- `doj_search_failed`: A specific name's DOJ search failed repeatedly. Consider retrying: {{"type": "retry_doj_search", "name": "...", "reason": "..."}}
-- `search_stuck`: Multiple consecutive DOJ search failures — the browser or DOJ site may be having issues. Alert the human.
-
-**Detective action formats:**
-- Override a verdict: {{"type": "override_verdict", "name": "Robert Smith", "verdict": "no_match", "reason": "Human instructed to dismiss"}}
-- Retry a DOJ search: {{"type": "retry_doj_search", "name": "Miranda Brooks", "reason": "Previous search timed out, worth retrying"}}
-
-Verdict options: confirmed_match, likely_match, possible_match, no_match
-
-**CRITICAL: Do NOT override verdicts on your own initiative.**
-The Researcher agent is responsible for investigating leads and building dossiers. Only use override_verdict when:
-1. The HUMAN explicitly tells you to dismiss a name (e.g., "ignore X", "dismiss X")
-2. The RESEARCHER rates a lead as COINCIDENCE (the Researcher auto-dismisses these)
-Never pre-emptively dismiss leads — even obvious false positives should go through the Researcher first. Your job is to SUPERVISE, not to INVESTIGATE.
-
-**Researcher escalations** (investigating leads & building dossiers): The Researcher investigates all Detective leads and builds dossiers with pattern analysis. Escalation types:
-- `high_value_lead`: A HIGH connection strength dossier was built. **Alert the human immediately** — this is the project's most important output. Include the subject name, strength rationale, and key findings with inbox_type "alert".
-- `pattern_detected`: Correlations found across multiple Epstein-associated names (shared designer, location cluster, style trend). Note in briefing and track in memory. If the same pattern keeps appearing, escalate to the human as a trend.
-- `investigation_failed`: The Haiku call failed or returned invalid JSON. If systemic (multiple failures), alert the human. If isolated, the Researcher will retry next cycle.
-- `needs_manual_review`: Ambiguous evidence the Researcher couldn't resolve. Forward to the human with context.
-Note: Researcher escalations are informational — you read them and brief the human, but don't write actions back.
-
-**Designer escalations** (training & design): The Designer studies design patterns from websites, Notion, local images, and Figma. Escalation types:
-- `training_failed`: Claude CLI call failed (timeout, network issue). Single failures are normal. If repeated, alert the human.
-- `source_unavailable`: Source temporarily down (Notion offline, local folder empty). Don't escalate immediately — Designer cycles to next source.
-- `training_stuck`: Multiple consecutive failures — systemic issue (CLI not installed, API key expired). Alert the human urgently.
-- `mode_transition_ready`: Designer has studied all sources and has 50+ patterns — may be ready for Phase 3. Review the stats and ask the human if ready to switch.
-To switch Designer to creation mode: {{"type": "set_designer_mode", "mode": "creating", "reason": "Designer has sufficient training data"}}"""
-
-        user_message = f"""Here is the current pipeline situation report:
+        user_message = f"""Pipeline situation report:
 
 ```json
-{json.dumps(report, indent=2)}
+{json.dumps(report, indent=2, default=str)}
 ```
 
-Analyze the pipeline state and provide your assessment."""
+Analyze and provide your assessment."""
 
         response = client.messages.create(
             model="claude-opus-4-6",
@@ -740,23 +1018,17 @@ Analyze the pipeline state and provide your assessment."""
             messages=[{"role": "user", "content": user_message}],
         )
 
-        # Track API usage and cost
         self._track_usage(response)
 
-        # Parse JSON from response — handle markdown blocks and trailing text
         text = response.content[0].text.strip()
-        # Strip markdown code blocks
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
-            # Find the closing ``` and discard everything after it
             if "```" in text:
                 text = text[:text.rindex("```")]
             text = text.strip()
-        # If still not valid JSON, try extracting the first JSON object
         try:
             return json.loads(text)
         except json.JSONDecodeError:
-            # Find first { and its matching } using a simple brace counter
             start = text.find("{")
             if start == -1:
                 raise
@@ -784,63 +1056,42 @@ Analyze the pipeline state and provide your assessment."""
                         return json.loads(text[start:i+1])
             raise
 
+    # ═══════════════════════════════════════════════════════════
+    # ACTION EXECUTION
+    # ═══════════════════════════════════════════════════════════
+
     def _execute_actions(self, assessment):
-        """Execute actions recommended by Haiku."""
+        """Execute actions recommended by the LLM."""
         for action in assessment.get("actions", []):
             action_type = action.get("type")
             agent_name = action.get("agent", "")
             reason = action.get("reason", "")
 
-            # Memory: persist an observation or decision
             if action_type == "remember":
                 category = action.get("category", "observation")
                 self._remember(category, reason)
-                self.log(f"Remembered [{category}]: {reason}", level="DEBUG")
                 continue
 
-            # update_skills works on any agent (just modifies a file)
             if action_type == "update_skills":
                 self._update_agent_skills(agent_name, action.get("content", ""), reason)
                 continue
 
-            # resolve_escalation marks an agent's escalation as handled
-            if action_type == "resolve_escalation":
-                esc_agent = action.get("agent", "scout")  # Default to scout for backwards compat
-                esc_index = action.get("index", 0)
-                self._resolve_escalation(esc_agent, esc_index)
-                continue
-
-            # queue_reextraction tells the Reader to re-extract an issue
-            if action_type == "queue_reextraction":
-                self._queue_reextraction(action)
-                continue
-
-            # override_verdict tells the Detective to override a name's verdict
-            if action_type == "override_verdict":
-                self._override_detective_verdict(action)
-                continue
-
-            # retry_doj_search resets a name for DOJ re-search
-            if action_type == "retry_doj_search":
-                self._retry_doj_search(action)
-                continue
-
-            # clear_load_failures resets the Reader's failure counter so it retries loading
-            if action_type == "clear_load_failures":
-                self._clear_load_failures(action)
-                continue
-
-            # delete_features removes specific feature rows from Supabase
             if action_type == "delete_features":
                 self._delete_features(action)
                 continue
 
-            # reset_issue_pipeline: full reset — wipe Supabase, reset manifest, delete extraction
             if action_type == "reset_issue_pipeline":
                 self._reset_issue_pipeline(action)
                 continue
 
-            # set_designer_mode switches the Designer between training/creating
+            if action_type == "override_verdict":
+                self._override_detective_verdict(action)
+                continue
+
+            if action_type == "retry_doj_search":
+                self._retry_doj_search(action)
+                continue
+
             if action_type == "set_designer_mode":
                 self._set_designer_mode(action)
                 continue
@@ -849,7 +1100,6 @@ Analyze the pipeline state and provide your assessment."""
                 continue
 
             agent = self.workers[agent_name]
-
             if action_type == "pause" and not agent.is_paused:
                 agent.pause()
                 self.log(f"Paused {agent_name}: {reason}")
@@ -860,7 +1110,6 @@ Analyze the pipeline state and provide your assessment."""
                 self.log(f"[{agent_name}] {reason}")
 
     def _update_agent_skills(self, agent_name, content, reason):
-        """Append new instructions to an agent's skills file."""
         if not content or not agent_name:
             return
         skills_dir = os.path.join(os.path.dirname(__file__), "skills")
@@ -876,195 +1125,63 @@ Analyze the pipeline state and provide your assessment."""
         except Exception as e:
             self.log(f"Failed to update {agent_name} skills: {e}", level="ERROR")
 
-    def _queue_reextraction(self, action):
-        """Queue a re-extraction for the Reader agent."""
-        identifier = action.get("identifier")
-        strategy = action.get("strategy", "wider_scan")
-        reason = action.get("reason", "Editor requested re-extraction")
-
-        if not identifier:
-            self.log("queue_reextraction: missing identifier", level="WARN")
-            return
-
-        # Atomically append to queue (Reader also reads/writes this file)
-        new_item = {
-            "identifier": identifier,
-            "reason": reason,
-            "strategy": strategy,
-            "queued_by": "editor",
-            "queued_time": datetime.now().isoformat(),
-            "status": "pending",
-        }
-
-        def append_to_queue(queue):
-            # Don't duplicate pending requests for the same identifier
-            for item in queue:
-                if item.get("identifier") == identifier and item.get("status") == "pending":
-                    return
-            queue.append(new_item)
-
-        update_json_locked(REEXTRACT_QUEUE_PATH, append_to_queue, default=[])
-
-        self.log(f"Queued re-extraction: {identifier} ({strategy}) — {reason}")
-
-    def _clear_load_failures(self, action):
-        """Clear the Reader's load failure counter so it retries loading issues into Supabase.
-
-        Supports clearing a specific identifier or all failures.
-        """
-        identifier = action.get("identifier")  # None means clear all
-        reason = action.get("reason", "Editor cleared load failures")
-
-        reader_log_path = os.path.join(DATA_DIR, "reader_log.json")
-        if not os.path.exists(reader_log_path):
-            self.log("clear_load_failures: reader_log.json not found", level="WARN")
-            return
-
-        try:
-            with open(reader_log_path) as f:
-                reader_log = json.load(f)
-
-            load_failures = reader_log.get("load_failures", {})
-
-            if identifier:
-                if identifier in load_failures:
-                    del load_failures[identifier]
-                    self.log(f"Cleared load failures for {identifier}: {reason}")
-                else:
-                    self.log(f"clear_load_failures: {identifier} not in failure list")
-                    return
-            else:
-                count = len(load_failures)
-                load_failures.clear()
-                self.log(f"Cleared all load failures ({count} entries): {reason}")
-
-            reader_log["load_failures"] = load_failures
-            with open(reader_log_path, "w") as f:
-                json.dump(reader_log, f, indent=2)
-
-        except Exception as e:
-            self.log(f"clear_load_failures failed: {e}", level="ERROR")
-
     def _delete_features(self, action):
-        """Delete specific feature rows from Supabase (for duplicates, junk entries)."""
         feature_ids = action.get("feature_ids", [])
         reason = action.get("reason", "Editor cleanup")
-
         if not feature_ids:
-            self.log("delete_features: no feature_ids provided", level="WARN")
             return
-
         try:
-            from dotenv import load_dotenv
-            load_dotenv()
-            from supabase import create_client
-            sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
-
+            sb = get_supabase()
             for fid in feature_ids:
                 sb.table("features").delete().eq("id", fid).execute()
-            self.log(f"Deleted {len(feature_ids)} features from Supabase: {feature_ids} — {reason}")
+            self.log(f"Deleted {len(feature_ids)} features: {feature_ids} — {reason}")
         except Exception as e:
             self.log(f"delete_features failed: {e}", level="ERROR")
 
     def _reset_issue_pipeline(self, action):
-        """Full pipeline reset for an issue: wipe Supabase → reset manifest → delete extraction.
-
-        This sends the issue back through the full pipeline:
-        Courier re-downloads → Reader re-extracts → Loader re-loads → Detective re-checks.
-        """
         issue_id = action.get("issue_id")
         identifier = action.get("identifier")
-        reason = action.get("reason", "Editor reset issue for full reprocessing")
-
+        reason = action.get("reason", "Editor reset")
         if not identifier or identifier == "?":
-            self.log("reset_issue_pipeline: no identifier provided", level="WARN")
             return
 
         steps_done = []
 
-        # Step 1: Delete all features for this issue from Supabase
         if issue_id:
             try:
-                from dotenv import load_dotenv
-                load_dotenv()
-                from supabase import create_client
-                sb = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_ANON_KEY"))
+                sb = get_supabase()
                 existing = sb.table("features").select("id").eq("issue_id", issue_id).execute()
                 count = len(existing.data)
                 if count > 0:
                     sb.table("features").delete().eq("issue_id", issue_id).execute()
-                    steps_done.append(f"Deleted {count} features from Supabase")
-
-                    # Also remove from cross-reference results and checked_features
+                    steps_done.append(f"Deleted {count} features")
                     deleted_ids = {row["id"] for row in existing.data}
                     self._remove_from_xref(deleted_ids)
-                    steps_done.append(f"Removed {len(deleted_ids)} IDs from cross-reference tracking")
             except Exception as e:
-                self.log(f"reset_issue_pipeline: Supabase cleanup failed: {e}", level="ERROR")
+                self.log(f"Reset Supabase cleanup failed: {e}", level="ERROR")
 
-        # Step 2: Delete local extraction JSON (so Reader starts fresh)
-        extraction_path = os.path.join(DATA_DIR, "extractions", f"{identifier}.json")
+        extraction_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
         if os.path.exists(extraction_path):
             os.remove(extraction_path)
-            steps_done.append("Deleted local extraction file")
+            steps_done.append("Deleted extraction")
         backup_path = extraction_path + ".backup"
         if os.path.exists(backup_path):
             os.remove(backup_path)
-            steps_done.append("Deleted extraction backup")
 
-        # Step 3: Delete the PDF so Courier re-downloads a fresh copy
-        issues_dir = os.path.join(DATA_DIR, "issues")
-        if os.path.exists(issues_dir):
-            for fname in os.listdir(issues_dir):
-                # PDF filenames are like "2013_11_ArchitecturalDigest.pdf"
-                if identifier.lower() in fname.lower() or fname.startswith(identifier):
-                    pdf_path = os.path.join(issues_dir, fname)
-                    os.remove(pdf_path)
-                    steps_done.append(f"Deleted PDF: {fname}")
-                    break
-            else:
-                # Try matching by month/year from manifest
-                manifest_path = os.path.join(DATA_DIR, "archive_manifest.json")
-                if os.path.exists(manifest_path):
-                    try:
-                        with open(manifest_path) as f:
-                            manifest = json.load(f)
-                        for item in manifest.get("issues", []):
-                            if item.get("identifier") == identifier and item.get("pdf_path"):
-                                old_pdf = item["pdf_path"]
-                                if os.path.exists(old_pdf):
-                                    os.remove(old_pdf)
-                                    steps_done.append(f"Deleted PDF: {os.path.basename(old_pdf)}")
-                                break
-                    except Exception:
-                        pass
+        issue_row = get_issue_by_identifier(identifier)
+        if issue_row and issue_row.get("pdf_path"):
+            old_pdf = issue_row["pdf_path"]
+            if os.path.exists(old_pdf):
+                os.remove(old_pdf)
+                steps_done.append("Deleted PDF")
 
-        # Step 4: Reset manifest status to "discovered" so Courier re-downloads
-        manifest_path = os.path.join(DATA_DIR, "archive_manifest.json")
-        if os.path.exists(manifest_path):
-            try:
-                with open(manifest_path) as f:
-                    manifest = json.load(f)
-                for item in manifest.get("issues", []):
-                    if item.get("identifier") == identifier:
-                        old_status = item.get("status")
-                        item["status"] = "discovered"
-                        item.pop("pdf_path", None)  # Clear stale PDF path
-                        steps_done.append(f"Reset manifest: {old_status} → discovered")
-                        break
-                with open(manifest_path, "w") as f:
-                    json.dump(manifest, f, indent=2)
-            except Exception as e:
-                self.log(f"reset_issue_pipeline: manifest reset failed: {e}", level="ERROR")
+        update_issue(identifier, {"status": "discovered", "pdf_path": None})
+        steps_done.append("Reset → discovered")
 
-        self.log(f"Reset issue {identifier}: {' | '.join(steps_done)} — {reason}")
+        self.log(f"Reset {identifier}: {' | '.join(steps_done)} — {reason}")
 
     def _remove_from_xref(self, feature_ids):
-        """Remove feature IDs from cross-reference tracking so Detective re-checks them."""
-        xref_dir = os.path.join(DATA_DIR, "cross_references")
-
-        # Remove from results.json
-        results_path = os.path.join(xref_dir, "results.json")
+        results_path = os.path.join(XREF_DIR, "results.json")
         if os.path.exists(results_path):
             try:
                 with open(results_path) as f:
@@ -1075,8 +1192,7 @@ Analyze the pipeline state and provide your assessment."""
             except Exception:
                 pass
 
-        # Remove from checked_features.json
-        checked_path = os.path.join(xref_dir, "checked_features.json")
+        checked_path = os.path.join(XREF_DIR, "checked_features.json")
         if os.path.exists(checked_path):
             try:
                 with open(checked_path) as f:
@@ -1088,45 +1204,29 @@ Analyze the pipeline state and provide your assessment."""
                 pass
 
     def _override_detective_verdict(self, action):
-        """Queue a verdict override for the Detective to apply."""
         name = action.get("name")
         verdict = action.get("verdict")
         reason = action.get("reason", "Editor override")
-
         if not name or not verdict:
-            self.log("override_verdict: missing name or verdict", level="WARN")
             return
-
         valid_verdicts = {"confirmed_match", "likely_match", "possible_match", "no_match"}
         if verdict not in valid_verdicts:
-            self.log(f"override_verdict: invalid verdict '{verdict}'", level="WARN")
             return
-
         verdicts_path = os.path.join(DATA_DIR, "detective_verdicts.json")
         new_verdict = {
-            "name": name,
-            "verdict": verdict,
-            "reason": reason,
-            "queued_by": "editor",
-            "queued_time": datetime.now().isoformat(),
+            "name": name, "verdict": verdict, "reason": reason,
+            "queued_by": "editor", "queued_time": datetime.now().isoformat(),
             "applied": False,
         }
         update_json_locked(verdicts_path, lambda data: data.append(new_verdict), default=[])
-
-        self.log(f"Queued verdict override: {name} → {verdict} ({reason})")
+        self.log(f"Queued verdict override: {name} → {verdict}")
 
     def _retry_doj_search(self, action):
-        """Reset a name for DOJ re-search by the Detective."""
         name = action.get("name")
         reason = action.get("reason", "Editor requested retry")
-
         if not name:
-            self.log("retry_doj_search: missing name", level="WARN")
             return
-
-        # Reset doj_status to "pending" in results.json (with locking)
-        xref_dir = os.path.join(DATA_DIR, "cross_references")
-        results_path = os.path.join(xref_dir, "results.json")
+        results_path = os.path.join(XREF_DIR, "results.json")
         name_lower = name.lower()
         try:
             def reset_doj(results):
@@ -1139,67 +1239,44 @@ Analyze the pipeline state and provide your assessment."""
                         break
             update_json_locked(results_path, reset_doj, default=[])
         except Exception as e:
-            self.log(f"retry_doj_search: failed to update results: {e}", level="ERROR")
-            return
-
-        # Clear name from detective_log failures
-        det_log_path = os.path.join(DATA_DIR, "detective_log.json")
-        if os.path.exists(det_log_path):
-            try:
-                with open(det_log_path) as f:
-                    det_log = json.load(f)
-                det_log.get("name_failures", {}).pop(name, None)
-                with open(det_log_path, "w") as f:
-                    json.dump(det_log, f, indent=2)
-            except Exception:
-                pass
-
-        self.log(f"Queued DOJ retry: {name} ({reason})")
+            self.log(f"retry_doj_search failed: {e}", level="ERROR")
+        self.log(f"Queued DOJ retry: {name}")
 
     def _set_designer_mode(self, action):
-        """Switch the Designer agent's mode via file."""
         mode = action.get("mode", "training")
-        reason = action.get("reason", "Editor requested mode change")
-
+        reason = action.get("reason", "Editor requested")
         if mode not in ("training", "creating"):
-            self.log(f"set_designer_mode: invalid mode '{mode}'", level="WARN")
             return
-
         mode_path = os.path.join(DATA_DIR, "designer_mode.json")
         os.makedirs(os.path.dirname(mode_path), exist_ok=True)
         with open(mode_path, "w") as f:
             json.dump({"mode": mode, "set_by": "editor", "time": datetime.now().isoformat()}, f, indent=2)
-
         self.log(f"Set Designer mode to '{mode}': {reason}")
 
+    # ═══════════════════════════════════════════════════════════
+    # BRIEFING / INBOX
+    # ═══════════════════════════════════════════════════════════
+
     def _write_briefing(self, assessment):
-        """Write the human-readable briefing file."""
         briefing = assessment.get("briefing", "")
         if not briefing:
-            # Build a minimal briefing from the assessment
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M")
             health = assessment.get("health", "UNKNOWN")
             summary = assessment.get("summary", "")
             observations = assessment.get("observations", [])
             asks = assessment.get("asks", [])
-
             lines = [
-                f"# Editor Briefing — {timestamp}",
-                f"",
-                f"## Pipeline Health: {health}",
-                f"{summary}",
-                f"",
+                f"# Editor Briefing — {timestamp}", "",
+                f"## Pipeline Health: {health}", f"{summary}", "",
                 f"## Observations",
             ]
             for obs in observations:
                 lines.append(f"- {obs}")
-
             if asks:
                 lines.append("")
-                lines.append("## Asks (needs human input)")
+                lines.append("## Asks")
                 for ask in asks:
                     lines.append(f"- {ask}")
-
             briefing = "\n".join(lines)
 
         os.makedirs(os.path.dirname(BRIEFING_PATH), exist_ok=True)
@@ -1207,10 +1284,8 @@ Analyze the pipeline state and provide your assessment."""
             f.write(briefing)
 
     def _write_inbox_message(self, assessment, is_reply=False):
-        """Append a structured message to the inbox JSON file."""
         msg_text = assessment.get("inbox_message")
         if not msg_text:
-            # Fallback: use summary
             msg_text = assessment.get("summary", "")
         if not msg_text:
             return
@@ -1228,7 +1303,6 @@ Analyze the pipeline state and provide your assessment."""
             "is_reply": is_reply,
         }
 
-        # Read existing messages
         messages = []
         if os.path.exists(MESSAGES_PATH):
             try:
@@ -1236,10 +1310,7 @@ Analyze the pipeline state and provide your assessment."""
                     messages = json.load(f)
             except Exception:
                 messages = []
-
         messages.append(message)
-
-        # Keep only the most recent MAX_MESSAGES
         if len(messages) > MAX_MESSAGES:
             messages = messages[-MAX_MESSAGES:]
 
@@ -1247,11 +1318,12 @@ Analyze the pipeline state and provide your assessment."""
         with open(MESSAGES_PATH, "w") as f:
             json.dump(messages, f)
 
+    # ═══════════════════════════════════════════════════════════
+    # DASHBOARD STATUS
+    # ═══════════════════════════════════════════════════════════
+
     def get_dashboard_status(self):
-        """Override to include editor-specific fields."""
-        import time as _time
         base = super().get_dashboard_status()
-        # Override editor_state if within happy window
         if _time.time() < self._happy_until:
             base["editor_state"] = "happy"
         else:
@@ -1262,10 +1334,14 @@ Analyze the pipeline state and provide your assessment."""
             "output_tokens": self._total_output_tokens,
             "total_cost": round(self._total_cost, 4),
         }
+        base["task_board"] = {
+            "in_flight": len(self._tasks_in_flight),
+            "completed": self._tasks_completed,
+            "failed": self._tasks_failed,
+        }
         return base
 
     def get_progress(self):
-        """Editor progress is based on overall pipeline completion."""
         total_agents = len(self.workers)
         idle_agents = sum(
             1 for a in self.workers.values()

@@ -28,7 +28,6 @@ from dotenv import load_dotenv
 load_dotenv()
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
 ISSUES_DIR = os.path.join(DATA_DIR, "issues")
 
@@ -481,11 +480,24 @@ def process_issue(issue):
         # Step 0: Verify actual publication date from cover
         verified_month, verified_year = verify_date(pdf_path, temp_dir)
 
-        # Update issue with confirmed date
-        if verified_year:
-            issue["verified_year"] = verified_year
-        if verified_month:
-            issue["verified_month"] = verified_month
+        # Update issue with confirmed date (in Supabase)
+        if verified_year or verified_month:
+            try:
+                from db import update_issue
+                updates = {}
+                if verified_year:
+                    updates["verified_year"] = verified_year
+                    updates["year"] = verified_year
+                if verified_month:
+                    updates["verified_month"] = verified_month
+                    updates["month"] = verified_month
+                update_issue(identifier, updates)
+            except Exception:
+                pass
+            if verified_year:
+                issue["verified_year"] = verified_year
+            if verified_month:
+                issue["verified_month"] = verified_month
 
         actual_year = verified_year or issue.get("year")
         actual_month = verified_month or issue.get("month")
@@ -494,6 +506,11 @@ def process_issue(issue):
         if actual_year and actual_year < MIN_YEAR:
             print(f"  Skipping: confirmed year {actual_year} is before {MIN_YEAR}")
             issue["status"] = "skipped_pre1988"
+            try:
+                from db import update_issue as _update_issue
+                _update_issue(identifier, {"status": "skipped_pre1988"})
+            except Exception:
+                pass
             # Save a minimal extraction file so we don't re-process
             os.makedirs(EXTRACTIONS_DIR, exist_ok=True)
             with open(output_path, "w") as f:
@@ -683,6 +700,11 @@ def process_issue_reextract(issue, strategy="wider_scan"):
         if actual_year and actual_year < MIN_YEAR:
             print(f"  Skipping: confirmed year {actual_year} is before {MIN_YEAR}")
             issue["status"] = "skipped_pre1988"
+            try:
+                from db import update_issue as _update_issue
+                _update_issue(identifier, {"status": "skipped_pre1988"})
+            except Exception:
+                pass
             os.makedirs(EXTRACTIONS_DIR, exist_ok=True)
             with open(output_path, "w") as f:
                 json.dump({
@@ -851,8 +873,7 @@ def extract_all(limit=None, identifier=None, reextract=False):
     Args:
         reextract: If True, re-process issues that have NULL homeowner_name values.
     """
-    with open(MANIFEST_PATH) as f:
-        manifest = json.load(f)
+    from db import list_issues, get_issue_by_identifier
 
     if reextract:
         # Find and re-extract issues with NULL results or too few features
@@ -864,7 +885,8 @@ def extract_all(limit=None, identifier=None, reextract=False):
         for pid, reason in problem_issues:
             print(f"  {pid}: {reason}")
         problem_ids = [pid for pid, _ in problem_issues]
-        issues = [i for i in manifest["issues"] if i["identifier"] in problem_ids]
+        issues = [get_issue_by_identifier(pid) for pid in problem_ids]
+        issues = [i for i in issues if i]  # Filter None
         # Delete old extraction files so they get re-processed
         for pid in problem_ids:
             old_path = os.path.join(EXTRACTIONS_DIR, f"{pid}.json")
@@ -872,12 +894,13 @@ def extract_all(limit=None, identifier=None, reextract=False):
                 os.remove(old_path)
                 print(f"  Removed old extraction: {pid}.json")
     elif identifier:
-        issues = [i for i in manifest["issues"] if i["identifier"] == identifier]
-        if not issues:
-            print(f"Issue {identifier} not found in manifest")
+        issue = get_issue_by_identifier(identifier)
+        if not issue:
+            print(f"Issue {identifier} not found in Supabase")
             return
+        issues = [issue]
     else:
-        issues = [i for i in manifest["issues"] if i.get("status") == "downloaded"]
+        issues = list_issues(status="downloaded")
         # Sort newest first — modern issues are most relevant
         issues.sort(key=lambda x: (x.get("year") or 0, x.get("month") or 0), reverse=True)
 
@@ -891,10 +914,6 @@ def extract_all(limit=None, identifier=None, reextract=False):
 
     for issue in issues:
         process_issue(issue)
-
-    # Save updated manifest with verified dates
-    with open(MANIFEST_PATH, "w") as f:
-        json.dump(manifest, f, indent=2)
 
     print("\nExtraction complete!")
 

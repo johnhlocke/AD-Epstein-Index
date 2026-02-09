@@ -1,6 +1,10 @@
 """
 Detective Agent — relentless cross-referencing against Epstein records.
 
+Hub-and-spoke model: Editor can assign cross_reference tasks via inbox.
+When no task is assigned, falls back to legacy work() loop which
+self-manages BB + DOJ searches.
+
 Two-pass search architecture:
   Pass 1: Black Book (local text file — instant, all unchecked names)
   Pass 2: DOJ Epstein Library (Playwright browser — batched, slow)
@@ -20,6 +24,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.base import Agent, DATA_DIR, update_json_locked, read_json_locked
+from agents.tasks import TaskResult
 
 XREF_DIR = os.path.join(DATA_DIR, "cross_references")
 RESULTS_PATH = os.path.join(XREF_DIR, "results.json")
@@ -41,6 +46,78 @@ class DetectiveAgent(Agent):
         self._checked = 0
         self._matches = 0
         self._doj_client = None
+
+    # ═══════════════════════════════════════════════════════════
+    # HUB-AND-SPOKE: execute() — for targeted cross-reference tasks
+    # ═══════════════════════════════════════════════════════════
+
+    async def execute(self, task):
+        """Execute a cross_reference task from the Editor.
+
+        Runs BB + DOJ search on a batch of names and returns results.
+        """
+        if task.type != "cross_reference":
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={}, error=f"Detective doesn't handle '{task.type}'",
+                agent=self.name,
+            )
+
+        names = task.params.get("names", [])
+        if not names:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="success",
+                result={"checked": []}, agent=self.name,
+            )
+
+        self._current_task = f"Cross-referencing {len(names)} names..."
+        checked = []
+
+        from cross_reference import search_black_book, load_black_book, assess_combined_verdict
+        book_text = await asyncio.to_thread(load_black_book)
+
+        for name in names:
+            bb_matches = search_black_book(name, book_text)
+            bb_verdict = "match" if bb_matches else "no_match"
+
+            # DOJ search (if browser available)
+            doj_result = None
+            doj_verdict = "pending"
+            try:
+                if await self._ensure_browser():
+                    doj_result = await self._doj_client.search_name_variations(name)
+                    if doj_result.get("search_successful"):
+                        doj_verdict = "searched"
+                        verdict_info = assess_combined_verdict(name, bb_matches, doj_result)
+                    else:
+                        doj_verdict = "error"
+                        verdict_info = {"verdict": bb_verdict, "confidence_score": 0.5,
+                                        "rationale": "DOJ search failed", "false_positive_indicators": []}
+                else:
+                    verdict_info = {"verdict": bb_verdict, "confidence_score": 0.5,
+                                    "rationale": "DOJ browser unavailable", "false_positive_indicators": []}
+            except Exception as e:
+                doj_verdict = "error"
+                verdict_info = {"verdict": bb_verdict, "confidence_score": 0.3,
+                                "rationale": f"DOJ error: {e}", "false_positive_indicators": []}
+
+            checked.append({
+                "name": name,
+                "bb_verdict": bb_verdict,
+                "bb_matches": bb_matches,
+                "doj_verdict": doj_verdict,
+                "doj_results": doj_result,
+                "combined": verdict_info["verdict"],
+                "confidence_score": verdict_info.get("confidence_score", 0),
+                "rationale": verdict_info.get("rationale", ""),
+            })
+
+            await asyncio.sleep(2)  # Rate limiting
+
+        return TaskResult(
+            task_id=task.id, task_type=task.type, status="success",
+            result={"checked": checked}, agent=self.name,
+        )
 
     # ── Browser Lifecycle ────────────────────────────────────────
 

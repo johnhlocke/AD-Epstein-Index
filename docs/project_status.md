@@ -30,6 +30,8 @@ This file should be automatically updated when necessary to answer three key que
 | Researcher: dossier building + false positive detection | Phase 2 | Done |
 | Dashboard: Supabase-backed stats + confirmed associates | Tooling | Done |
 | Editor: event-driven behavior + verdict restrictions | Tooling | Done |
+| Migrate pipeline source of truth: manifest → Supabase | Tooling | Done |
+| Hub-and-spoke architecture: Editor as central coordinator | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -116,9 +118,12 @@ Built a 7-agent autonomous pipeline that runs continuously:
 | **Editor** | Pipeline oversight | Health monitoring, human message processing, escalations |
 | **Designer** | Learns design patterns | Training from design sources, pattern cataloging |
 
-**Infrastructure:**
-- `src/agents/base.py` — Async work loop, pause/resume, progress tracking, skills system, dashboard status
-- `src/orchestrator.py` — Launches all agents, merges live status into `status.json`, command processing
+**Infrastructure (Hub-and-Spoke):**
+- `src/agents/tasks.py` — Task/TaskResult dataclasses, EditorLedger for centralized failure tracking
+- `src/agents/base.py` — Async work loop with inbox/outbox asyncio.Queue, execute() for task-driven work, watchdog timer
+- `src/agents/editor.py` — Central coordinator: plans tasks, collects results, validates, commits to Supabase. Only agent that writes pipeline state.
+- `src/db.py` — Shared DB module (singleton Supabase client, issue/feature CRUD). All agents import from here — Supabase `issues` table is the single source of truth
+- `src/orchestrator.py` — Launches all agents, wires Editor with worker references, merges live status + task board into `status.json`
 - `src/dashboard_server.py` — HTTP server: inbox API, agent pause/resume, skills editing
 - `src/agents/skills/*.md` — Per-agent personality, methodology, and behavior documentation
 

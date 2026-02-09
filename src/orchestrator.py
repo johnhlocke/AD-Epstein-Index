@@ -1,7 +1,14 @@
 """
-AD-Epstein Pipeline — Multi-Agent Orchestrator
+AD-Epstein Pipeline — Multi-Agent Orchestrator (Hub-and-Spoke)
 
-Creates agents, runs the async event loop, writes status.json, handles shutdown.
+Creates agents, wires Editor as central coordinator, runs the async event loop,
+writes status.json, handles shutdown.
+
+Hub-and-spoke model:
+  - Editor scans Supabase, decides what needs doing, assigns tasks to agents
+  - Agents are intelligent and autonomous in HOW they accomplish tasks
+  - Editor is the only one committing pipeline state to Supabase
+  - Dashboard commands are routed through Editor's inbox
 
 Usage:
     python3 src/orchestrator.py                       # Single pass (run-once)
@@ -146,6 +153,14 @@ async def write_status(agents):
                 if find["name"].lower().strip().startswith(investigating_name[:8]):
                     find["research"] = "investigating"
 
+    # Add Editor's task board to status
+    if "editor" in live_agents:
+        editor_live = live_agents["editor"]
+        task_board = editor_live.get("task_board", {})
+        cost = editor_live.get("cost", {})
+        status["task_board"] = task_board
+        status["editor_cost"] = cost
+
     # Add live activity log entries
     if os.path.exists(LOG_PATH):
         try:
@@ -175,7 +190,12 @@ async def write_status(agents):
 
 
 def process_commands(agents):
-    """Read agent_commands.json, execute unprocessed pause/resume commands."""
+    """Read agent_commands.json, execute unprocessed pause/resume commands.
+
+    Note: In the hub-and-spoke model, the Editor also reads human_messages.json
+    for strategic instructions. This function handles low-level pause/resume commands
+    from the dashboard that need to bypass the Editor (e.g., emergency pause).
+    """
     if not os.path.exists(COMMANDS_PATH):
         return
 

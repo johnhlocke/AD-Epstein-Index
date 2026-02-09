@@ -1,9 +1,16 @@
 """
 Reader Agent — extracts homeowner data from downloaded AD PDFs.
 
+Hub-and-spoke model: Editor assigns extract_features tasks via inbox.
+When no task is assigned, falls back to legacy work() loop.
+
+Task types:
+  - extract_features: Extract features from a PDF
+  - reextract_features: Re-extract with specific strategy
+
 Wraps extract_features.process_issue() + load_features.load_extraction().
-Includes quality gating (load vs hold), failure tracking, escalation to Editor,
-and re-extraction queue processing.
+Includes failure tracking, escalation to Editor, and re-extraction support.
+Quality gating is done by the Editor (not Reader) in hub-and-spoke model.
 
 Interval: 30s — each extraction takes several minutes via Claude Vision.
 """
@@ -17,9 +24,9 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agents.base import Agent, DATA_DIR, read_manifest, update_manifest_locked, update_json_locked, read_json_locked
-
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
+from agents.base import Agent, DATA_DIR, update_json_locked, read_json_locked
+from agents.tasks import TaskResult
+from db import list_issues, update_issue, get_issue_by_identifier
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
 READER_LOG_PATH = os.path.join(DATA_DIR, "reader_log.json")
 READER_ESCALATION_PATH = os.path.join(DATA_DIR, "reader_escalations.json")
@@ -45,6 +52,109 @@ class ReaderAgent(Agent):
         super().__init__("reader", interval=30)
         self._extracted_count = 0
         self._features_count = 0
+
+    # ═══════════════════════════════════════════════════════════
+    # HUB-AND-SPOKE: execute() — called when Editor assigns a task
+    # ═══════════════════════════════════════════════════════════
+
+    async def execute(self, task):
+        """Execute an extraction task from the Editor. Returns a TaskResult.
+
+        The Reader extracts features and returns them. The Editor applies
+        quality gating and loads into Supabase.
+        """
+        if task.type not in ("extract_features", "reextract_features"):
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={}, error=f"Reader doesn't handle '{task.type}'",
+                agent=self.name,
+            )
+
+        identifier = task.params.get("identifier", "")
+        pdf_path = task.params.get("pdf_path", "")
+
+        if not identifier:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier}, error="No identifier provided",
+                agent=self.name,
+            )
+
+        self._current_task = f"Extracting: {identifier[:40]}..."
+
+        # Build issue dict for process_issue
+        issue = get_issue_by_identifier(identifier)
+        if not issue:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier}, error="Issue not found in Supabase",
+                agent=self.name,
+            )
+
+        try:
+            if task.type == "reextract_features":
+                strategy = task.params.get("strategy", "wider_scan")
+                # Backup and re-extract
+                old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                backup_path = old_path + ".backup"
+                if os.path.exists(old_path):
+                    shutil.copy2(old_path, backup_path)
+                    os.remove(old_path)
+
+                from extract_features import process_issue_reextract
+                output_path = await asyncio.to_thread(process_issue_reextract, issue, strategy)
+            else:
+                from extract_features import process_issue
+                output_path = await asyncio.to_thread(process_issue, issue)
+
+            if not output_path:
+                return TaskResult(
+                    task_id=task.id, task_type=task.type, status="failure",
+                    result={"identifier": identifier},
+                    error="process_issue returned None",
+                    agent=self.name,
+                )
+
+            # Read the extraction output
+            with open(output_path) as f:
+                data = json.load(f)
+
+            features = data.get("features", [])
+            quality_metrics = {
+                "feature_count": len(features),
+                "null_homeowner_count": sum(
+                    1 for f in features
+                    if not f.get("homeowner_name") or f["homeowner_name"] in ("null", "None")
+                ),
+            }
+            if len(features) > 0:
+                quality_metrics["null_homeowner_rate"] = round(
+                    quality_metrics["null_homeowner_count"] / len(features), 2
+                )
+
+            self._extracted_count += 1
+            self._features_count += len(features)
+
+            return TaskResult(
+                task_id=task.id,
+                task_type=task.type,
+                status="success",
+                result={
+                    "identifier": identifier,
+                    "features": features,
+                    "quality_metrics": quality_metrics,
+                    "extraction_path": output_path,
+                },
+                agent=self.name,
+            )
+
+        except Exception as e:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier},
+                error=str(e),
+                agent=self.name,
+            )
 
     # ── Quality Assessment ──────────────────────────────────
 
@@ -241,21 +351,17 @@ class ReaderAgent(Agent):
                 break
         self._save_reextract_queue(queue)
 
-    async def _run_reextraction(self, reextract_item, manifest):
+    async def _run_reextraction(self, reextract_item):
         """Backup old extraction JSON and re-extract with specified strategy."""
         identifier = reextract_item["identifier"]
         strategy = reextract_item.get("strategy", "wider_scan")
 
-        # Find the issue in manifest
-        issue = None
-        for i in manifest.get("issues", []):
-            if i["identifier"] == identifier:
-                issue = i
-                break
+        # Find the issue in Supabase
+        issue = get_issue_by_identifier(identifier)
 
         if not issue:
-            self.log(f"Re-extraction: issue {identifier} not found in manifest", level="ERROR")
-            self._mark_reextraction_done(identifier, False, "not found in manifest")
+            self.log(f"Re-extraction: issue {identifier} not found in Supabase", level="ERROR")
+            self._mark_reextraction_done(identifier, False, "not found in Supabase")
             return None
 
         # Backup old extraction JSON (don't delete — rename to .backup)
@@ -322,16 +428,15 @@ class ReaderAgent(Agent):
 
     # ── Issue Selection (with infinite loop fix) ─────────────
 
-    def _find_next_issue(self, manifest, reader_log):
+    def _find_next_issue(self, reader_log):
         """Find the next downloaded issue that hasn't been extracted.
 
         Skips issues that have failed MAX_ISSUE_FAILURES times.
         """
         issue_failures = reader_log.get("issue_failures", {})
+        issues = list_issues(status="downloaded")
 
-        for issue in manifest.get("issues", []):
-            if issue.get("status") != "downloaded":
-                continue
+        for issue in issues:
             identifier = issue["identifier"]
 
             # Skip issues that have exceeded failure threshold
@@ -344,17 +449,16 @@ class ReaderAgent(Agent):
                 return issue
         return None
 
-    def _find_issues_needing_load(self, manifest, reader_log):
+    def _find_issues_needing_load(self, reader_log):
         """Find extracted issues that haven't been loaded into Supabase yet.
 
         These are issues with extraction JSON on disk but status still 'downloaded'
         (not yet 'extracted'). Skips issues with too many load failures.
         """
         load_failures = reader_log.get("load_failures", {})
+        issues = list_issues(status="downloaded")
 
-        for issue in manifest.get("issues", []):
-            if issue.get("status") != "downloaded":
-                continue
+        for issue in issues:
             identifier = issue["identifier"]
 
             # Skip if too many load failures
@@ -373,16 +477,10 @@ class ReaderAgent(Agent):
     async def work(self):
         self.load_skills()
 
-        if not os.path.exists(MANIFEST_PATH):
-            self._current_task = "Waiting for Courier"
-            return False
-
         # Load state
         reader_log = self._load_reader_log()
         reader_log["cycle_count"] = reader_log.get("cycle_count", 0) + 1
         reader_log["last_run"] = datetime.now().isoformat()
-
-        manifest = read_manifest()
 
         # ── Priority 1: Re-extraction queue ─────────────────
         reextract_item = self._get_next_reextraction()
@@ -391,7 +489,7 @@ class ReaderAgent(Agent):
             strategy = reextract_item.get("strategy", "wider_scan")
             self.log(f"Processing re-extraction: {identifier} ({strategy})")
 
-            output_path = await self._run_reextraction(reextract_item, manifest)
+            output_path = await self._run_reextraction(reextract_item)
 
             if output_path:
                 verdict, metrics = self._assess_quality(output_path, identifier)
@@ -408,13 +506,7 @@ class ReaderAgent(Agent):
                         held = reader_log.get("issues_held", [])
                         if identifier in held:
                             held.remove(identifier)
-                        # Mark as extracted in manifest
-                        def mark_extracted(m):
-                            for i in m.get("issues", []):
-                                if i["identifier"] == identifier:
-                                    i["status"] = "extracted"
-                                    break
-                        update_manifest_locked(mark_extracted)
+                        update_issue(identifier, {"status": "extracted"})
                     else:
                         self._mark_reextraction_done(identifier, False, "Supabase load failed")
                 else:
@@ -439,7 +531,7 @@ class ReaderAgent(Agent):
             return True
 
         # ── Priority 2: Retry Supabase loads for extracted-but-not-loaded issues
-        retry_issue, retry_path = self._find_issues_needing_load(manifest, reader_log)
+        retry_issue, retry_path = self._find_issues_needing_load(reader_log)
         if retry_issue:
             identifier = retry_issue["identifier"]
             self._current_task = f"Retrying Supabase load: {identifier}"
@@ -454,19 +546,14 @@ class ReaderAgent(Agent):
                     held = reader_log.get("issues_held", [])
                     if identifier in held:
                         held.remove(identifier)
-                    def mark_extracted(m):
-                        for i in m.get("issues", []):
-                            if i["identifier"] == identifier:
-                                i["status"] = "extracted"
-                                break
-                    update_manifest_locked(mark_extracted)
+                    update_issue(identifier, {"status": "extracted"})
 
             self._save_reader_log(reader_log)
             self._update_counts()
             return True
 
         # ── Priority 3: Normal extraction ───────────────────
-        issue = self._find_next_issue(manifest, reader_log)
+        issue = self._find_next_issue(reader_log)
         if not issue:
             # Check for issues that hit the failure threshold this cycle
             self._check_for_exhausted_issues(reader_log)
@@ -495,12 +582,7 @@ class ReaderAgent(Agent):
             # Check if this issue has exhausted its retries
             failures = reader_log.get("issue_failures", {}).get(identifier, {})
             if failures.get("failures", 0) >= MAX_ISSUE_FAILURES:
-                def mark_error(m):
-                    for i in m.get("issues", []):
-                        if i["identifier"] == identifier:
-                            i["status"] = "extraction_error"
-                            break
-                update_manifest_locked(mark_error)
+                update_issue(identifier, {"status": "extraction_error"})
                 self._maybe_escalate(
                     "extraction_failed",
                     f"Issue {identifier} failed extraction {failures['failures']} times. "
@@ -528,13 +610,7 @@ class ReaderAgent(Agent):
 
                 if loaded:
                     self._record_issue_success(reader_log, identifier)
-                    # Mark as extracted in manifest (locked write)
-                    def mark_extracted(m):
-                        for i in m.get("issues", []):
-                            if i["identifier"] == identifier:
-                                i["status"] = "extracted"
-                                break
-                    update_manifest_locked(mark_extracted)
+                    update_issue(identifier, {"status": "extracted"})
                 else:
                     # Supabase failed but extraction is good — don't mark as success
                     # Next cycle will retry via _find_issues_needing_load
@@ -568,19 +644,10 @@ class ReaderAgent(Agent):
     def _check_for_exhausted_issues(self, reader_log):
         """Mark issues that have hit MAX_ISSUE_FAILURES as extraction_error."""
         issue_failures = reader_log.get("issue_failures", {})
-        identifiers_to_mark = []
         for ident, entry in issue_failures.items():
             if entry.get("failures", 0) >= MAX_ISSUE_FAILURES:
-                identifiers_to_mark.append(ident)
-
-        if identifiers_to_mark:
-            def mark_errors(m):
-                for issue in m.get("issues", []):
-                    if issue["identifier"] in identifiers_to_mark and issue.get("status") == "downloaded":
-                        issue["status"] = "extraction_error"
-            update_manifest_locked(mark_errors)
-            for ident in identifiers_to_mark:
-                self.log(f"Marking {ident} as extraction_error after {issue_failures[ident]['failures']} failures")
+                update_issue(ident, {"status": "extraction_error"})
+                self.log(f"Marking {ident} as extraction_error after {entry['failures']} failures")
 
     # ── Counts ──────────────────────────────────────────────
 
@@ -606,8 +673,9 @@ class ReaderAgent(Agent):
 
     def get_progress(self):
         try:
-            manifest = read_manifest()
-            downloaded = sum(1 for i in manifest.get("issues", []) if i.get("status") in ("downloaded", "extracted"))
+            from db import count_issues_by_status
+            counts = count_issues_by_status()
+            downloaded = counts["downloaded"] + counts["extracted"]
             self._update_counts()
             return {"current": self._extracted_count, "total": downloaded}
         except Exception:

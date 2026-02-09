@@ -1,6 +1,9 @@
 """
 Courier Agent — downloads AD magazine PDFs from archive.org and the AD Archive.
 
+Hub-and-spoke model: Editor assigns download_pdf tasks via inbox.
+When no task is assigned, falls back to legacy work() loop.
+
 Two download strategies:
 1. archive.org (Primary) — simple HTTP downloads, free, no auth
 2. AD Archive (Secondary) — Playwright browser login + 20-page batched downloads
@@ -18,9 +21,10 @@ from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agents.base import Agent, DATA_DIR, BASE_DIR, read_manifest, update_manifest_locked
+from agents.base import Agent, DATA_DIR, BASE_DIR
+from agents.tasks import TaskResult
+from db import list_issues, update_issue, count_issues_by_status
 
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
 ISSUES_DIR = os.path.join(DATA_DIR, "issues")
 BATCHES_DIR = os.path.join(ISSUES_DIR, "batches")
 METADATA_URL = "https://archive.org/metadata/{identifier}/files"
@@ -47,6 +51,81 @@ AD_ARCHIVE_TOOLS = [
 class CourierAgent(Agent):
     def __init__(self):
         super().__init__("courier", interval=5)
+
+    # ═══════════════════════════════════════════════════════════
+    # HUB-AND-SPOKE: execute() — called when Editor assigns a task
+    # ═══════════════════════════════════════════════════════════
+
+    async def execute(self, task):
+        """Execute a download task from the Editor. Returns a TaskResult."""
+        if task.type != "download_pdf":
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={}, error=f"Courier doesn't handle '{task.type}'",
+                agent=self.name,
+            )
+
+        identifier = task.params.get("identifier", "")
+        source = task.params.get("source", "archive.org")
+        year = task.params.get("year")
+        month = task.params.get("month")
+
+        if not identifier:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier}, error="No identifier provided",
+                agent=self.name,
+            )
+
+        self._current_task = f"Downloading {year}-{month:02d if month else '??'}..."
+
+        # Build a minimal issue dict for existing download logic
+        issue = {
+            "identifier": identifier,
+            "title": task.params.get("title", identifier),
+            "year": year,
+            "month": month,
+            "source": source,
+            "source_url": task.params.get("source_url"),
+        }
+
+        try:
+            if source == "ad_archive":
+                success = await self._download_ad_archive_batch(issue)
+            else:
+                success = await self._download_archive_org(issue)
+
+            if success and issue.get("pdf_path"):
+                return TaskResult(
+                    task_id=task.id, task_type=task.type, status="success",
+                    result={
+                        "identifier": identifier,
+                        "pdf_path": issue["pdf_path"],
+                        "pages": issue.get("pages", 0),
+                    },
+                    agent=self.name,
+                )
+            elif issue.get("status") == "no_pdf":
+                return TaskResult(
+                    task_id=task.id, task_type=task.type, status="failure",
+                    result={"identifier": identifier},
+                    error="No PDF file found in archive.org metadata",
+                    agent=self.name,
+                )
+            else:
+                return TaskResult(
+                    task_id=task.id, task_type=task.type, status="failure",
+                    result={"identifier": identifier},
+                    error="Download returned no PDF path",
+                    agent=self.name,
+                )
+        except Exception as e:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier},
+                error=str(e),
+                agent=self.name,
+            )
 
     # ── Failure Tracking ──────────────────────────────────────
 
@@ -134,37 +213,18 @@ class CourierAgent(Agent):
         self._save_escalations(escalations)
         self.log(f"Escalated to Editor: {message}", level="WARN")
 
-    # ── Manifest I/O ──────────────────────────────────────────
-
-    def _load_manifest(self):
-        return read_manifest()
-
-    def _save_manifest_issue(self, identifier, updates):
-        """Apply updates to a specific issue in the manifest under lock.
-
-        Args:
-            identifier: Issue identifier to update
-            updates: Dict of fields to set on the issue (e.g. {"status": "downloaded", "pdf_path": "/..."})
-        """
-        def apply(fresh_manifest):
-            for issue in fresh_manifest.get("issues", []):
-                if issue["identifier"] == identifier:
-                    issue.update(updates)
-                    break
-        update_manifest_locked(apply)
-
     # ── Issue Selection ───────────────────────────────────────
 
-    def _find_next_archive_org_issue(self, manifest):
+    def _find_next_archive_org_issue(self):
         """Find the next archive.org issue that needs downloading."""
-        issues = manifest.get("issues", [])
+        issues = list_issues(status="discovered")
+        # Filter to archive.org source with month/year
         downloadable = [
             i for i in issues
             if i.get("month") and i.get("year")
             and i.get("source", "archive.org") != "ad_archive"
-            and i.get("status") not in ("downloaded", "no_pdf", "error", "skipped_pre1988", "extracted", "extraction_error")
         ]
-        # Newest first
+        # Newest first (list_issues already sorts desc, but be explicit)
         downloadable.sort(key=lambda x: (x["year"], x["month"]), reverse=True)
         for issue in downloadable:
             identifier = issue["identifier"]
@@ -173,20 +233,18 @@ class CourierAgent(Agent):
                 existing = [f for f in os.listdir(ISSUES_DIR) if f.startswith(filename_base)]
                 if existing:
                     pdf_path = os.path.join(ISSUES_DIR, existing[0])
-                    issue["status"] = "downloaded"
-                    issue["pdf_path"] = pdf_path
-                    # Save reconciliation via locked write
-                    self._save_manifest_issue(identifier, {"status": "downloaded", "pdf_path": pdf_path})
+                    # Reconcile: already on disk, mark as downloaded in Supabase
+                    update_issue(identifier, {"status": "downloaded", "pdf_path": pdf_path})
                     continue
             return issue
         return None
 
-    def _find_next_ad_archive_issue(self, manifest):
+    def _find_next_ad_archive_issue(self):
         """Find the next AD Archive issue — prioritize partial downloads, then new ones."""
-        issues = manifest.get("issues", [])
+        all_issues = list_issues(source="ad_archive")
 
         # First: resume partial downloads (batches already started)
-        for issue in issues:
+        for issue in all_issues:
             progress = issue.get("ad_archive_progress")
             if progress and progress.get("batches_downloaded"):
                 total = progress.get("total_pages")
@@ -196,18 +254,15 @@ class CourierAgent(Agent):
                         return issue
 
         # Then: start new AD Archive issues
-        for issue in issues:
-            if (issue.get("source") == "ad_archive"
-                    and issue.get("month") and issue.get("year")
+        for issue in all_issues:
+            if (issue.get("month") and issue.get("year")
                     and issue.get("status") not in ("downloaded", "error", "skipped_pre1988", "extracted", "extraction_error")):
-                # Skip if already downloaded from archive.org
                 identifier = issue["identifier"]
                 filename_base = f"{issue['year']}_{issue['month']:02d}"
                 if os.path.exists(ISSUES_DIR):
                     existing = [f for f in os.listdir(ISSUES_DIR) if f.startswith(filename_base)]
                     if existing:
-                        issue["status"] = "downloaded"
-                        issue["pdf_path"] = os.path.join(ISSUES_DIR, existing[0])
+                        update_issue(identifier, {"status": "downloaded", "pdf_path": os.path.join(ISSUES_DIR, existing[0])})
                         continue
                 if not issue.get("ad_archive_progress"):
                     return issue
@@ -219,37 +274,27 @@ class CourierAgent(Agent):
     async def work(self):
         self.load_skills()
 
-        if not os.path.exists(MANIFEST_PATH):
-            self._current_task = "Waiting for Scout"
-            return False
-
         courier_log = self._load_courier_log()
         courier_log["cycle_count"] = courier_log.get("cycle_count", 0) + 1
         courier_log["last_run"] = datetime.now().isoformat()
 
-        manifest = self._load_manifest()
-
         # Priority 1: archive.org downloads (simple HTTP, no auth)
-        issue = self._find_next_archive_org_issue(manifest)
+        issue = self._find_next_archive_org_issue()
         if issue:
             courier_log["consecutive_idle_cycles"] = 0
             self._save_courier_log(courier_log)
-            return await self._download_archive_org(issue, manifest, courier_log)
+            return await self._download_archive_org(issue, courier_log)
 
         # Priority 2: AD Archive downloads (Playwright, batched, needs auth)
-        issue = self._find_next_ad_archive_issue(manifest)
+        issue = self._find_next_ad_archive_issue()
         if issue:
             courier_log["consecutive_idle_cycles"] = 0
             self._save_courier_log(courier_log)
-            return await self._download_ad_archive_batch(issue, manifest, courier_log)
+            return await self._download_ad_archive_batch(issue, courier_log)
 
         # Idle — check if there are stuck issues we can't process
-        issues = manifest.get("issues", [])
-        stuck_count = sum(
-            1 for i in issues
-            if i.get("status") in ("error", "no_pdf")
-            and i.get("month") and i.get("year")
-        )
+        counts = count_issues_by_status()
+        stuck_count = counts.get("error", 0) + counts.get("no_pdf", 0)
         if stuck_count > 0:
             courier_log["consecutive_idle_cycles"] = courier_log.get("consecutive_idle_cycles", 0) + 1
             if courier_log["consecutive_idle_cycles"] >= IDLE_ESCALATION_THRESHOLD:
@@ -269,7 +314,7 @@ class CourierAgent(Agent):
 
     # ── archive.org Downloads (existing logic) ────────────────
 
-    async def _download_archive_org(self, issue, manifest, courier_log=None):
+    async def _download_archive_org(self, issue, courier_log=None):
         """Download one issue from archive.org via HTTP."""
         identifier = issue["identifier"]
         title = issue.get("title", identifier)
@@ -306,11 +351,11 @@ class CourierAgent(Agent):
                         {"identifier": identifier, "failures": failures["failures"], "last_error": str(e)[:200]},
                     )
 
-        # Save the issue's updated status via locked write
+        # Save the issue's updated status to Supabase
         updates = {"status": issue.get("status", "discovered")}
         if issue.get("pdf_path"):
             updates["pdf_path"] = issue["pdf_path"]
-        self._save_manifest_issue(identifier, updates)
+        update_issue(identifier, updates)
         return True
 
     def _download_one_http(self, issue):
@@ -348,7 +393,7 @@ class CourierAgent(Agent):
 
     # ── AD Archive Downloads (Playwright + LLM) ──────────────
 
-    async def _download_ad_archive_batch(self, issue, manifest, courier_log=None):
+    async def _download_ad_archive_batch(self, issue, courier_log=None):
         """Download one 20-page batch from the AD Archive via Playwright."""
         from dotenv import load_dotenv
         load_dotenv(os.path.join(BASE_DIR, ".env"))
@@ -387,7 +432,7 @@ class CourierAgent(Agent):
 
         # If we know total pages and we're past it, combine
         if total_pages and start_page > total_pages:
-            return await self._combine_and_finalize(issue, manifest)
+            return await self._combine_and_finalize(issue)
 
         # Cap end_page at total if known
         if total_pages and end_page > total_pages:
@@ -452,9 +497,9 @@ class CourierAgent(Agent):
                 max_page = max(end for _, end in batches_done)
                 if max_page >= total_pages:
                     self.log(f"All batches done for {identifier} — combining")
-                    return await self._combine_and_finalize(issue, manifest)
+                    return await self._combine_and_finalize(issue)
 
-            self._save_manifest_issue(identifier, {
+            update_issue(identifier, {
                 "status": "downloading",
                 "ad_archive_progress": progress,
             })
@@ -477,7 +522,7 @@ class CourierAgent(Agent):
                     f"May need manual intervention or alternative source.",
                     {"identifier": identifier, "failures": failures["failures"], "last_error": notes[:200]},
                 )
-        # No issue status changes on failure — no manifest write needed
+        # No issue status changes on failure — no DB update needed
         return False
 
     def _build_ad_archive_prompt(self, email, password, url, start_page, end_page, save_path, total_pages):
@@ -596,7 +641,7 @@ If the download FAILED, respond:
 
     # ── PDF Combining ─────────────────────────────────────────
 
-    async def _combine_and_finalize(self, issue, manifest):
+    async def _combine_and_finalize(self, issue):
         """Combine all PDF batches into a single file using pdfunite."""
         progress = issue.get("ad_archive_progress", {})
         batch_dir = progress.get("batch_dir")
@@ -653,9 +698,7 @@ If the download FAILED, respond:
                 )
                 return False
 
-        issue["status"] = "downloaded"
-        issue["pdf_path"] = dest
-        self._save_manifest_issue(identifier, {"status": "downloaded", "pdf_path": dest})
+        update_issue(identifier, {"status": "downloaded", "pdf_path": dest})
 
         total = progress.get("total_pages", "?")
         self.log(f"Combined {len(batch_files)} batches → {dest} ({total} pages)")
@@ -666,13 +709,10 @@ If the download FAILED, respond:
 
     def get_progress(self):
         try:
-            if os.path.exists(MANIFEST_PATH):
-                with open(MANIFEST_PATH) as f:
-                    manifest = json.load(f)
-                issues = manifest.get("issues", [])
-                total = len([i for i in issues if i.get("month") and i.get("year")])
-                downloaded = sum(1 for i in issues if i.get("status") in ("downloaded", "extracted"))
-                return {"current": downloaded, "total": total}
+            counts = count_issues_by_status()
+            total = counts["total"]
+            downloaded = counts["downloaded"] + counts["extracted"]
+            return {"current": downloaded, "total": total}
         except Exception:
             pass
         return {"current": 0, "total": 0}

@@ -18,76 +18,56 @@ Options:
     --reextract                         # Re-extract issues with NULL homeowner names
 """
 
-import json
 import os
 import sys
 
-DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
-EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
-ISSUES_DIR = os.path.join(DATA_DIR, "issues")
-
 
 def show_status():
-    """Show pipeline progress summary."""
+    """Show pipeline progress summary from Supabase."""
+    from dotenv import load_dotenv
+    load_dotenv()
+
     print("=" * 60)
     print("AD Magazine Pipeline — Status")
     print("=" * 60)
 
-    # Manifest
-    if not os.path.exists(MANIFEST_PATH):
-        print("\nStep 1 (Discover): Not run yet")
+    try:
+        from db import count_issues_by_status, get_supabase
+        counts = count_issues_by_status()
+    except Exception as e:
+        print(f"\nError connecting to Supabase: {e}")
+        print("Make sure SUPABASE_URL and SUPABASE_KEY are set in .env")
         return
 
-    with open(MANIFEST_PATH) as f:
-        manifest = json.load(f)
+    total = sum(counts.values())
+    discovered = counts.get("discovered", 0)
+    downloaded = counts.get("downloaded", 0)
+    extracted = counts.get("extracted", 0)
+    skipped = counts.get("skipped_pre1988", 0)
+    no_pdf = counts.get("no_pdf", 0)
+    errors = counts.get("error", 0) + counts.get("extraction_error", 0)
 
-    issues = manifest.get("issues", [])
-    skipped = manifest.get("skipped", [])
-    with_month = sum(1 for i in issues if i.get("month"))
-    needs_review = sum(1 for i in issues if i.get("needs_review"))
+    print(f"\nStep 1 (Discover): {total} issues in database")
+    print(f"  {discovered} awaiting download")
 
-    print(f"\nStep 1 (Discover): {len(issues)} issues found")
-    print(f"  {with_month} with month/year parsed")
-    print(f"  {needs_review} need manual review")
-    print(f"  {len(skipped)} items skipped")
-
-    # Downloads
-    downloaded = sum(1 for i in issues if i.get("status") == "downloaded")
-    no_pdf = sum(1 for i in issues if i.get("status") == "no_pdf")
-    errors = sum(1 for i in issues if i.get("status") == "error")
-
-    print(f"\nStep 2 (Download): {downloaded} PDFs downloaded")
+    print(f"\nStep 2 (Download): {downloaded + extracted} PDFs downloaded")
     if no_pdf:
         print(f"  {no_pdf} items had no PDF available")
     if errors:
-        print(f"  {errors} download errors")
+        print(f"  {errors} errors")
 
-    # Extractions
-    if os.path.exists(EXTRACTIONS_DIR):
-        extractions = [f for f in os.listdir(EXTRACTIONS_DIR) if f.endswith(".json")]
-        total_features = 0
-        skipped_pre1988 = 0
-        processed = 0
-        for ext_file in extractions:
-            with open(os.path.join(EXTRACTIONS_DIR, ext_file)) as f:
-                ext_data = json.load(f)
-                if ext_data.get("skipped"):
-                    skipped_pre1988 += 1
-                else:
-                    processed += 1
-                    total_features += len(ext_data.get("features", []))
-        print(f"\nStep 3 (Extract): {processed} issues extracted, {skipped_pre1988} skipped (pre-1988)")
-        print(f"  {total_features} total features found")
-    else:
-        print(f"\nStep 3 (Extract): Not run yet")
+    print(f"\nStep 3 (Extract): {extracted} issues extracted, {skipped} skipped (pre-1988)")
 
-    # Database (just check if Supabase is configured)
-    from dotenv import load_dotenv
-    load_dotenv()
-    has_supabase = bool(os.getenv("SUPABASE_URL"))
-    print(f"\nStep 4 (Load): Supabase {'configured' if has_supabase else 'NOT configured'}")
+    # Feature count from Supabase
+    try:
+        sb = get_supabase()
+        result = sb.table("features").select("id", count="exact").execute()
+        feature_count = result.count if result.count is not None else len(result.data)
+        print(f"  {feature_count} total features in database")
+    except Exception:
+        pass
 
+    print(f"\nStep 4 (Load): Supabase connected")
     print("=" * 60)
 
 

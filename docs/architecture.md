@@ -2,29 +2,35 @@
 
 High-level system architecture, data flow, and component relationships.
 
-## System Overview
+## System Overview — Hub-and-Spoke Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    Multi-Agent Autonomous System                     │
+│               Hub-and-Spoke Multi-Agent System                       │
 │                                                                     │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐           │
-│  │  Scout   │  │ Courier  │  │  Reader  │  │Detective │           │
-│  │ discover │──│ download │──│ extract  │──│  xref    │           │
-│  │ issues   │  │  PDFs    │  │ features │  │ BB + DOJ │           │
-│  └──────────┘  └──────────┘  └──────────┘  └────┬─────┘           │
-│                                                  │                  │
-│                               ┌──────────┐  ┌────▼─────┐          │
-│                               │ Designer │  │Researcher│          │
-│                               │  learn   │  │ dossiers │          │
-│                               │ patterns │  │ + home   │          │
-│                               └──────────┘  │ analysis │          │
-│                                             └──────────┘          │
-│                    ┌──────────────────────┐                        │
-│                    │       Editor         │                        │
-│                    │  monitor + escalate  │                        │
-│                    └──────────────────────┘                        │
-│                                                                     │
+│                    ┌──────────────────────┐                         │
+│                    │       Editor         │                         │
+│                    │  scan → plan → assign │                        │
+│                    │  collect → validate   │                        │
+│                    │  commit to Supabase   │                        │
+│                    └──────────┬───────────┘                         │
+│                               │                                     │
+│              ┌────────┬───────┼───────┬──────────┐                 │
+│              │        │       │       │          │                 │
+│          inbox↓   inbox↓  inbox↓  inbox↓     inbox↓               │
+│         ┌────────┐┌───────┐┌──────┐┌─────────┐┌──────────┐       │
+│         │ Scout  ││Courier││Reader││Detective││Researcher│       │
+│         │ finds  ││ downs ││ extr ││  xrefs  ││ dossiers │       │
+│         └────────┘└───────┘└──────┘└─────────┘└──────────┘       │
+│          outbox↑   outbox↑  outbox↑  outbox↑     outbox↑         │
+│              │        │       │       │          │                 │
+│              └────────┴───────┼───────┴──────────┘                 │
+│                               │                                     │
+│                    ┌──────────┴───────────┐                         │
+│                    │    Editor collects    │  ┌──────────┐          │
+│                    │    validates + commits│  │ Designer │          │
+│                    └──────────────────────┘  │ (indep.) │          │
+│                                              └──────────┘          │
 │  Orchestrator (src/orchestrator.py) manages all agents              │
 │  Dashboard Server (src/dashboard_server.py) serves UI + API         │
 │  Agent Office (tools/agent-office/) real-time visualization         │
@@ -35,10 +41,9 @@ High-level system architecture, data flow, and component relationships.
 │                        Data Storage                                  │
 │                                                                     │
 │  Supabase (PostgreSQL)          Disk (data/)                        │
-│  ├── issues                     ├── archive_manifest.json           │
-│  ├── features                   ├── issues/*.pdf                    │
-│  └── (phase 2 tables)          ├── extractions/*.json               │
-│                                 ├── cross_references/results.json   │
+│  ├── issues (source of truth)  ├── issues/*.pdf                    │
+│  ├── features                   ├── extractions/*.json              │
+│  └── (phase 2 tables)          ├── cross_references/results.json   │
 │                                 ├── dossiers/*.json                 │
 │                                 └── detective_verdicts.json         │
 └─────────────────────────────────────────────────────────────────────┘
@@ -56,49 +61,81 @@ High-level system architecture, data flow, and component relationships.
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## Multi-Agent Pipeline
+## Multi-Agent Pipeline (Hub-and-Spoke)
 
-The system runs as 7 autonomous agents coordinated by an orchestrator:
+The system runs as 7 autonomous agents coordinated by the Editor via asyncio.Queue task queues:
 
 ```
-┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐    ┌──────────┐
-│  Scout   │───►│ Courier  │───►│  Reader  │───►│Detective │───►│Researcher│
-│          │    │          │    │          │    │          │    │          │
-│ archive  │    │ download │    │ Claude   │    │ BB grep  │    │ Claude   │
-│ .org API │    │ PDFs     │    │ Sonnet   │    │ + DOJ    │    │ Haiku    │
-│          │    │          │    │ Vision   │    │ Playwright│    │ dossiers │
-│ Output:  │    │ Output:  │    │ Output:  │    │ Output:  │    │ Output:  │
-│ manifest │    │ PDFs     │    │ JSON     │    │ verdicts │    │ dossiers │
-└──────────┘    └──────────┘    └──────────┘    └──────────┘    └──────────┘
-                                                                      │
-                              ┌──────────┐                            │
-                              │  Editor  │◄───── escalations ─────────┘
-                              │ monitor  │
-                              │ + human  │
-                              │ messages │
-                              └──────────┘
+       Editor decides WHAT                   Agent decides HOW
+ ─────────────────────────────       ─────────────────────────────────
+ "Find Jan-Mar 2015 issues"    →    Scout searches archive.org API,
+                                     then web, then eBay
+ "Download sim_ad_1995-03"     →    Courier downloads with retry,
+                                     resume support, rate limiting
+ "Extract features from PDF"   →    Reader does TOC analysis, page
+                                     scanning, offset detection
+ "Cross-reference these names" →    Detective greps BB first, then
+                                     DOJ browser search
 ```
 
 ### Agent Details
 
 | Agent | Interval | AI Model | Key Behavior |
 |-------|----------|----------|-------------|
-| Scout | 60s | None (API calls) | Discovers issues on archive.org, fixes dates, multi-strategy |
+| Scout | 60s | None (API calls) | Built-in archive.org HTTP search + Claude CLI for creative strategies |
 | Courier | 5s | None (downloads) | Downloads PDFs with rate limiting, priority sorting |
 | Reader | 30s | Claude Sonnet | Extracts homeowner data via Vision API, TOC + article pages |
 | Detective | 180s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright (batched) |
 | Researcher | 120s | Claude Haiku | Builds dossiers with pattern analysis + home analysis |
-| Editor | 5s | Claude Haiku | Event-driven pipeline health, human messages, escalation handling |
+| Editor | 5s | Claude Opus | Central coordinator: plans tasks, validates results, commits to Supabase |
 | Designer | 600s | Claude Haiku | Learns design patterns from training sources |
 
-### Editor Event-Driven Model
-The Editor does NOT poll agents for status. Instead:
-1. **Event detection** — Monitors the shared activity log for milestone keywords (`loaded`, `match`, `dossier complete`, etc.)
-2. **Escalation handling** — Reads agent-written escalation files (e.g., `reader_escalations.json`)
-3. **Human messages** — Processes messages from the dashboard inbox immediately
-4. **Health checks** — Periodic full assessment every 300s
-5. **Cooldowns** — Minimum 30s between escalation responses, 90s between milestone responses
-6. **Verdict restrictions** — Editor ONLY overrides detective verdicts when explicitly instructed by a human. Leads are the Researcher's responsibility.
+### Editor Coordinator Model (Hub-and-Spoke)
+
+The Editor is the central coordinator — the ONLY agent that writes pipeline state to Supabase.
+
+**Main loop (every 5s):**
+1. `_collect_results()` — drain all agent outboxes
+2. `_process_results()` — validate each result, commit to Supabase or reject
+3. `_handle_failures()` — log failures to EditorLedger, maybe reassign
+
+**Planning loop (every 30s):**
+4. `_plan_and_assign()` — scan Supabase, create tasks, push to agent inboxes:
+   - Missing issues? → assign Scout
+   - Discovered but not downloaded? → assign Courier
+   - Downloaded but not extracted? → assign Reader
+   - Features need cross-referencing? → assign Detective (via work())
+   - Leads need investigation? → assign Researcher (via work())
+
+**Strategic assessment (every 5 min or on human message):**
+5. `_strategic_assessment()` — call Claude for complex decisions, handle human messages
+
+### Task Infrastructure (`src/agents/tasks.py`)
+
+```python
+@dataclass
+class Task:
+    type: str          # "discover_issues", "download_pdf", "extract_features", etc.
+    goal: str          # Human-readable: "Find AD issues for Jan-Mar 2015"
+    params: dict       # Everything the agent needs
+    priority: int      # 0=critical, 1=high, 2=normal, 3=low
+    id: str            # Short UUID
+
+@dataclass
+class TaskResult:
+    task_id: str
+    task_type: str
+    status: str        # "success" or "failure"
+    result: dict       # Agent-specific structured data
+    error: str | None  # Why it failed
+    agent: str         # Which agent produced this
+```
+
+### Editor Ledger (`data/editor_ledger.json`)
+Centralized log of every task attempt — replaces scattered per-agent escalation files:
+- Records all success/failure attempts keyed by identifier/name
+- Failure counts determine retry eligibility (max 3 failures per key)
+- Provides context to agents about previous failures
 
 ### Researcher Investigation Pipeline
 1. Picks up non-`no_match` leads from `results.json` that haven't been investigated
@@ -112,7 +149,10 @@ The Editor does NOT poll agents for status. Instead:
 
 ### Agent Base Class (`src/agents/base.py`)
 - Async work loop with configurable interval
-- Pause/resume support via command queue
+- **Hub-and-spoke**: `inbox` (asyncio.Queue) receives tasks from Editor, `outbox` sends results back
+- `execute(task)` — task-driven entry point; falls back to `work()` when inbox is empty
+- Watchdog timer: logs warning if inbox empty for >120s
+- Pause/resume support via asyncio.Event
 - Progress tracking (`get_progress()` returns `{current, total}`)
 - Skills loading from `src/agents/skills/<agent>.md`
 - Dashboard status reporting (`get_dashboard_status()`)
@@ -120,15 +160,22 @@ The Editor does NOT poll agents for status. Instead:
 
 ### Orchestrator (`src/orchestrator.py`)
 - Launches all 7 agents as async tasks
+- Wires Editor with worker references (Editor.workers = all other agents)
 - Writes `status.json` every 5 seconds (merges live agent data with disk-based stats)
+- Includes Editor's task board (in_flight/completed/failed) in status.json
 - Overlays `editor_state` for dashboard sprite animation
-- Injects Researcher's live task into notable_finds for "investigating" status
 - Processes pause/resume commands from `data/agent_commands.json`
 - Graceful shutdown on SIGINT
 
+### Shared DB Module (`src/db.py`)
+- Singleton Supabase client (`get_supabase()`) — all agents import from here
+- Issue CRUD: `get_issue_by_identifier()`, `upsert_issue()`, `update_issue()`, `list_issues()`, `count_issues_by_status()`
+- Feature CRUD: `feature_exists()`, `insert_feature()`, `delete_features_for_issue()`
+- Replaces the local `archive_manifest.json` — Supabase `issues` table is the single source of truth
+
 ### Agent Status (`src/agent_status.py`)
-- Reads pipeline state from manifest, extractions, cross-references, dossiers
-- Pulls real-time feature counts from **Supabase** (source of truth, not local JSON)
+- Reads pipeline state from Supabase issues table, extractions, cross-references, dossiers
+- All issue counts come from `db.count_issues_by_status()` (no more manifest reads)
 - Generates `status.json` for the Agent Office dashboard
 - Notable finds: filters out no_match names, shows xref verdict + research status
 - Confirmed associates: HIGH and MEDIUM dossier connections with names and rationale
@@ -165,7 +212,7 @@ The Editor does NOT poll agents for status. Instead:
 
 ## Data Flow
 
-1. **Discover** — Query archive.org API for AD magazine text items, parse month/year, save manifest
+1. **Discover** — Query archive.org API for AD magazine text items, parse month/year, upsert to Supabase issues table
 2. **Download** — Fetch PDFs from archive.org with rate limiting and resume support
 3. **Extract** — Convert PDF pages to PNG (pdftoppm at 150 DPI), send to Claude Sonnet for structured data extraction
 4. **Load** — Insert issues and features into Supabase with duplicate detection
@@ -179,6 +226,7 @@ The Editor does NOT poll agents for status. Instead:
 |-----------|---------|------|
 | Orchestrator | Launches & coordinates all agents | Python, asyncio (`src/orchestrator.py`) |
 | Agent Base | Shared agent behavior (work loop, pause, progress) | Python (`src/agents/base.py`) |
+| Shared DB | Singleton Supabase client, issue/feature CRUD | Python (`src/db.py`) |
 | Scout Agent | Discover AD issues on archive.org | Python, requests (`src/agents/scout.py`) |
 | Courier Agent | Download PDFs | Python, requests (`src/agents/courier.py`) |
 | Reader Agent | Extract homeowner data from PDFs | Python, Claude Sonnet, pdftoppm (`src/agents/reader.py`) |
@@ -205,7 +253,7 @@ See [schema.sql](schema.sql) for full SQL definitions.
 
 | Table | Phase | Purpose |
 |-------|-------|---------|
-| `issues` | 1 | One row per magazine issue (month, year, cover) |
+| `issues` | 1 | One row per magazine issue — also pipeline tracker (identifier, status, pdf_path, verified dates) |
 | `features` | 1 | One row per featured home (homeowner, designer, location, article_author, etc.) |
 | `epstein_persons` | 2 | Unique individuals from Epstein files |
 | `epstein_references` | 2 | Each mention of a person (document, context, URL) |
@@ -216,6 +264,7 @@ See [schema.sql](schema.sql) for full SQL definitions.
 ## Key Decisions
 
 ### Resolved
+- **Single source of truth:** Supabase `issues` table — all agents read/write pipeline status via `src/db.py` (replaced local `archive_manifest.json`)
 - **Database:** Supabase (PostgreSQL) — shared across all phases
 - **Image storage:** Supabase Storage — only for Epstein-matched homeowners
 - **Vision API:** Claude Sonnet (`claude-sonnet-4-5-20250929`) via Anthropic SDK — migrated from Gemini 2.0 Flash for significantly better extraction quality

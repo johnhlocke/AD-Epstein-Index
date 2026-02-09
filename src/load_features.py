@@ -11,18 +11,15 @@ Usage:
 
 import json
 import os
+import re
 import sys
-from dotenv import load_dotenv
-from supabase import create_client
 
-load_dotenv()
+sys.path.insert(0, os.path.dirname(__file__))
+
+from db import get_supabase, get_or_create_issue, feature_exists, insert_feature
 
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
-
-url = os.getenv("SUPABASE_URL")
-key = os.getenv("SUPABASE_ANON_KEY")
-supabase = create_client(url, key)
 
 # Fields that map directly from extraction JSON to the features table
 FEATURE_FIELDS = [
@@ -48,46 +45,10 @@ def _sanitize_integer(value):
         # Strip commas, whitespace, and common suffixes
         cleaned = value.replace(",", "").strip()
         # Extract leading digits only (handles "3500 sq ft", "2005-2006", etc.)
-        import re
         match = re.match(r"(\d+)", cleaned)
         if match:
             return int(match.group(1))
     return None
-
-
-def get_or_create_issue(month, year, cover_description=None):
-    """Get existing issue or create a new one. Returns the issue ID."""
-    # Check if issue already exists
-    existing = (
-        supabase.table("issues")
-        .select("id")
-        .eq("month", month)
-        .eq("year", year)
-        .execute()
-    )
-
-    if existing.data:
-        return existing.data[0]["id"]
-
-    # Create new issue
-    issue_data = {"month": month, "year": year}
-    if cover_description:
-        issue_data["cover_description"] = cover_description
-
-    result = supabase.table("issues").insert(issue_data).execute()
-    return result.data[0]["id"]
-
-
-def feature_exists(issue_id, page_number):
-    """Check if a feature already exists for this issue + page."""
-    existing = (
-        supabase.table("features")
-        .select("id")
-        .eq("issue_id", issue_id)
-        .eq("page_number", page_number)
-        .execute()
-    )
-    return len(existing.data) > 0
 
 
 def load_extraction(extraction_path):
@@ -102,8 +63,10 @@ def load_extraction(extraction_path):
         print(f"  Skipping {data.get('identifier')} — missing month/year")
         return 0
 
-    # Get or create the issue
-    issue_id = get_or_create_issue(month, year)
+    identifier = data.get("identifier")
+
+    # Get or create the issue (now uses db.py shared module)
+    issue_id = get_or_create_issue(month, year, identifier=identifier)
     print(f"  Issue: {year}-{month:02d} (id={issue_id})")
 
     # Insert features
@@ -119,7 +82,7 @@ def load_extraction(extraction_path):
             continue
 
         # Build the row from known fields
-        row = {"issue_id": issue_id}
+        row = {}
         for field in FEATURE_FIELDS:
             value = feature.get(field)
             if value is not None:
@@ -129,7 +92,7 @@ def load_extraction(extraction_path):
                         continue
                 row[field] = value
 
-        supabase.table("features").insert(row).execute()
+        insert_feature(issue_id, row)
         homeowner = row.get("homeowner_name", "Unknown")
         print(f"    Inserted: {homeowner} (page {page})")
         inserted += 1

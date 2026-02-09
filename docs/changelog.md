@@ -6,6 +6,69 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 8)
+
+### Changed — Hub-and-Spoke Architecture: Editor as Central Coordinator
+- **Major architectural redesign**: Editor is now the central coordinator using asyncio.Queue task system
+- **New file `src/agents/tasks.py`**: `Task`, `TaskResult` dataclasses + `EditorLedger` for centralized failure tracking
+- **Base class (`src/agents/base.py`)**: Added `inbox`/`outbox` asyncio.Queue per agent, `execute(task)` method, watchdog timer (warns if inbox empty >120s)
+- **Editor rewrite (`src/agents/editor.py`)**: Coordinator loop with 3 timing tiers:
+  - Every 5s: collect results from all outboxes, validate, commit to Supabase
+  - Every 30s: plan and assign tasks (rule-based gap analysis, not LLM)
+  - Every 5min: strategic LLM assessment + human message processing
+- **Quality gating moved to Editor**: Reader no longer decides load/hold — Editor applies quality gate on extraction results
+- **EditorLedger (`data/editor_ledger.json`)**: Centralized failure tracking replaces scattered per-agent escalation files
+
+### Changed — Scout Agent
+- Added `execute()` for `discover_issues` and `fix_dates` task types
+- **Built-in archive.org API search** (direct HTTP `requests.get()`) — no LLM needed for basic discovery
+- Three-tier search strategy: archive.org API → Claude CLI → report not_found
+- Fix_dates priority set to LOW (3) — no longer blocks discovery (was the main pipeline bottleneck)
+- Legacy `work()` still available as fallback when no task assigned
+
+### Changed — Courier Agent
+- Added `execute()` for `download_pdf` task type
+- Builds issue dict from task params, delegates to existing download logic
+- Returns structured result with `pdf_path` and `pages` on success
+
+### Changed — Reader Agent
+- Added `execute()` for `extract_features` and `reextract_features` task types
+- Returns features + quality_metrics to Editor for quality gating
+- Editor decides whether to load into Supabase (not Reader)
+
+### Changed — Detective + Researcher Agents
+- Both get `execute()` for targeted tasks from Editor (`cross_reference` / `investigate_lead`)
+- Legacy `work()` still runs when no task assigned — these agents are largely self-managing
+
+### Changed — Orchestrator + Status
+- `src/orchestrator.py`: Added Editor task board to `status.json` output
+- `src/agent_status.py`: Updated TOTAL_EXPECTED_ISSUES from 444 to 456 (1988-2025)
+
+### Architecture
+- **What vs How separation**: Editor decides WHAT needs doing (gap analysis, priority), agents decide HOW to do it (search strategies, retry logic)
+- **Only Editor writes pipeline state to Supabase** — agents can still READ for context
+- **Agent watchdog**: if inbox empty >120s, agent logs warning and continues with `work()` fallback
+- **No breaking changes**: All agents still have `work()` loop, so the system degrades gracefully if Editor stops assigning tasks
+
+---
+
+## 2026-02-09 (Session 7)
+
+### Changed — Pipeline Source of Truth: Manifest → Supabase
+- **Migrated all agents from `archive_manifest.json` to Supabase `issues` table as single source of truth**
+- Created `src/db.py` — shared DB module with singleton Supabase client and all issue/feature CRUD functions
+- Added 14 pipeline tracking columns to `issues` table: `identifier`, `status`, `pdf_path`, `source`, `verified_month`, `verified_year`, `date_confidence`, `needs_review`, etc.
+- Created `src/migrate_manifest_to_supabase.py` — one-time migration script (92 issues migrated, 72 pre-1988 removed)
+- Updated all 7 agents (Scout, Courier, Reader, Editor, Detective, Researcher, Designer) to use `db.py` instead of manifest
+- Updated `src/agent_status.py` — all stats now come from Supabase
+- Updated `src/pipeline.py` — `status` command reads from Supabase
+- Updated `src/extract_features.py` and `src/load_features.py` — use `db.py` imports
+- Removed `read_manifest()` and `update_manifest_locked()` from `src/agents/base.py`
+- Scout now covers all issues through December 2025 (456 expected total) plus monitors for new monthly issues
+- Updated `docs/schema.sql` with full issues table definition including pipeline columns
+
+---
+
 ## 2026-02-09 (Session 6)
 
 ### Fixed — Researcher Agent (3 bugs)

@@ -5,13 +5,33 @@
 -- Phase 1 Tables
 -- ============================================================
 
--- Issues: one row per magazine issue
+-- Issues: one row per magazine issue (also serves as pipeline tracker)
+-- This is the single source of truth for issue status, replacing archive_manifest.json.
 CREATE TABLE issues (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
-  year INTEGER NOT NULL CHECK (year BETWEEN 1920 AND 2100),
+  month INTEGER CHECK (month BETWEEN 1 AND 12),
+  year INTEGER CHECK (year BETWEEN 1920 AND 2100),
   cover_description TEXT,
   created_at TIMESTAMPTZ DEFAULT NOW(),
+
+  -- Pipeline tracking columns (added in Supabase migration)
+  identifier TEXT UNIQUE,                       -- archive.org identifier (e.g. "sim_architectural-digest_1992-03")
+  title TEXT,                                   -- human-readable title
+  status TEXT DEFAULT 'discovered'              -- pipeline state machine
+    CHECK (status IN ('discovered','downloading','downloaded','extracted',
+                      'skipped_pre1988','error','no_pdf','extraction_error')),
+  pdf_path TEXT,                                -- local path to downloaded PDF
+  source TEXT DEFAULT 'archive.org',            -- where this issue came from
+  source_url TEXT,                              -- original URL
+  date_confidence TEXT DEFAULT 'medium',        -- how sure we are about the date
+  date_source TEXT,                             -- where the date came from
+  verified_month INTEGER,                       -- month confirmed from cover/TOC
+  verified_year INTEGER,                        -- year confirmed from cover/TOC
+  needs_review BOOLEAN DEFAULT FALSE,           -- flagged for human review
+  archive_date TEXT,                            -- raw date string from archive.org
+  ad_archive_progress JSONB,                    -- progress tracking for AD Archive source
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+
   UNIQUE (month, year)
 );
 

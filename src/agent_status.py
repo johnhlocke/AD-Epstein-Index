@@ -15,13 +15,16 @@ import os
 import sys
 from datetime import datetime
 
-# Total expected AD issues: 12/year from 1988 to 2024 = 37 years × 12 = 444
-TOTAL_EXPECTED_ISSUES = 444
+sys.path.insert(0, os.path.dirname(__file__))
+
+from db import get_supabase, count_issues_by_status
+
+# Total expected AD issues: 12/year from 1988 to 2025 = 38 years × 12 = 456
+TOTAL_EXPECTED_ISSUES = 456
 
 # Paths
 BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
 DATA_DIR = os.path.join(BASE_DIR, "data")
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
 ISSUES_DIR = os.path.join(DATA_DIR, "issues")
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
 XREF_DIR = os.path.join(DATA_DIR, "cross_references")
@@ -34,55 +37,40 @@ DESIGNER_MODE_PATH = os.path.join(DATA_DIR, "designer_mode.json")
 OUTPUT_PATH = os.path.join(BASE_DIR, "tools", "agent-office", "status.json")
 
 
-def count_downloads():
-    """Count downloaded PDFs in issues directory."""
-    if not os.path.exists(ISSUES_DIR):
-        return 0
-    return len([f for f in os.listdir(ISSUES_DIR) if f.endswith(".pdf")])
+def read_pipeline_stats():
+    """Read pipeline stats from Supabase (single source of truth).
 
-
-def read_supabase_stats():
-    """Read feature counts from Supabase (source of truth)."""
+    Returns a dict compatible with the old manifest_stats format, plus feature counts.
+    """
     try:
-        from dotenv import load_dotenv
-        load_dotenv(os.path.join(BASE_DIR, ".env"))
-        from supabase import create_client
-        url = os.environ.get("SUPABASE_URL")
-        key = os.environ.get("SUPABASE_ANON_KEY")
-        if not url or not key:
-            return None
-        sb = create_client(url, key)
-        result = sb.table("features").select("id,homeowner_name,issue_id", count="exact").execute()
-        total = result.count or len(result.data)
-        with_name = sum(1 for r in result.data if r.get("homeowner_name"))
-        distinct_issues = len(set(r["issue_id"] for r in result.data if r.get("issue_id")))
+        counts = count_issues_by_status()
+        sb = get_supabase()
+        feat_result = sb.table("features").select("id,homeowner_name,issue_id", count="exact").execute()
+        total_features = feat_result.count or len(feat_result.data)
+        with_name = sum(1 for r in feat_result.data if r.get("homeowner_name"))
+        distinct_issues = len(set(r["issue_id"] for r in feat_result.data if r.get("issue_id")))
+
         return {
-            "total_features": total,
+            # Issue counts (replaces read_manifest)
+            "total": counts["total"],
+            "downloaded": counts["downloaded"] + counts["extracted"],  # Both have PDFs
+            "extracted": counts["extracted"],
+            "skipped": counts.get("skipped_pre1988", 0),
+            "errors": counts.get("error", 0),
+            "no_pdf": counts.get("no_pdf", 0),
+            # Feature counts (replaces read_supabase_stats)
+            "total_features": total_features,
             "with_homeowner": with_name,
-            "null_homeowners": total - with_name,
+            "null_homeowners": total_features - with_name,
             "distinct_issues": distinct_issues,
         }
     except Exception:
-        return None
-
-
-def read_manifest():
-    """Read the archive manifest and return summary stats."""
-    if not os.path.exists(MANIFEST_PATH):
-        return {"total": 0, "downloaded": 0, "skipped": 0, "errors": 0, "no_pdf": 0}
-
-    with open(MANIFEST_PATH) as f:
-        manifest = json.load(f)
-
-    issues = manifest.get("issues", [])
-    return {
-        "total": len(issues),
-        "downloaded": sum(1 for i in issues if i.get("status") in ("downloaded", "extracted") and i.get("year", 0) >= 1988),
-        "extracted": sum(1 for i in issues if i.get("status") == "extracted"),
-        "skipped": sum(1 for i in issues if i.get("status") == "skipped_pre1988"),
-        "errors": sum(1 for i in issues if i.get("status") == "error"),
-        "no_pdf": sum(1 for i in issues if i.get("status") == "no_pdf"),
-    }
+        return {
+            "total": 0, "downloaded": 0, "extracted": 0,
+            "skipped": 0, "errors": 0, "no_pdf": 0,
+            "total_features": 0, "with_homeowner": 0,
+            "null_homeowners": 0, "distinct_issues": 0,
+        }
 
 
 def read_extractions():
@@ -749,12 +737,10 @@ def build_quality(extraction_stats):
 
 def generate_status():
     """Generate the full status JSON."""
-    manifest_stats = read_manifest()
+    manifest_stats = read_pipeline_stats()
     extraction_stats = read_extractions()
     xref_stats = read_xref()
     dossier_stats = read_dossiers()
-    download_count = count_downloads()
-    supabase_stats = read_supabase_stats()
 
     # Count confirmed Epstein associates from dossiers
     confirmed_associates = dossier_stats.get("high", 0) + dossier_stats.get("medium", 0)
@@ -880,7 +866,7 @@ def generate_status():
                 "message": reader_msg,
                 "color": "#2ecc71",
                 "deskItems": ["book", "pencil"],
-                "progress": {"current": supabase_stats["distinct_issues"] if supabase_stats else manifest_stats.get("extracted", extraction_stats["extracted"]), "total": manifest_stats["downloaded"]}
+                "progress": {"current": manifest_stats["distinct_issues"], "total": manifest_stats["downloaded"]}
             },
             {
                 "id": "detective",
@@ -890,7 +876,7 @@ def generate_status():
                 "message": detective_msg,
                 "color": "#9b59b6",
                 "deskItems": ["detective-hat", "clipboard"],
-                "progress": {"current": xref_stats["checked"], "total": supabase_stats["total_features"] if supabase_stats else extraction_stats["features"]}
+                "progress": {"current": xref_stats["checked"], "total": manifest_stats["total_features"]}
             },
             {
                 "id": "researcher",
@@ -926,8 +912,8 @@ def generate_status():
         "stats": [
             {"label": "Discovered", "value": manifest_stats["total"], "total": TOTAL_EXPECTED_ISSUES},
             {"label": "Downloaded Issues", "value": manifest_stats["downloaded"]},
-            {"label": "Extracted Issues", "value": supabase_stats["distinct_issues"] if supabase_stats else manifest_stats.get("extracted", extraction_stats["extracted"])},
-            {"label": "Features", "value": supabase_stats["total_features"] if supabase_stats else extraction_stats["features"]},
+            {"label": "Extracted Issues", "value": manifest_stats["distinct_issues"]},
+            {"label": "Features", "value": manifest_stats["total_features"]},
             {"label": "XRef Leads", "value": xref_stats.get("leads", xref_stats.get("matches", 0))},
             {"label": "Dossiers", "value": dossier_stats["investigated"]},
             {"label": "Confirmed", "value": confirmed_associates, "details": dossier_stats.get("confirmed_names", [])},

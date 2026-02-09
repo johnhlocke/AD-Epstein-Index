@@ -1,26 +1,36 @@
 """
-Scout Agent — finds every issue of Architectural Digest from 1988-2024.
+Scout Agent — finds every issue of Architectural Digest from 1988-2025.
 
-Uses an LLM brain (claude -p) to reason about gaps, verify dates,
-and search multiple sources. Each cycle picks ONE focused task:
-fix a batch of misdated issues, search for specific gaps, or explore
-new sources.
+Hub-and-spoke model: Editor assigns tasks via inbox, Scout reports via outbox.
+When no task is assigned, falls back to legacy work() loop.
 
-Interval: 900s (15 min) — filling a 400+ issue backlog.
+Task types:
+  - discover_issues: Search for missing issues (archive.org API + web + creative)
+  - fix_dates: Verify dates on misdated issues
+
+Three-tier search strategy (for discover_issues):
+  1. Built-in archive.org API (direct HTTP — no LLM needed)
+  2. Claude CLI for creative/complex strategies (fallback)
+
+Interval: 60s (fast poll for tasks from Editor).
 """
 
 import asyncio
 import json
 import os
+import re
 import subprocess
 import sys
 from datetime import datetime
 
+import requests
+
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from agents.base import Agent, DATA_DIR, BASE_DIR, read_manifest, update_manifest_locked
+from agents.base import Agent, DATA_DIR, BASE_DIR
+from agents.tasks import TaskResult
+from db import list_issues, upsert_issue, update_issue, count_issues_by_status
 
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
 SCOUT_LOG_PATH = os.path.join(DATA_DIR, "scout_log.json")
 KNOWLEDGE_PATH = os.path.join(DATA_DIR, "scout_knowledge.json")
 ESCALATION_PATH = os.path.join(DATA_DIR, "scout_escalations.json")
@@ -30,8 +40,8 @@ ESCALATION_COOLDOWN_HOURS = 1
 EXHAUSTED_ESCALATION_THRESHOLD = 20
 
 MIN_YEAR = 1988
-MAX_YEAR = 2024
-TOTAL_EXPECTED = (MAX_YEAR - MIN_YEAR + 1) * 12  # 444
+MAX_YEAR = 2025
+TOTAL_EXPECTED = (MAX_YEAR - MIN_YEAR + 1) * 12  # 456
 
 # Tools the Scout is allowed to use via Claude Code
 ALLOWED_TOOLS = [
@@ -106,14 +116,9 @@ class ScoutAgent(Agent):
             existing["last_searched"] = datetime.now().isoformat()
             self._search_attempts[month_key] = existing
 
-    def _load_manifest(self):
-        return read_manifest()
-
-    def _save_manifest_with_findings(self, findings, strategy):
-        """Apply findings to the LATEST manifest under lock, then write."""
-        def apply(fresh_manifest):
-            self._apply_findings(fresh_manifest, findings, strategy)
-        update_manifest_locked(apply)
+    def _load_issues(self):
+        """Load all issues from Supabase (replaces _load_manifest)."""
+        return list_issues()
 
     # ── Knowledge Base ─────────────────────────────────────────────
 
@@ -277,11 +282,266 @@ class ScoutAgent(Agent):
             self._save_escalations(escalations)
             self.log(f"Escalated to Editor: {reason}", level="WARN")
 
+    # ═══════════════════════════════════════════════════════════
+    # HUB-AND-SPOKE: execute() — called when Editor assigns a task
+    # ═══════════════════════════════════════════════════════════
+
+    async def execute(self, task):
+        """Execute a task from the Editor. Returns a TaskResult."""
+        if task.type == "discover_issues":
+            return await self._execute_discover(task)
+        elif task.type == "fix_dates":
+            return await self._execute_fix_dates(task)
+        else:
+            return TaskResult(
+                task_id=task.id,
+                task_type=task.type,
+                status="failure",
+                result={},
+                error=f"Scout doesn't handle task type '{task.type}'",
+                agent=self.name,
+            )
+
+    async def _execute_discover(self, task):
+        """Discover missing issues using tiered search strategy."""
+        missing_months = task.params.get("missing_months", [])
+        if not missing_months:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="success",
+                result={"found_issues": [], "not_found": [], "strategies_tried": []},
+                agent=self.name,
+            )
+
+        found_issues = []
+        not_found = []
+        strategies_tried = []
+
+        # ── Tier 1: Built-in archive.org API search (no LLM needed) ──
+        self._current_task = f"Searching archive.org API for {len(missing_months)} months..."
+        self.log(f"Tier 1: archive.org API search for {len(missing_months)} months")
+
+        for month_key in missing_months:
+            year_str, month_str = month_key.split("-")
+            year, month = int(year_str), int(month_str)
+
+            results = await asyncio.to_thread(
+                self._search_archive_org_api, year, month
+            )
+
+            if results:
+                for r in results:
+                    found_issues.append(r)
+                    self._record_search_attempt(month_key, found=True)
+                    self.log(f"Found via API: {year}-{month:02d} → {r['identifier'][:40]}")
+            else:
+                not_found.append(month_key)
+                self._record_search_attempt(month_key, found=False)
+
+            # Small delay between API calls
+            await asyncio.sleep(0.5)
+
+        strategies_tried.append(f"archive.org API: {len(found_issues)} found, {len(not_found)} not found")
+
+        # ── Tier 2: Claude CLI for remaining (creative strategies) ──
+        if not_found and len(not_found) <= 6:
+            self._current_task = f"Claude CLI search for {len(not_found)} remaining..."
+            self.log(f"Tier 2: Claude CLI search for {len(not_found)} remaining months")
+
+            # Only try CLI if we have some unfound months
+            skills = self.load_skills()
+            issues = self._load_issues()
+            gap_report = self._analyze_gaps(issues)
+
+            strategy = {
+                "type": "fill_gaps",
+                "description": f"Search for {len(not_found)} missing issues via creative strategies",
+                "batch": not_found,
+            }
+            prompt = self._build_prompt(strategy, gap_report, skills)
+            cli_result = await asyncio.to_thread(self._call_claude, prompt)
+
+            if cli_result:
+                findings = self._parse_findings(cli_result)
+                if findings:
+                    for issue in findings.get("found_issues", []):
+                        found_issues.append(issue)
+                        month_key = f"{issue.get('year', 0)}-{issue.get('month', 0):02d}"
+                        self._record_search_attempt(month_key, found=True)
+                        if month_key in not_found:
+                            not_found.remove(month_key)
+                    strategies_tried.append(f"Claude CLI: {len(findings.get('found_issues', []))} found")
+                else:
+                    strategies_tried.append("Claude CLI: no parseable results")
+            else:
+                strategies_tried.append("Claude CLI: call failed")
+
+        self._save_scout_log()
+
+        return TaskResult(
+            task_id=task.id,
+            task_type=task.type,
+            status="success",
+            result={
+                "found_issues": found_issues,
+                "not_found": not_found,
+                "strategies_tried": strategies_tried,
+            },
+            agent=self.name,
+        )
+
+    async def _execute_fix_dates(self, task):
+        """Fix dates on misdated issues using Claude CLI."""
+        batch = task.params.get("batch", [])
+        if not batch:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="success",
+                result={"verified_issues": [], "unverifiable": []},
+                agent=self.name,
+            )
+
+        self._current_task = f"Verifying dates on {len(batch)} issues..."
+        skills = self.load_skills()
+        issues = self._load_issues()
+        gap_report = self._analyze_gaps(issues)
+
+        strategy = {
+            "type": "fix_dates",
+            "description": f"Verify dates on {len(batch)} issues",
+            "batch": batch,
+        }
+        prompt = self._build_prompt(strategy, gap_report, skills)
+        result = await asyncio.to_thread(self._call_claude, prompt)
+
+        verified = []
+        unverifiable = []
+
+        if result:
+            findings = self._parse_findings(result)
+            if findings:
+                verified = findings.get("verified_issues", [])
+                # Any in the batch not verified are unverifiable
+                verified_ids = {v["identifier"] for v in verified}
+                unverifiable = [b.get("identifier", "") for b in batch
+                                if b.get("identifier", "") not in verified_ids]
+
+        return TaskResult(
+            task_id=task.id,
+            task_type=task.type,
+            status="success",
+            result={
+                "verified_issues": verified,
+                "unverifiable": unverifiable,
+            },
+            agent=self.name,
+        )
+
+    # ── Built-in archive.org API search ─────────────────────────────
+
+    def _search_archive_org_api(self, year, month):
+        """Direct HTTP search of archive.org API. No LLM needed.
+
+        Returns list of issue dicts, or empty list.
+        """
+        month_names = ["january", "february", "march", "april", "may", "june",
+                       "july", "august", "september", "october", "november", "december"]
+        month_name = month_names[month - 1]
+        month_abbr = month_name[:3]
+
+        found = []
+
+        # Strategy 1: Search by title + date range
+        queries = [
+            f'title:"architectural digest" AND date:[{year}-01-01 TO {year}-12-31]',
+            f'title:"architectural digest" AND title:"{month_name}" AND date:[{year}-01-01 TO {year}-12-31]',
+            f'title:"architectural digest" AND title:"{month_abbr}" AND date:[{year}-01-01 TO {year}-12-31]',
+            f'title:"architectural digest" AND title:"{year}" AND title:"{month_name}"',
+        ]
+
+        for query in queries:
+            try:
+                url = "https://archive.org/advancedsearch.php"
+                params = {
+                    "q": query,
+                    "fl[]": ["identifier", "title", "date"],
+                    "output": "json",
+                    "rows": 20,
+                }
+                resp = requests.get(url, params=params, timeout=15)
+                if resp.status_code != 200:
+                    continue
+
+                data = resp.json()
+                docs = data.get("response", {}).get("docs", [])
+
+                for doc in docs:
+                    ident = doc.get("identifier", "")
+                    title = doc.get("title", "")
+
+                    # Filter: must look like an AD issue
+                    title_lower = title.lower()
+                    if "architectural digest" not in title_lower and "architecturaldig" not in ident.lower():
+                        continue
+
+                    # Try to match the target month
+                    if self._matches_month(title_lower, ident.lower(), year, month, month_name, month_abbr):
+                        # Determine confidence
+                        confidence = "medium"
+                        if month_name in title_lower or f"{month_abbr}" in title_lower:
+                            confidence = "high"
+
+                        found.append({
+                            "identifier": ident,
+                            "title": title,
+                            "year": year,
+                            "month": month,
+                            "source": "archive.org",
+                            "confidence": confidence,
+                            "url": f"https://archive.org/details/{ident}",
+                        })
+
+                if found:
+                    break  # Got results, no need for more queries
+
+            except Exception:
+                continue
+
+        # Deduplicate by identifier
+        seen = set()
+        unique = []
+        for f in found:
+            if f["identifier"] not in seen:
+                seen.add(f["identifier"])
+                unique.append(f)
+
+        return unique
+
+    def _matches_month(self, title_lower, ident_lower, year, month, month_name, month_abbr):
+        """Check if a title/identifier matches a specific month+year."""
+        year_str = str(year)
+
+        # Check title for month name
+        if month_name in title_lower and year_str in title_lower:
+            return True
+        if month_abbr in title_lower and year_str in title_lower:
+            return True
+
+        # Check identifier patterns
+        # Pattern: architecturaldig<vol><month_abbr>
+        if month_abbr in ident_lower:
+            return True
+
+        # Pattern: sim_architectural-digest_YYYY-MM
+        if f"_{year}-{month:02d}" in ident_lower:
+            return True
+        if f"_{year}_{month:02d}" in ident_lower:
+            return True
+
+        return False
+
     # ── Gap Analysis ───────────────────────────────────────────────
 
-    def _analyze_gaps(self, manifest):
+    def _analyze_gaps(self, issues):
         """Figure out what's missing, misdated, and unverified."""
-        issues = manifest.get("issues", [])
 
         # Categorize issues
         confirmed = {}  # (year, month) -> issue  — correctly dated
@@ -343,7 +603,7 @@ class ScoutAgent(Agent):
 
     # ── Strategy Selection ─────────────────────────────────────────
 
-    def _pick_strategy(self, gap_report, manifest):
+    def _pick_strategy(self, gap_report, issues):
         """Decide what to work on this cycle.
 
         Priority order:
@@ -401,7 +661,7 @@ class ScoutAgent(Agent):
         # Priority 4: Scrape AD Archive to catalog which issues exist
         # (Useful for confirming existence, but downloads require auth + 20-page batching)
         ad_archive_years = set()
-        for i in manifest.get("issues", []):
+        for i in issues:
             if i.get("date_source") == "ad_archive" and i.get("year"):
                 ad_archive_years.add(i["year"])
         all_target_years = set(range(MIN_YEAR, MAX_YEAR + 1))
@@ -755,11 +1015,9 @@ Prior knowledge (what's worked and what hasn't):
 
     # ── Apply Findings ─────────────────────────────────────────────
 
-    def _apply_findings(self, manifest, findings, strategy):
-        """Merge findings into the manifest. Returns count of changes."""
+    def _apply_findings(self, findings, strategy, existing_ids):
+        """Apply findings to Supabase. Returns count of changes."""
         changes = 0
-        issues = manifest.get("issues", [])
-        existing_ids = {i["identifier"]: i for i in issues}
 
         if strategy["type"] == "fix_dates":
             for verified in findings.get("verified_issues", []):
@@ -772,16 +1030,16 @@ Prior knowledge (what's worked and what hasn't):
                     continue
 
                 if ident in existing_ids:
-                    issue = existing_ids[ident]
-                    old_year = issue.get("year")
-                    issue["year"] = year
-                    issue["month"] = month
-                    issue["date_confidence"] = confidence
-                    issue["date_source"] = verified.get("source", "scout_verified")
-                    issue["needs_review"] = confidence == "low"
-                    if year != old_year:
-                        changes += 1
-                        self.log(f"Date fixed: {ident} → {year}-{month or '??'} ({confidence})")
+                    updates = {
+                        "year": year,
+                        "month": month,
+                        "date_confidence": confidence,
+                        "date_source": verified.get("source", "scout_verified"),
+                        "needs_review": confidence == "low",
+                    }
+                    update_issue(ident, updates)
+                    changes += 1
+                    self.log(f"Date fixed: {ident} → {year}-{month or '??'} ({confidence})")
 
         elif strategy["type"] in ("scrape_ad_archive", "fill_gaps", "verify", "explore_sources"):
             for found in findings.get("found_issues", []):
@@ -794,17 +1052,19 @@ Prior knowledge (what's worked and what hasn't):
                 if not year or year < MIN_YEAR or year > MAX_YEAR:
                     continue
 
-                issues.append({
-                    "identifier": ident,
+                source = found.get("source", "scout_search")
+                # Normalize source field for ad_archive
+                db_source = "ad_archive" if "ad_archive" in source else "archive.org"
+
+                upsert_issue(ident, {
                     "title": found.get("title", ""),
                     "month": month,
                     "year": year,
-                    "date": None,
                     "status": "discovered",
-                    "pdf_path": None,
                     "needs_review": found.get("confidence", "low") == "low",
                     "date_confidence": found.get("confidence", "medium"),
-                    "date_source": found.get("source", "scout_search"),
+                    "date_source": source,
+                    "source": db_source,
                     "source_url": found.get("url"),
                 })
                 changes += 1
@@ -814,20 +1074,16 @@ Prior knowledge (what's worked and what hasn't):
             for note in findings.get("new_sources", []):
                 self.log(f"New source discovered: {note}")
 
-        # Re-sort by year/month
-        issues.sort(key=lambda x: (x.get("year") or 9999, x.get("month") or 99))
-        manifest["issues"] = issues
-
         return changes
 
     # ── Main Work Loop ─────────────────────────────────────────────
 
     async def work(self):
         skills = self.load_skills()
-        manifest = self._load_manifest()
-        gap_report = self._analyze_gaps(manifest)
+        issues = self._load_issues()
+        gap_report = self._analyze_gaps(issues)
 
-        strategy = self._pick_strategy(gap_report, manifest)
+        strategy = self._pick_strategy(gap_report, issues)
 
         self._current_task = f"{strategy['type']}: {strategy['description'][:50]}"
         self.log(f"Scout strategy: {strategy['type']} — {strategy['description']}")
@@ -853,8 +1109,8 @@ Prior knowledge (what's worked and what hasn't):
 
         findings = self._parse_findings(result)
         if findings:
-            changes = self._apply_findings(manifest, findings, strategy)
-            self._save_manifest_with_findings(findings, strategy)
+            existing_ids = {i["identifier"]: i for i in issues if i.get("identifier")}
+            changes = self._apply_findings(findings, strategy, existing_ids)
 
             # Track search attempts for fill_gaps strategy
             if strategy["type"] == "fill_gaps":
@@ -918,8 +1174,9 @@ Prior knowledge (what's worked and what hasn't):
             if notes and len(notes) > 20:
                 self._record_learning("insights", {"text": notes})
 
-            # Re-analyze after changes
-            updated = self._analyze_gaps(manifest)
+            # Re-analyze after changes (re-fetch from Supabase)
+            updated_issues = self._load_issues()
+            updated = self._analyze_gaps(updated_issues)
             self._current_task = (
                 f"{changes} changes — {updated['total_confirmed']}/{TOTAL_EXPECTED} "
                 f"({updated['coverage_pct']}%)"
@@ -958,8 +1215,8 @@ Prior knowledge (what's worked and what hasn't):
         return True
 
     def get_progress(self):
-        manifest = self._load_manifest()
-        gap_report = self._analyze_gaps(manifest)
+        issues = self._load_issues()
+        gap_report = self._analyze_gaps(issues)
         on_cooldown = sum(1 for m in gap_report["missing_months"] if self._is_on_cooldown(m))
         exhausted = sum(
             1 for m in gap_report["missing_months"]

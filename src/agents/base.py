@@ -3,19 +3,20 @@ Base Agent class — foundation for all pipeline agents.
 
 Provides:
 - Async run loop with configurable interval
+- Hub-and-spoke task system: inbox (from Editor) → execute → outbox (to Editor)
 - Pause/resume via asyncio.Event
 - Graceful shutdown
 - Activity logging (pipe-delimited file)
 - Skills file loading (markdown instructions)
 - Dashboard status reporting
-- Manifest locking utilities (fcntl-based file locking)
+- JSON file locking utilities (fcntl-based file locking)
 """
 
 import asyncio
 import fcntl
 import json
 import os
-import shutil
+import time as _time
 from abc import ABC, abstractmethod
 from datetime import datetime
 
@@ -23,65 +24,8 @@ BASE_DIR = os.path.join(os.path.dirname(__file__), "..", "..")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")
 LOG_PATH = os.path.join(DATA_DIR, "agent_activity.log")
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
-MANIFEST_LOCK_PATH = MANIFEST_PATH + ".lock"
 
-
-# ── Manifest Utilities (shared by all agents) ─────────────────
-
-def read_manifest():
-    """Read the manifest without locking. Safe for finding work.
-
-    If the manifest is being written concurrently, the read may get a slightly
-    stale version — that's fine for work selection. Writes use locking.
-    """
-    if os.path.exists(MANIFEST_PATH):
-        try:
-            with open(MANIFEST_PATH) as f:
-                return json.load(f)
-        except (json.JSONDecodeError, OSError):
-            pass
-    return {"total_found": 0, "issues": [], "skipped": []}
-
-
-def update_manifest_locked(update_fn):
-    """Atomically read-modify-write the manifest with file locking.
-
-    Acquires an exclusive lock, re-reads the LATEST manifest from disk,
-    calls update_fn(manifest) to apply changes in-place, creates a backup
-    of the old version, then writes the updated manifest.
-
-    This prevents race conditions between agents that all write the manifest
-    (Scout adding issues, Courier updating download status, Reader marking
-    extractions complete).
-
-    Args:
-        update_fn: Callable that receives the manifest dict and modifies it
-                   in place. Should NOT read/write the manifest file itself.
-    """
-    os.makedirs(os.path.dirname(MANIFEST_LOCK_PATH), exist_ok=True)
-
-    lock_fd = open(MANIFEST_LOCK_PATH, "w")
-    try:
-        fcntl.flock(lock_fd, fcntl.LOCK_EX)
-
-        # Re-read the latest manifest under the lock
-        manifest = read_manifest()
-
-        # Apply the caller's changes
-        update_fn(manifest)
-
-        # Backup the current version before overwriting
-        if os.path.exists(MANIFEST_PATH):
-            shutil.copy2(MANIFEST_PATH, MANIFEST_PATH + ".backup")
-
-        # Write the updated manifest
-        with open(MANIFEST_PATH, "w") as f:
-            json.dump(manifest, f, indent=2)
-    finally:
-        fcntl.flock(lock_fd, fcntl.LOCK_UN)
-        lock_fd.close()
-
+# ── JSON File Locking Utilities ──────────────────────────────
 
 def update_json_locked(json_path, update_fn, default=None):
     """Atomically read-modify-write a JSON file with file locking.
@@ -161,7 +105,17 @@ def read_json_locked(json_path, default=None):
 
 
 class Agent(ABC):
-    """Base class for all pipeline agents."""
+    """Base class for all pipeline agents.
+
+    Hub-and-spoke model:
+    - Editor pushes Tasks to agent's inbox queue
+    - Agent executes tasks and pushes TaskResults to outbox queue
+    - When inbox is empty, agent enters idle_work() (optional background maintenance)
+    - Watchdog: if inbox empty for >120s, logs a warning
+    """
+
+    # How long an agent waits for inbox before logging a watchdog warning
+    WATCHDOG_TIMEOUT = 120
 
     def __init__(self, name, interval=60):
         """
@@ -183,12 +137,19 @@ class Agent(ABC):
         self._last_error = None
         self._last_error_time = None
 
+        # Hub-and-spoke: task queues
+        self.inbox = asyncio.Queue()   # Editor pushes Tasks here
+        self.outbox = asyncio.Queue()  # Agent pushes TaskResults here
+        self._last_task_time = 0.0     # For watchdog timer
+        self._current_task_obj = None  # The Task currently being executed
+
     # ── Lifecycle ──────────────────────────────────────────────
 
     async def run(self):
-        """Main run loop. Calls work() repeatedly with interval pauses."""
+        """Main run loop. Checks inbox for tasks first, falls back to idle_work()."""
         self._running = True
         self._stop_requested = False
+        self._last_task_time = _time.time()
         self.log(f"{self.name.title()} agent started (interval={self.interval}s)")
 
         try:
@@ -199,10 +160,49 @@ class Agent(ABC):
                 if self._stop_requested:
                     break
 
-                # Do one unit of work
                 self._active = True
                 try:
-                    did_work = await self.work()
+                    # Check inbox for tasks from Editor
+                    did_work = False
+                    try:
+                        task = self.inbox.get_nowait()
+                        self._last_task_time = _time.time()
+                        self._current_task_obj = task
+                        self._current_task = f"Task: {task.goal[:60]}"
+                        self.log(f"Executing task {task.id}: {task.goal}")
+
+                        from agents.tasks import TaskResult
+                        try:
+                            result = await self.execute(task)
+                            self.outbox.put_nowait(result)
+                            did_work = True
+                        except Exception as e:
+                            # Task execution failed — send failure result
+                            fail_result = TaskResult(
+                                task_id=task.id,
+                                task_type=task.type,
+                                status="failure",
+                                result={},
+                                error=str(e),
+                                agent=self.name,
+                            )
+                            self.outbox.put_nowait(fail_result)
+                            self._errors += 1
+                            self._last_error = str(e)
+                            self._last_error_time = datetime.now()
+                            self.log(f"Task {task.id} failed: {e}", level="ERROR")
+                        finally:
+                            self._current_task_obj = None
+
+                    except asyncio.QueueEmpty:
+                        # No task from Editor — run legacy work() or idle_work()
+                        did_work = await self.work()
+
+                        # Watchdog: warn if inbox has been empty too long
+                        if _time.time() - self._last_task_time > self.WATCHDOG_TIMEOUT:
+                            if self._cycles > 0 and self._cycles % 10 == 0:
+                                self.log(f"Inbox empty for >{self.WATCHDOG_TIMEOUT}s", level="DEBUG")
+
                     self._cycles += 1
                     self._last_work_time = datetime.now()
                     if did_work:
@@ -256,8 +256,30 @@ class Agent(ABC):
 
     @abstractmethod
     async def work(self):
-        """Do one unit of work. Return True if work was done, False if idle."""
+        """Do one unit of work (legacy loop). Return True if work was done, False if idle.
+
+        In the hub-and-spoke model, this is called when the inbox is empty.
+        Agents should implement execute() for task-driven work and use work()
+        only as a fallback idle behavior.
+        """
         ...
+
+    async def execute(self, task):
+        """Execute a task from the Editor. Returns a TaskResult.
+
+        Override this in each agent to handle task types. The base implementation
+        raises NotImplementedError — agents that haven't been migrated yet will
+        fall through to work() via the inbox-empty path.
+        """
+        from agents.tasks import TaskResult
+        return TaskResult(
+            task_id=task.id,
+            task_type=task.type,
+            status="failure",
+            result={},
+            error=f"{self.name} has not implemented execute() for task type '{task.type}'",
+            agent=self.name,
+        )
 
     @abstractmethod
     def get_progress(self):
