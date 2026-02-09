@@ -258,6 +258,32 @@ idle_chatter() ──→ speech bubble on dashboard
 - Queries episodic memory for 'proposal' outcome episodes
 - Included in situation report for the Editor's strategic LLM
 
+### World Model
+
+`get_world_state()` gives any agent a structured snapshot of the pipeline:
+```python
+{
+    "pipeline": {"discovered": 85, "downloaded": 42, "extracted": 15, "target": 456, "coverage_pct": 18.6},
+    "intelligence": {"memory_episodes": 127, "bulletin_notes": 14},
+    "bottleneck": "extraction"  # Where the pipeline is stuck
+}
+```
+Cached for 30 seconds. Agents can use this to make context-aware decisions.
+
+### Inter-Agent Communication (`src/agents/bulletin.py`)
+
+Shared bulletin board for peer-to-peer tips and warnings:
+```
+Scout posts: "archive.org rate limiting — slow down" (tag: warning)
+    → Courier reads warning before attempting downloads
+    → Detective reads warning before DOJ search
+```
+
+- `post_bulletin()` / `read_bulletin()` on base Agent class
+- `problem_solve()` checks bulletin for relevant notes before deciding
+- Agents auto-post warnings when escalating to Editor
+- JSON-backed persistence, capped at 200 notes
+
 ### Orchestrator (`src/orchestrator.py`)
 - Launches all 7 agents as async tasks
 - Wires Editor with worker references (Editor.workers = all other agents)

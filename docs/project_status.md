@@ -43,6 +43,8 @@ This file should be automatically updated when necessary to answer three key que
 | Self-improvement proposals (agent methodology feedback) | Tooling | Done |
 | Planning/Lookahead (memory-informed task priority) | Tooling | Done |
 | Curiosity (cross-agent pattern exploration) | Tooling | Done |
+| World model (structured pipeline state awareness) | Tooling | Done |
+| Inter-agent communication (bulletin board) | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -201,8 +203,9 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 - ~~Implement self-improvement~~ **Done** (30-min methodology proposals via Haiku)
 - ~~Implement planning/lookahead~~ **Done** (memory-informed priority in Editor)
 - ~~Implement curiosity~~ **Done** (15-min cross-agent pattern exploration)
-- Implement world model (structured pipeline state representation)
-- Implement inter-agent communication (event bus for peer coordination)
+- ~~Implement world model~~ **Done** (structured pipeline state + bottleneck detection)
+- ~~Implement inter-agent communication~~ **Done** (bulletin board for peer tips/warnings)
+- All 7 intelligence gaps closed!
 - Fix Courier `work()` bug (`'NoneType' object has no attribute 'get'`)
 
 **Ongoing — Scale the Pipeline:**

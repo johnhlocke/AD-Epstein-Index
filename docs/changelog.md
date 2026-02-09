@@ -54,6 +54,24 @@ Format: entries are grouped by date, with the most recent at the top.
   - Commits insights as 'curiosity' episodes — cross-pollinating knowledge between agents
   - Shows insight as speech bubble on dashboard
 
+### Added — World Model (Gap 6 of Intelligence Roadmap)
+- **`get_world_state()`** in base Agent class — structured pipeline state snapshot
+  - Returns pipeline metrics (discovered/downloaded/extracted/target/coverage%)
+  - Includes intelligence stats (memory episodes, bulletin notes)
+  - Identifies current bottleneck (discovery/download/extraction/cross-reference)
+  - 30-second cache to avoid hammering Supabase
+
+### Added — Inter-Agent Communication (Gap 7 of Intelligence Roadmap)
+- **`src/agents/bulletin.py`** — Shared bulletin board for peer-to-peer communication
+  - `post(agent, text, tag)` — post notes visible to all agents
+  - `read(n, from_agent, tag, exclude_agent)` — read notes from other agents
+  - Tags: "tip", "warning", "discovery", "question"
+  - JSON-backed persistence (`data/bulletin_board.json`), capped at 200 notes
+- **Base Agent integration**:
+  - `post_bulletin()` / `read_bulletin()` convenience methods
+  - `problem_solve()` now checks bulletin for relevant warnings/tips from peers
+  - Agents auto-post warnings when escalating (other agents should know)
+
 ### Changed — Idle Intelligence Pipeline
 - Agents now have a 4-stage idle intelligence pipeline (all with independent cooldowns):
   1. `reflect()` — self-assessment (every 10 min)

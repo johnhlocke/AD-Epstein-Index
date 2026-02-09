@@ -545,6 +545,114 @@ class Agent(ABC):
         except Exception as e:
             self.log(f"Reflection failed: {e}", level="DEBUG")
 
+    # ── World Model (Pipeline State Awareness) ─────────────────
+
+    def get_world_state(self) -> dict:
+        """Get a structured snapshot of the pipeline state.
+
+        Returns a dict with key metrics that any agent can use to understand
+        the broader context. Cached for 30 seconds to avoid hammering Supabase.
+        """
+        now = _time.time()
+        if not hasattr(self, '_world_state_cache'):
+            self._world_state_cache = None
+            self._world_state_time = 0.0
+        if self._world_state_cache and now - self._world_state_time < 30:
+            return self._world_state_cache
+
+        try:
+            from db import count_issues_by_status
+            counts = count_issues_by_status()
+        except Exception:
+            return self._world_state_cache or {}
+
+        # Get memory stats
+        memory_count = 0
+        try:
+            from agents.memory import get_memory
+            mem = get_memory()
+            if mem:
+                memory_count = mem.count()
+        except Exception:
+            pass
+
+        # Get bulletin count
+        bulletin_count = 0
+        try:
+            from agents.bulletin import get_bulletin
+            board = get_bulletin()
+            bulletin_count = board.count()
+        except Exception:
+            pass
+
+        state = {
+            "pipeline": {
+                "discovered": counts.get("total", 0),
+                "downloaded": counts.get("downloaded", 0),
+                "extracted": counts.get("extracted", 0),
+                "target": 456,
+                "coverage_pct": round(counts.get("total", 0) / 456 * 100, 1),
+            },
+            "intelligence": {
+                "memory_episodes": memory_count,
+                "bulletin_notes": bulletin_count,
+            },
+            "bottleneck": self._identify_bottleneck(counts),
+        }
+
+        self._world_state_cache = state
+        self._world_state_time = now
+        return state
+
+    @staticmethod
+    def _identify_bottleneck(counts) -> str:
+        """Identify the current pipeline bottleneck."""
+        discovered = counts.get("total", 0)
+        downloaded = counts.get("downloaded", 0)
+        extracted = counts.get("extracted", 0)
+
+        if discovered < 100:
+            return "discovery"
+        elif downloaded < discovered * 0.5:
+            return "download"
+        elif extracted < downloaded * 0.5:
+            return "extraction"
+        else:
+            return "cross-reference"
+
+    # ── Inter-Agent Communication (Bulletin Board) ─────────────
+
+    def post_bulletin(self, text, tag="tip"):
+        """Post a note to the shared bulletin board for other agents.
+
+        Args:
+            text: The message to share.
+            tag: Category — "tip", "warning", "discovery", "question".
+        """
+        try:
+            from agents.bulletin import get_bulletin
+            board = get_bulletin()
+            board.post(self.name, text, tag)
+        except Exception:
+            pass
+
+    def read_bulletin(self, n=5, tag=None):
+        """Read recent notes from other agents (excludes own notes).
+
+        Args:
+            n: Max notes to return.
+            tag: Optional tag filter.
+
+        Returns:
+            List of note dicts, newest first.
+        """
+        try:
+            from agents.bulletin import get_bulletin
+            board = get_bulletin()
+            return board.read(n=n, tag=tag, exclude_agent=self.name)
+        except Exception:
+            return []
+
     # ── Self-Improvement ──────────────────────────────────────
 
     _IMPROVEMENT_INTERVAL = 1800  # 30 minutes between improvement proposals
@@ -800,6 +908,15 @@ class Agent(ABC):
                 memory_lines.append(f"  - {ep['episode']}")
             memory_context = "\n\nPAST EXPERIENCE (similar problems you've seen before):\n" + "\n".join(memory_lines)
 
+        # Check bulletin board for relevant tips from other agents
+        bulletin_context = ""
+        bulletin_notes = self.read_bulletin(n=3, tag="warning")
+        if not bulletin_notes:
+            bulletin_notes = self.read_bulletin(n=3, tag="tip")
+        if bulletin_notes:
+            bulletin_lines = [f"  - [{n['agent']}] {n['text']}" for n in bulletin_notes]
+            bulletin_context = "\n\nNOTES FROM OTHER AGENTS:\n" + "\n".join(bulletin_lines)
+
         prompt = f"""You encountered an error while working. Diagnose it and choose the best recovery strategy.
 
 ERROR: {error}
@@ -808,7 +925,7 @@ CONTEXT:
 {json.dumps(context, indent=2, default=str)}
 
 AVAILABLE STRATEGIES:
-{strategies_text}{memory_context}
+{strategies_text}{memory_context}{bulletin_context}
 
 Respond with JSON only:
 {{"diagnosis": "What went wrong (1 sentence)", "strategy": "strategy_name", "reasoning": "Why this strategy (1 sentence)"}}"""
@@ -844,6 +961,13 @@ Respond with JSON only:
                 outcome="decision",
                 extra_meta={"strategy": result.get("strategy", "unknown")},
             )
+
+            # Post warning to bulletin if escalating (other agents should know)
+            if result.get("strategy") == "escalate":
+                self.post_bulletin(
+                    f"Escalating: {result.get('diagnosis', str(error)[:60])}",
+                    tag="warning",
+                )
 
             # Narrate the decision
             try:
