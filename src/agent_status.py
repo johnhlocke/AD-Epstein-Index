@@ -735,6 +735,125 @@ def build_quality(extraction_stats):
     return {"total_features": total, "fields": result}
 
 
+def read_editor_ledger():
+    """Read the EditorLedger and build a summary for the dashboard.
+
+    Returns:
+        {
+            "stuck": [ { "key": "...", "failures": N, "last_error": "...", "agent": "...", "task": "..." } ],
+            "exhausted": [ { "key": "...", "failures": N, "last_error": "...", "agent": "...", "task": "..." } ],
+            "recent_failures": [ { "key": "...", "agent": "...", "error": "...", "time": "..." } ],
+            "total_keys": N,
+            "total_failures": N,
+            "total_successes": N,
+        }
+    """
+    ledger_path = os.path.join(DATA_DIR, "editor_ledger.json")
+    empty = {"stuck": [], "exhausted": [], "recent_failures": [],
+             "total_keys": 0, "total_failures": 0, "total_successes": 0}
+
+    if not os.path.exists(ledger_path):
+        return empty
+
+    try:
+        with open(ledger_path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return empty
+
+    max_failures = 3
+    stuck = []
+    exhausted = []
+    all_failures = []
+    total_failures = 0
+    total_successes = 0
+
+    for key, entries in data.items():
+        failures = [e for e in entries if not e.get("success")]
+        successes = [e for e in entries if e.get("success")]
+        total_failures += len(failures)
+        total_successes += len(successes)
+
+        if not failures:
+            continue
+
+        last_fail = failures[-1]
+        item = {
+            "key": key,
+            "failures": len(failures),
+            "last_error": (last_fail.get("error") or last_fail.get("note", ""))[:80],
+            "agent": last_fail.get("agent", ""),
+            "task": last_fail.get("task", ""),
+        }
+
+        if len(failures) >= max_failures:
+            exhausted.append(item)
+        else:
+            stuck.append(item)
+
+        for f in failures:
+            all_failures.append({
+                "key": key,
+                "agent": f.get("agent", ""),
+                "error": (f.get("error") or f.get("note", ""))[:60],
+                "time": f.get("time", ""),
+            })
+
+    # Sort: most failures first for stuck/exhausted
+    stuck.sort(key=lambda x: -x["failures"])
+    exhausted.sort(key=lambda x: -x["failures"])
+
+    # Recent failures: sorted by time, most recent first
+    all_failures.sort(key=lambda x: x["time"], reverse=True)
+
+    return {
+        "stuck": stuck[:10],
+        "exhausted": exhausted[:10],
+        "recent_failures": all_failures[:8],
+        "total_keys": len(data),
+        "total_failures": total_failures,
+        "total_successes": total_successes,
+    }
+
+
+def build_coverage_map():
+    """Build a year×month grid showing pipeline status for each AD issue.
+
+    Returns dict: { "1988": {"1": "extracted", "2": null, ...}, ... }
+    Status priority: extracted > downloaded > discovered > null
+    """
+    coverage = {}
+    # Initialize all months as null (1988-2025)
+    for year in range(1988, 2026):
+        coverage[str(year)] = {str(m): None for m in range(1, 13)}
+
+    try:
+        sb = get_supabase()
+        result = sb.table("issues").select("year,month,status").execute()
+        # Status priority for when multiple issues share a month
+        priority = {"extracted": 4, "downloaded": 3, "discovered": 2,
+                    "skipped_pre1988": 1, "error": 1, "no_pdf": 1,
+                    "extraction_error": 2}
+        for row in result.data:
+            y = row.get("year")
+            m = row.get("month")
+            s = row.get("status", "discovered")
+            if y is None or m is None:
+                continue
+            yk = str(y)
+            mk = str(m)
+            if yk not in coverage or mk not in coverage.get(yk, {}):
+                continue
+            # Keep the highest-priority status
+            existing = coverage[yk][mk]
+            if existing is None or priority.get(s, 0) > priority.get(existing, 0):
+                coverage[yk][mk] = s
+    except Exception:
+        pass
+
+    return coverage
+
+
 def generate_status():
     """Generate the full status JSON."""
     manifest_stats = read_pipeline_stats()
@@ -928,6 +1047,8 @@ def generate_status():
         "quality": build_quality(extraction_stats),
         "throughput": throughput,
         "cost": cost_data,
+        "coverage_map": build_coverage_map(),
+        "editor_ledger": read_editor_ledger(),
     }
 
     return status
