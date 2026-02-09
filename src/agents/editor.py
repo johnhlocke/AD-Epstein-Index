@@ -427,9 +427,10 @@ Respond with JSON only. Schema:
   "summary": "One-line summary of pipeline state",
   "observations": ["observation 1", "observation 2", ...],
   "actions": [
-    {{"type": "pause"|"resume"|"log"|"remember"|"update_skills"|"queue_reextraction"|"set_designer_mode", "agent": "agent_name", "reason": "why"}},
+    {{"type": "pause"|"resume"|"log"|"remember"|"update_skills"|"queue_reextraction"|"set_designer_mode"|"clear_load_failures", "agent": "agent_name", "reason": "why"}},
     {{"type": "queue_reextraction", "identifier": "...", "strategy": "wider_scan"|"extended_toc"|"full_scan", "reason": "why"}},
-    {{"type": "set_designer_mode", "mode": "training"|"creating", "reason": "why"}}
+    {{"type": "set_designer_mode", "mode": "training"|"creating", "reason": "why"}},
+    {{"type": "clear_load_failures", "identifier": "ArchitecturalDigest..." or null for all, "reason": "why"}}
   ],
   "briefing": "Full markdown briefing text for the human researcher",
   "inbox_message": "A concise 1-2 sentence update for the human's inbox dashboard. Focus on high-level progress, milestones, or issues that need attention. Write conversationally. If the human sent you a message, address it directly here.",
@@ -491,8 +492,10 @@ Use inbox_type "alert" for escalations so the human notices.
 - `extraction_failed`: process_issue() returned None (PDF may be corrupt). Alert the human.
 - `extraction_stuck`: Multiple consecutive failures across different issues. The extraction pipeline itself may be broken. Alert the human urgently.
 - `reextraction_*`: A re-extraction attempt also failed QC. Consider escalating to `full_scan` or alerting the human.
+- `supabase_load_failed`: **SELF-HEALABLE — do NOT pause the Reader or alert the human.** The `_sanitize_integer()` function in load_features.py now handles comma-formatted numbers (e.g., "35,000" → 35000). To fix: (1) clear_load_failures, (2) resolve_escalation, (3) resume reader if paused. The retry will succeed.
 
 To queue a re-extraction, use: {{"type": "queue_reextraction", "identifier": "ArchitecturalDigestMarch2020", "strategy": "wider_scan", "reason": "High null rate"}}
+To clear load failures, use: {{"type": "clear_load_failures", "identifier": "ArchitecturalDigest...", "reason": "Integer sanitization handles this"}}
 Available strategies (prefer in this order): `wider_scan` → `extended_toc` → `full_scan`
 - `wider_scan`: Normal TOC + scan every 3 pages from page 20 (good first retry)
 - `extended_toc`: Read TOC from pages 1-30, scan every 3 from page 20
@@ -536,7 +539,7 @@ Analyze the pipeline state and provide your assessment."""
 
         response = client.messages.create(
             model="claude-haiku-4-5-20251001",
-            max_tokens=1024,
+            max_tokens=4096,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
         )
@@ -544,15 +547,46 @@ Analyze the pipeline state and provide your assessment."""
         # Track API usage and cost
         self._track_usage(response)
 
-        # Parse JSON from response
+        # Parse JSON from response — handle markdown blocks and trailing text
         text = response.content[0].text.strip()
-        # Handle markdown code blocks
+        # Strip markdown code blocks
         if text.startswith("```"):
             text = text.split("\n", 1)[1]
-            if text.endswith("```"):
-                text = text[:-3]
-
-        return json.loads(text)
+            # Find the closing ``` and discard everything after it
+            if "```" in text:
+                text = text[:text.rindex("```")]
+            text = text.strip()
+        # If still not valid JSON, try extracting the first JSON object
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            # Find first { and its matching } using a simple brace counter
+            start = text.find("{")
+            if start == -1:
+                raise
+            depth = 0
+            in_string = False
+            escape = False
+            for i in range(start, len(text)):
+                c = text[i]
+                if escape:
+                    escape = False
+                    continue
+                if c == "\\":
+                    escape = True
+                    continue
+                if c == '"' and not escape:
+                    in_string = not in_string
+                    continue
+                if in_string:
+                    continue
+                if c == "{":
+                    depth += 1
+                elif c == "}":
+                    depth -= 1
+                    if depth == 0:
+                        return json.loads(text[start:i+1])
+            raise
 
     def _execute_actions(self, assessment):
         """Execute actions recommended by Haiku."""
@@ -593,6 +627,11 @@ Analyze the pipeline state and provide your assessment."""
             # retry_doj_search resets a name for DOJ re-search
             if action_type == "retry_doj_search":
                 self._retry_doj_search(action)
+                continue
+
+            # clear_load_failures resets the Reader's failure counter so it retries loading
+            if action_type == "clear_load_failures":
+                self._clear_load_failures(action)
                 continue
 
             # set_designer_mode switches the Designer between training/creating
@@ -661,6 +700,44 @@ Analyze the pipeline state and provide your assessment."""
         update_json_locked(REEXTRACT_QUEUE_PATH, append_to_queue, default=[])
 
         self.log(f"Queued re-extraction: {identifier} ({strategy}) — {reason}")
+
+    def _clear_load_failures(self, action):
+        """Clear the Reader's load failure counter so it retries loading issues into Supabase.
+
+        Supports clearing a specific identifier or all failures.
+        """
+        identifier = action.get("identifier")  # None means clear all
+        reason = action.get("reason", "Editor cleared load failures")
+
+        reader_log_path = os.path.join(DATA_DIR, "reader_log.json")
+        if not os.path.exists(reader_log_path):
+            self.log("clear_load_failures: reader_log.json not found", level="WARN")
+            return
+
+        try:
+            with open(reader_log_path) as f:
+                reader_log = json.load(f)
+
+            load_failures = reader_log.get("load_failures", {})
+
+            if identifier:
+                if identifier in load_failures:
+                    del load_failures[identifier]
+                    self.log(f"Cleared load failures for {identifier}: {reason}")
+                else:
+                    self.log(f"clear_load_failures: {identifier} not in failure list")
+                    return
+            else:
+                count = len(load_failures)
+                load_failures.clear()
+                self.log(f"Cleared all load failures ({count} entries): {reason}")
+
+            reader_log["load_failures"] = load_failures
+            with open(reader_log_path, "w") as f:
+                json.dump(reader_log, f, indent=2)
+
+        except Exception as e:
+            self.log(f"clear_load_failures failed: {e}", level="ERROR")
 
     def _override_detective_verdict(self, action):
         """Queue a verdict override for the Detective to apply."""

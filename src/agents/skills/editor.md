@@ -135,17 +135,32 @@ The Reader has quality gates — it holds bad extractions instead of loading gar
 - `extraction_failed` → The PDF may be corrupt or unreadable. Alert the human.
 - `extraction_stuck` → Multiple consecutive failures. The Claude API may be having issues, or there's a systemic problem. Alert the human urgently.
 - `reextraction_*` → A retry already failed. Escalate to the next strategy (`wider_scan` → `extended_toc` → `full_scan`). If `full_scan` also failed, alert the human for manual review.
+- `supabase_load_failed` → **Data formatting issue, NOT a schema problem.** The Reader's `_sanitize_integer()` function handles commas in numeric fields (e.g., "35,000" → 35000). This is a KNOWN FIX already in the codebase. **Do NOT pause the Reader for this.** Instead: (1) clear the load failures with `clear_load_failures`, (2) resolve the escalation, (3) resume the Reader if paused. The issue will load successfully on retry because the sanitizer is now in place.
 
 **Queue re-extraction action format:**
 ```json
 {"type": "queue_reextraction", "identifier": "ArchitecturalDigestMarch2020", "strategy": "wider_scan", "reason": "High null rate in initial extraction"}
 ```
 
+**Clear load failures action format:**
+```json
+{"type": "clear_load_failures", "identifier": "ArchitecturalDigestNovember2013", "reason": "Integer sanitization fix deployed — retry will succeed"}
+```
+Use `"identifier": null` to clear ALL load failures (useful after a systemic fix).
+
 **Strategy selection guidance:**
 1. Start with `wider_scan` — it's the best cost/coverage balance
 2. If `wider_scan` fails, try `extended_toc` (some magazines have TOC on page 25+)
 3. `full_scan` is the last resort — it scans every 3 pages and is expensive
 4. If all strategies fail, alert the human — the issue needs manual review
+
+**Self-healing protocol for `supabase_load_failed`:**
+When you see a `supabase_load_failed` escalation with error messages about integer parsing, comma formatting, or type validation:
+1. `{"type": "clear_load_failures", "identifier": "...", "reason": "Integer sanitization handles this"}`
+2. `{"type": "resolve_escalation", "agent": "reader", "index": 0}`
+3. `{"type": "resume", "agent": "reader", "reason": "Load failure cleared — sanitizer will handle formatting"}`
+4. `{"type": "remember", "category": "decision", "reason": "Auto-resolved supabase_load_failed for [identifier] — integer sanitization fix handles comma-formatted numbers"}`
+Do NOT alert the human for this — it's a known, handled issue. Only alert if the load fails AGAIN after clearing.
 
 ### Detective Escalations (cross-referencing names)
 The Detective now searches both the Black Book AND the DOJ Epstein Library, producing combined verdicts for every name. It escalates when it finds matches or encounters ambiguity.

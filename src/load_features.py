@@ -31,6 +31,29 @@ FEATURE_FIELDS = [
     "location_state", "location_country", "design_style", "page_number", "notes",
 ]
 
+# Fields that must be integers in Supabase (Claude sometimes returns "35,000" or "3500 sq ft")
+INTEGER_FIELDS = {"year_built", "square_footage", "page_number"}
+
+
+def _sanitize_integer(value):
+    """Convert a value to int, stripping commas and non-numeric suffixes.
+
+    Returns int or None if not parseable.
+    """
+    if isinstance(value, int):
+        return value
+    if isinstance(value, float):
+        return int(value)
+    if isinstance(value, str):
+        # Strip commas, whitespace, and common suffixes
+        cleaned = value.replace(",", "").strip()
+        # Extract leading digits only (handles "3500 sq ft", "2005-2006", etc.)
+        import re
+        match = re.match(r"(\d+)", cleaned)
+        if match:
+            return int(match.group(1))
+    return None
+
 
 def get_or_create_issue(month, year, cover_description=None):
     """Get existing issue or create a new one. Returns the issue ID."""
@@ -100,6 +123,10 @@ def load_extraction(extraction_path):
         for field in FEATURE_FIELDS:
             value = feature.get(field)
             if value is not None:
+                if field in INTEGER_FIELDS:
+                    value = _sanitize_integer(value)
+                    if value is None:
+                        continue
                 row[field] = value
 
         supabase.table("features").insert(row).execute()

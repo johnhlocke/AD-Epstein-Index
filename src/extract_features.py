@@ -313,46 +313,63 @@ Use null for printed_page if you cannot read it. Return ONLY valid JSON."""
 def find_articles_from_toc(pdf_path, temp_dir):
     """Extract TOC pages, identify featured home articles, and calculate page offset.
 
+    Sends pages in two batches (1-10, 11-20) to stay within Claude's request
+    size limit, then merges the results.
+
     Returns (articles, page_offset) where:
     - articles: list of dicts with article_title, magazine_page, homeowner_hint
     - page_offset: integer to add to magazine_page to get PDF page number
       (e.g., if magazine page 8 = PDF page 6, offset is -2)
     """
-    # Try pages 1-20 (covers + TOC — some issues have TOC deeper in)
-    print("  Extracting TOC pages (1-20)...")
-    toc_images = pdf_to_images(pdf_path, (1, 20), os.path.join(temp_dir, "toc"))
+    all_articles = []
+    page_offset = None
 
-    if not toc_images:
-        print("  Warning: No TOC images extracted")
-        return [], 0
+    # Send TOC pages in two batches to stay within Claude's request size limit
+    batches = [(1, 10), (11, 20)]
+    for first, last in batches:
+        print(f"  Extracting TOC pages ({first}-{last})...")
+        toc_images = pdf_to_images(pdf_path, (first, last), os.path.join(temp_dir, f"toc_{first}"))
 
-    print(f"  Sending {len(toc_images)} TOC pages to Claude...")
+        if not toc_images:
+            continue
 
-    response_text = call_claude_with_retry(TOC_PROMPT, toc_images)
+        print(f"  Sending {len(toc_images)} TOC pages to Claude...")
+        response_text = call_claude_with_retry(TOC_PROMPT, toc_images)
 
-    try:
-        data = parse_json_response(response_text)
-        articles = data.get("articles", [])
+        try:
+            data = parse_json_response(response_text)
+            articles = data.get("articles", [])
+            all_articles.extend(articles)
 
-        # Calculate page offset from TOC page position
-        toc_printed = data.get("toc_printed_page")
-        toc_pdf = data.get("toc_pdf_page")
-        if toc_printed and toc_pdf:
-            page_offset = toc_pdf - toc_printed
-            print(f"  Page offset: {page_offset:+d} (TOC printed page {toc_printed} = PDF page {toc_pdf})")
-        else:
-            # Auto-detect offset from interior pages
-            page_offset = detect_page_offset(pdf_path, temp_dir)
+            # Calculate page offset from the first batch that provides it
+            if page_offset is None:
+                toc_printed = data.get("toc_printed_page")
+                toc_pdf = data.get("toc_pdf_page")
+                if toc_printed and toc_pdf:
+                    page_offset = toc_pdf - toc_printed
+                    print(f"  Page offset: {page_offset:+d} (TOC printed page {toc_printed} = PDF page {toc_pdf})")
+        except json.JSONDecodeError:
+            print(f"  Warning: Could not parse TOC response: {response_text[:200]}")
 
-        if articles:
-            print(f"  Found {len(articles)} featured home articles in TOC")
-            return articles, page_offset
-        else:
-            print("  TOC read returned no articles, will use fallback")
-            return [], page_offset
-    except json.JSONDecodeError:
-        print(f"  Warning: Could not parse TOC response: {response_text[:200]}")
-        return [], detect_page_offset(pdf_path, temp_dir)
+    # Fallback: auto-detect offset if TOC didn't provide it
+    if page_offset is None:
+        page_offset = detect_page_offset(pdf_path, temp_dir)
+
+    # Deduplicate articles by magazine_page
+    seen_pages = set()
+    unique_articles = []
+    for a in all_articles:
+        mp = a.get("magazine_page")
+        if mp and mp not in seen_pages:
+            seen_pages.add(mp)
+            unique_articles.append(a)
+
+    if unique_articles:
+        print(f"  Found {len(unique_articles)} featured home articles in TOC")
+        return unique_articles, page_offset
+    else:
+        print("  TOC read returned no articles, will use fallback")
+        return [], page_offset
 
 
 def _build_extraction_prompt(toc_hint=None):
@@ -676,29 +693,45 @@ def process_issue_reextract(issue, strategy="wider_scan"):
         page_offset = 0
 
         if not params["skip_toc"]:
-            # Use TOC with strategy-specific page range
+            # Use TOC with strategy-specific page range, sent in batches of 10
             toc_first, toc_last = params["toc_pages"]
-            print(f"  Extracting TOC pages ({toc_first}-{toc_last})...")
-            toc_images = pdf_to_images(pdf_path, (toc_first, toc_last), os.path.join(temp_dir, "toc"))
+            batch_size = 10
+            for b_start in range(toc_first, toc_last + 1, batch_size):
+                b_end = min(b_start + batch_size - 1, toc_last)
+                print(f"  Extracting TOC pages ({b_start}-{b_end})...")
+                toc_images = pdf_to_images(pdf_path, (b_start, b_end), os.path.join(temp_dir, f"toc_{b_start}"))
 
-            if toc_images:
+                if not toc_images:
+                    continue
+
                 print(f"  Sending {len(toc_images)} TOC pages to Claude...")
                 response_text = call_claude_with_retry(TOC_PROMPT, toc_images)
                 try:
                     data = parse_json_response(response_text)
-                    articles = data.get("articles", [])
-                    toc_printed = data.get("toc_printed_page")
-                    toc_pdf = data.get("toc_pdf_page")
-                    if toc_printed and toc_pdf:
-                        page_offset = toc_pdf - toc_printed
-                        print(f"  Page offset: {page_offset:+d}")
-                    else:
-                        page_offset = detect_page_offset(pdf_path, temp_dir)
-                    if articles:
-                        print(f"  Found {len(articles)} featured home articles in TOC")
+                    batch_articles = data.get("articles", [])
+                    articles.extend(batch_articles)
+                    if page_offset == 0:
+                        toc_printed = data.get("toc_printed_page")
+                        toc_pdf = data.get("toc_pdf_page")
+                        if toc_printed and toc_pdf:
+                            page_offset = toc_pdf - toc_printed
+                            print(f"  Page offset: {page_offset:+d}")
                 except json.JSONDecodeError:
                     print(f"  Warning: Could not parse TOC response")
-                    page_offset = detect_page_offset(pdf_path, temp_dir)
+
+            if page_offset == 0:
+                page_offset = detect_page_offset(pdf_path, temp_dir)
+            if articles:
+                # Deduplicate by magazine_page
+                seen = set()
+                unique = []
+                for a in articles:
+                    mp = a.get("magazine_page")
+                    if mp and mp not in seen:
+                        seen.add(mp)
+                        unique.append(a)
+                articles = unique
+                print(f"  Found {len(articles)} featured home articles in TOC")
         else:
             # Full scan — skip TOC, auto-detect offset
             page_offset = detect_page_offset(pdf_path, temp_dir)
