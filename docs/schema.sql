@@ -20,6 +20,7 @@ CREATE TABLE features (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   issue_id BIGINT NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
   article_title TEXT,
+  article_author TEXT,
   homeowner_name TEXT,
   designer_name TEXT,
   architecture_firm TEXT,

@@ -331,6 +331,249 @@ def show_status():
     print("=" * 50)
 
 
+# ── Verdict Assessment (used by Detective agent) ───────────────────
+
+# Common last names — matches on these are more likely false positives
+COMMON_LAST_NAMES = {
+    "smith", "johnson", "williams", "brown", "jones", "davis", "miller",
+    "wilson", "moore", "taylor", "anderson", "thomas", "jackson", "white",
+    "harris", "martin", "thompson", "garcia", "martinez", "robinson",
+    "clark", "rodriguez", "lewis", "lee", "walker", "hall", "allen",
+    "young", "king", "wright", "scott", "green", "baker", "adams",
+    "nelson", "hill", "campbell", "mitchell", "roberts", "carter",
+    "phillips", "evans", "turner", "torres", "parker", "collins",
+    "edwards", "stewart", "flores", "morris", "murphy", "cook", "rogers",
+    "morgan", "peterson", "cooper", "reed", "bailey", "bell", "gomez",
+    "kelly", "howard", "ward", "cox", "diaz", "richardson", "wood",
+    "watson", "brooks", "bennett", "gray", "james", "reyes", "cruz",
+    "hughes", "price", "myers", "long", "foster", "sanders", "ross",
+    "morales", "powell", "sullivan", "russell", "ortiz", "jenkins",
+    "gutierrez", "perry", "butler", "barnes", "fisher",
+}
+
+HONORIFICS_SET = {"jr", "jr.", "sr", "sr.", "ii", "iii", "iv", "esq", "esq.", "phd"}
+
+
+def generate_name_variations(name: str) -> list:
+    """Generate search variations for a name.
+
+    Returns:
+        List of name strings to try, ordered from most specific to least:
+        [full name, "Last, First", without honorifics, first+last only]
+    """
+    if not name or not name.strip():
+        return []
+
+    name = name.strip()
+    variations = [name]
+    parts = name.split()
+
+    if len(parts) < 2:
+        return variations
+
+    # "Last, First" format
+    first_name = parts[0]
+    last_name = parts[-1]
+
+    # Strip honorifics from last position
+    clean_parts = [p for p in parts if p.lower().rstrip(".") not in HONORIFICS_SET]
+    if len(clean_parts) >= 2:
+        last_name = clean_parts[-1]
+        first_name = clean_parts[0]
+
+    last_first = f"{last_name}, {first_name}"
+    if last_first not in variations:
+        variations.append(last_first)
+
+    # Without honorifics (if different from original)
+    without_honorifics = " ".join(clean_parts)
+    if without_honorifics != name and without_honorifics not in variations:
+        variations.append(without_honorifics)
+
+    # First + last only (skip middle names/initials)
+    if len(clean_parts) > 2:
+        first_last = f"{clean_parts[0]} {clean_parts[-1]}"
+        if first_last not in variations:
+            variations.append(first_last)
+
+    # Last name only (fallback — only if 5+ chars)
+    if len(last_name) >= 5 and last_name not in variations:
+        variations.append(last_name)
+
+    return variations
+
+
+def assess_combined_verdict(name: str, bb_matches, doj_result) -> dict:
+    """Combine Black Book and DOJ results into a single verdict.
+
+    Args:
+        name: The homeowner name
+        bb_matches: List of Black Book match dicts, or None
+        doj_result: DOJ search result dict, or None
+
+    Returns:
+        Dict with verdict, confidence_score, rationale, false_positive_indicators, evidence_summary
+    """
+    bb_has_match = bool(bb_matches)
+    bb_match_types = [m.get("match_type", "") for m in (bb_matches or [])]
+    bb_best = _best_bb_match_type(bb_match_types)
+
+    doj_confidence = "none"
+    doj_total = 0
+    if doj_result and doj_result.get("search_successful"):
+        doj_confidence = doj_result.get("confidence", "none")
+        doj_total = doj_result.get("total_results", 0)
+
+    # Detect false positive indicators
+    fp_indicators = detect_false_positive_indicators(name, bb_matches, doj_result)
+
+    # Build evidence summary
+    evidence = {
+        "black_book": {
+            "has_match": bb_has_match,
+            "best_match_type": bb_best,
+            "match_count": len(bb_matches) if bb_matches else 0,
+        },
+        "doj": {
+            "searched": doj_result is not None and doj_result.get("search_successful", False),
+            "confidence": doj_confidence,
+            "total_results": doj_total,
+        },
+    }
+
+    # Verdict logic
+    verdict, score, rationale = _determine_verdict(
+        bb_has_match, bb_best, doj_confidence, doj_total, fp_indicators
+    )
+
+    return {
+        "verdict": verdict,
+        "confidence_score": score,
+        "rationale": rationale,
+        "false_positive_indicators": fp_indicators,
+        "evidence_summary": evidence,
+    }
+
+
+def _best_bb_match_type(match_types: list) -> str:
+    """Return the highest-confidence match type from a list."""
+    rank = {"last_first": 4, "full_name": 3, "last_name_only": 2}
+    best = ""
+    best_rank = 0
+    for mt in match_types:
+        r = rank.get(mt, 0)
+        if r > best_rank:
+            best_rank = r
+            best = mt
+    return best
+
+
+def _determine_verdict(bb_has_match, bb_best, doj_confidence, doj_total, fp_indicators):
+    """Core verdict logic. Returns (verdict, confidence_score, rationale)."""
+    has_fp_risk = len(fp_indicators) > 0
+
+    # Both strong: confirmed
+    if bb_best in ("last_first",) and doj_confidence == "high":
+        return ("confirmed_match", 0.95,
+                "Strong match in both Black Book (last_first) and DOJ (high confidence)")
+
+    # One very strong source
+    if bb_best == "last_first" and doj_confidence in ("medium", "low", "none"):
+        if doj_confidence == "none" and not has_fp_risk:
+            return ("likely_match", 0.75,
+                    "Strong Black Book match (last_first), DOJ returned no results")
+        if doj_confidence == "medium":
+            return ("likely_match", 0.80,
+                    "Strong Black Book match (last_first) + DOJ medium confidence")
+        return ("likely_match", 0.70,
+                "Strong Black Book match (last_first), weak/no DOJ evidence")
+
+    if doj_confidence == "high" and not bb_has_match:
+        return ("likely_match", 0.75,
+                "DOJ high confidence but no Black Book match")
+
+    # Moderate evidence
+    if bb_best == "full_name" and doj_confidence in ("medium", "high"):
+        return ("likely_match", 0.70,
+                f"Black Book full_name match + DOJ {doj_confidence} confidence")
+
+    if bb_best == "full_name" and doj_confidence in ("low", "none"):
+        if has_fp_risk:
+            return ("needs_review", 0.40,
+                    "Black Book full_name match but false positive indicators present")
+        return ("possible_match", 0.50,
+                "Black Book full_name match, weak/no DOJ evidence")
+
+    # Weak evidence
+    if bb_best == "last_name_only":
+        if doj_confidence in ("high", "medium"):
+            return ("possible_match", 0.45,
+                    f"Black Book last_name_only + DOJ {doj_confidence}")
+        if has_fp_risk:
+            return ("needs_review", 0.25,
+                    "Last name only match with false positive indicators")
+        return ("possible_match", 0.30,
+                "Black Book last_name_only match, weak/no DOJ evidence")
+
+    if doj_confidence in ("medium", "low") and not bb_has_match:
+        if has_fp_risk:
+            return ("needs_review", 0.20,
+                    f"DOJ {doj_confidence} confidence, no BB match, false positive risk")
+        return ("possible_match", 0.30,
+                f"DOJ {doj_confidence} confidence, no Black Book match")
+
+    # No match
+    if not bb_has_match and doj_confidence == "none":
+        return ("no_match", 0.0,
+                "No evidence in Black Book or DOJ records")
+
+    # Catch-all for ambiguous combinations
+    return ("needs_review", 0.35,
+            "Ambiguous evidence combination — needs human review")
+
+
+def detect_false_positive_indicators(name: str, bb_matches, doj_result) -> list:
+    """Detect indicators that a match might be a false positive.
+
+    Returns a list of human-readable indicator strings.
+    """
+    indicators = []
+    if not name:
+        return indicators
+
+    parts = name.strip().split()
+    last_name = parts[-1].lower() if parts else ""
+
+    # Common last name
+    if last_name in COMMON_LAST_NAMES:
+        indicators.append(f"Very common last name: '{last_name}'")
+
+    # Last-name-only match on a common name
+    if bb_matches:
+        for m in bb_matches:
+            if m.get("match_type") == "last_name_only" and last_name in COMMON_LAST_NAMES:
+                indicators.append("Last_name_only match on common name — high false positive risk")
+                break
+
+    # Short last name (more collision-prone)
+    if len(last_name) < 5 and bb_matches:
+        for m in bb_matches:
+            if m.get("match_type") == "last_name_only":
+                indicators.append(f"Short last name '{last_name}' in last_name_only match")
+                break
+
+    # DOJ results with low relevance
+    if doj_result and doj_result.get("search_successful"):
+        confidence = doj_result.get("confidence", "none")
+        total = doj_result.get("total_results", 0)
+        if total > 50:
+            indicators.append(f"DOJ returned {total} results — likely matching common terms")
+        if confidence == "low" and total > 0:
+            indicators.append("DOJ results present but no high-signal keyword context")
+
+    return indicators
+
+
 if __name__ == "__main__":
     if "--status" in sys.argv:
         show_status()

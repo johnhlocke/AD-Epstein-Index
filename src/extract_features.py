@@ -106,6 +106,7 @@ Return a JSON object with these fields:
 - "location_state": state (US) or province
 - "location_country": country
 - "design_style": architectural/design style (e.g., "Mid-Century Modern", "Mediterranean")
+- "article_author": the writer/journalist who authored this article (check the byline)
 - "page_number": the page number visible on this page (integer)
 - "notes": any other notable details
 
@@ -596,6 +597,174 @@ def process_issue(issue):
         json.dump(result, f, indent=2)
 
     print(f"  Saved {len(features)} features to {output_path}")
+    return output_path
+
+
+# ── Re-Extraction Strategies ────────────────────────────────────────
+
+REEXTRACT_STRATEGIES = {
+    "default":      {"toc_pages": (1, 20), "scan_start": 30, "scan_interval": 5, "skip_toc": False, "toc_end": 20},
+    "wider_scan":   {"toc_pages": (1, 20), "scan_start": 20, "scan_interval": 3, "skip_toc": False, "toc_end": 20},
+    "extended_toc": {"toc_pages": (1, 30), "scan_start": 20, "scan_interval": 3, "skip_toc": False, "toc_end": 30},
+    "full_scan":    {"toc_pages": None,    "scan_start": 20, "scan_interval": 3, "skip_toc": True,  "toc_end": 0},
+}
+
+
+def process_issue_reextract(issue, strategy="wider_scan"):
+    """Re-extract an issue using a specified strategy.
+
+    Reuses existing helpers (verify_date, find_articles_from_toc, extract_article_data,
+    detect_page_offset) but with strategy-specific parameters for broader coverage.
+
+    Strategies:
+        default      — Same as process_issue() (TOC 1-20, scan every 5 from 30)
+        wider_scan   — Normal TOC first, then scan every 3 pages from page 20
+        extended_toc — Read TOC from pages 1-30, scan every 3 from page 20
+        full_scan    — Skip TOC entirely, scan every 3 pages from page 20
+
+    Returns output_path on success, None on failure.
+    """
+    params = REEXTRACT_STRATEGIES.get(strategy)
+    if not params:
+        print(f"  Unknown re-extraction strategy: {strategy}")
+        return None
+
+    identifier = issue["identifier"]
+    pdf_path = issue.get("pdf_path")
+
+    if not pdf_path or not os.path.exists(pdf_path):
+        print(f"  PDF not found for {identifier}")
+        return None
+
+    output_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+
+    month = issue.get("month", "?")
+    month_str = f"{month:02d}" if isinstance(month, int) else str(month)
+    print(f"\nRe-extracting ({strategy}): {issue.get('title', identifier)} (estimated {issue.get('year')}-{month_str})")
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        # Step 0: Verify actual publication date from cover
+        verified_month, verified_year = verify_date(pdf_path, temp_dir)
+
+        if verified_year:
+            issue["verified_year"] = verified_year
+        if verified_month:
+            issue["verified_month"] = verified_month
+
+        actual_year = verified_year or issue.get("year")
+        actual_month = verified_month or issue.get("month")
+
+        # Skip pre-1988 issues
+        if actual_year and actual_year < MIN_YEAR:
+            print(f"  Skipping: confirmed year {actual_year} is before {MIN_YEAR}")
+            issue["status"] = "skipped_pre1988"
+            os.makedirs(EXTRACTIONS_DIR, exist_ok=True)
+            with open(output_path, "w") as f:
+                json.dump({
+                    "identifier": identifier,
+                    "title": issue.get("title", identifier),
+                    "month": actual_month, "year": actual_year,
+                    "verified_month": verified_month, "verified_year": verified_year,
+                    "skipped": True, "skip_reason": f"pre-{MIN_YEAR}",
+                    "toc_articles": [], "features": [],
+                    "reextraction_strategy": strategy,
+                }, f, indent=2)
+            return output_path
+
+        # Step 1: Find articles (strategy-dependent)
+        articles = []
+        page_offset = 0
+
+        if not params["skip_toc"]:
+            # Use TOC with strategy-specific page range
+            toc_first, toc_last = params["toc_pages"]
+            print(f"  Extracting TOC pages ({toc_first}-{toc_last})...")
+            toc_images = pdf_to_images(pdf_path, (toc_first, toc_last), os.path.join(temp_dir, "toc"))
+
+            if toc_images:
+                print(f"  Sending {len(toc_images)} TOC pages to Claude...")
+                response_text = call_claude_with_retry(TOC_PROMPT, toc_images)
+                try:
+                    data = parse_json_response(response_text)
+                    articles = data.get("articles", [])
+                    toc_printed = data.get("toc_printed_page")
+                    toc_pdf = data.get("toc_pdf_page")
+                    if toc_printed and toc_pdf:
+                        page_offset = toc_pdf - toc_printed
+                        print(f"  Page offset: {page_offset:+d}")
+                    else:
+                        page_offset = detect_page_offset(pdf_path, temp_dir)
+                    if articles:
+                        print(f"  Found {len(articles)} featured home articles in TOC")
+                except json.JSONDecodeError:
+                    print(f"  Warning: Could not parse TOC response")
+                    page_offset = detect_page_offset(pdf_path, temp_dir)
+        else:
+            # Full scan — skip TOC, auto-detect offset
+            page_offset = detect_page_offset(pdf_path, temp_dir)
+            print(f"  Full scan mode — skipping TOC, offset: {page_offset:+d}")
+
+        # Step 1b: If no articles from TOC (or skip_toc), use fallback scanning
+        if not articles:
+            try:
+                result = subprocess.run(["pdfinfo", pdf_path], capture_output=True, text=True)
+                total_pages = 100
+                for line in result.stdout.split("\n"):
+                    if line.startswith("Pages:"):
+                        total_pages = int(line.split(":")[1].strip())
+                        break
+            except Exception:
+                total_pages = 100
+
+            scan_start = params["scan_start"]
+            scan_end = min(total_pages - 5, 200)
+            scan_interval = params["scan_interval"]
+            print(f"  Scanning every {scan_interval} pages ({scan_start}-{scan_end})")
+            articles = [{"magazine_page": p, "article_title": "Unknown", "homeowner_hint": ""}
+                       for p in range(scan_start, scan_end, scan_interval)]
+
+        # Step 2: Extract data from each article
+        features = []
+        for article in articles:
+            mag_page = article.get("magazine_page") or article.get("page_number")
+            if not mag_page:
+                continue
+
+            pdf_page = mag_page + page_offset
+            if pdf_page < 1:
+                continue
+
+            print(f"  Extracting magazine page {mag_page} (PDF page {pdf_page}): {article.get('article_title', 'Unknown')}")
+            time.sleep(2)
+
+            try:
+                data = extract_article_data(pdf_path, pdf_page, temp_dir, toc_hint=article)
+                if data:
+                    data["magazine_page"] = mag_page
+                    features.append(data)
+                    print(f"    Found: {data.get('homeowner_name', 'Unknown homeowner')}")
+            except Exception as e:
+                print(f"    Error extracting page {mag_page}: {e}")
+                continue
+
+    # Save results with strategy tag
+    result = {
+        "identifier": identifier,
+        "title": issue.get("title", identifier),
+        "month": actual_month,
+        "year": actual_year,
+        "verified_month": verified_month,
+        "verified_year": verified_year,
+        "toc_articles": articles,
+        "features": features,
+        "reextraction_strategy": strategy,
+    }
+
+    os.makedirs(EXTRACTIONS_DIR, exist_ok=True)
+    with open(output_path, "w") as f:
+        json.dump(result, f, indent=2)
+
+    print(f"  Re-extraction ({strategy}) saved {len(features)} features to {output_path}")
     return output_path
 
 

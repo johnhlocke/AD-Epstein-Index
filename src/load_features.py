@@ -26,7 +26,7 @@ supabase = create_client(url, key)
 
 # Fields that map directly from extraction JSON to the features table
 FEATURE_FIELDS = [
-    "article_title", "homeowner_name", "designer_name", "architecture_firm",
+    "article_title", "article_author", "homeowner_name", "designer_name", "architecture_firm",
     "year_built", "square_footage", "cost", "location_city",
     "location_state", "location_country", "design_style", "page_number", "notes",
 ]

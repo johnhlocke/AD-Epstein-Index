@@ -1,0 +1,678 @@
+"""
+Courier Agent — downloads AD magazine PDFs from archive.org and the AD Archive.
+
+Two download strategies:
+1. archive.org (Primary) — simple HTTP downloads, free, no auth
+2. AD Archive (Secondary) — Playwright browser login + 20-page batched downloads
+
+Interval: 5s — checks for new work frequently, actual downloads take 5-30s.
+"""
+
+import asyncio
+import json
+import os
+import subprocess
+import sys
+import time
+from datetime import datetime
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+from agents.base import Agent, DATA_DIR, BASE_DIR, read_manifest, update_manifest_locked
+
+MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
+ISSUES_DIR = os.path.join(DATA_DIR, "issues")
+BATCHES_DIR = os.path.join(ISSUES_DIR, "batches")
+METADATA_URL = "https://archive.org/metadata/{identifier}/files"
+DOWNLOAD_URL = "https://archive.org/download/{identifier}/{filename}"
+DELAY_SECONDS = 2
+
+AD_ARCHIVE_BATCH_SIZE = 20
+
+# Failure tracking & escalation
+COURIER_LOG_PATH = os.path.join(DATA_DIR, "courier_log.json")
+COURIER_ESCALATION_PATH = os.path.join(DATA_DIR, "courier_escalations.json")
+MAX_ISSUE_FAILURES = 3          # After 3 failures on same issue, escalate
+IDLE_ESCALATION_THRESHOLD = 5   # After 5 idle cycles with remaining work, escalate
+ESCALATION_COOLDOWN_HOURS = 1   # Max 1 escalation per hour
+
+# Tools for AD Archive downloads (Playwright browser + file management)
+AD_ARCHIVE_TOOLS = [
+    "Read",
+    "Bash",
+    "mcp__playwright__*",
+]
+
+
+class CourierAgent(Agent):
+    def __init__(self):
+        super().__init__("courier", interval=5)
+
+    # ── Failure Tracking ──────────────────────────────────────
+
+    def _load_courier_log(self):
+        """Load persistent failure tracking from disk."""
+        if os.path.exists(COURIER_LOG_PATH):
+            try:
+                with open(COURIER_LOG_PATH) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return {
+            "cycle_count": 0,
+            "last_run": None,
+            "issue_failures": {},
+            "consecutive_idle_cycles": 0,
+        }
+
+    def _save_courier_log(self, log):
+        """Persist failure tracking to disk."""
+        os.makedirs(os.path.dirname(COURIER_LOG_PATH), exist_ok=True)
+        with open(COURIER_LOG_PATH, "w") as f:
+            json.dump(log, f, indent=2)
+
+    def _record_issue_failure(self, log, identifier, error_msg):
+        """Increment failure count for an issue."""
+        failures = log.setdefault("issue_failures", {})
+        entry = failures.get(identifier, {"failures": 0})
+        entry["failures"] = entry.get("failures", 0) + 1
+        entry["last_error"] = str(error_msg)[:200]
+        entry["last_attempt"] = datetime.now().isoformat()
+        failures[identifier] = entry
+
+    def _record_issue_success(self, log, identifier):
+        """Clear failure tracking for a successfully downloaded issue."""
+        log.get("issue_failures", {}).pop(identifier, None)
+
+    # ── Escalation I/O ────────────────────────────────────────
+
+    def _load_escalations(self):
+        """Load existing escalations from disk."""
+        if os.path.exists(COURIER_ESCALATION_PATH):
+            try:
+                with open(COURIER_ESCALATION_PATH) as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return []
+
+    def _save_escalations(self, escalations):
+        """Write escalations to disk."""
+        os.makedirs(os.path.dirname(COURIER_ESCALATION_PATH), exist_ok=True)
+        with open(COURIER_ESCALATION_PATH, "w") as f:
+            json.dump(escalations, f, indent=2)
+
+    def _maybe_escalate(self, reason_type, message, context=None):
+        """Write an escalation if warranted and rate-limited (max 1/hour per identifier)."""
+        escalations = self._load_escalations()
+        ctx = context or {}
+        identifier = ctx.get("identifier", "")
+
+        # Per-issue cooldown: check for recent unresolved escalation with same identifier
+        for esc in reversed(escalations):
+            if not esc.get("resolved"):
+                esc_ident = esc.get("context", {}).get("identifier", "")
+                same_issue = (identifier and esc_ident == identifier) or (not identifier and esc.get("type") == reason_type)
+                if same_issue:
+                    try:
+                        last_time = datetime.fromisoformat(esc["time"])
+                        hours_since = (datetime.now() - last_time).total_seconds() / 3600
+                        if hours_since < ESCALATION_COOLDOWN_HOURS:
+                            return  # Too soon for this issue
+                    except Exception:
+                        pass
+                    break  # Only check the most recent matching escalation
+
+        escalation = {
+            "time": datetime.now().isoformat(),
+            "type": reason_type,
+            "message": message,
+            "context": context or {},
+            "resolved": False,
+        }
+        escalations.append(escalation)
+        self._save_escalations(escalations)
+        self.log(f"Escalated to Editor: {message}", level="WARN")
+
+    # ── Manifest I/O ──────────────────────────────────────────
+
+    def _load_manifest(self):
+        return read_manifest()
+
+    def _save_manifest_issue(self, identifier, updates):
+        """Apply updates to a specific issue in the manifest under lock.
+
+        Args:
+            identifier: Issue identifier to update
+            updates: Dict of fields to set on the issue (e.g. {"status": "downloaded", "pdf_path": "/..."})
+        """
+        def apply(fresh_manifest):
+            for issue in fresh_manifest.get("issues", []):
+                if issue["identifier"] == identifier:
+                    issue.update(updates)
+                    break
+        update_manifest_locked(apply)
+
+    # ── Issue Selection ───────────────────────────────────────
+
+    def _find_next_archive_org_issue(self, manifest):
+        """Find the next archive.org issue that needs downloading."""
+        issues = manifest.get("issues", [])
+        downloadable = [
+            i for i in issues
+            if i.get("month") and i.get("year")
+            and i.get("source", "archive.org") != "ad_archive"
+            and i.get("status") not in ("downloaded", "no_pdf", "error", "skipped_pre1988", "extracted", "extraction_error")
+        ]
+        # Newest first
+        downloadable.sort(key=lambda x: (x["year"], x["month"]), reverse=True)
+        for issue in downloadable:
+            identifier = issue["identifier"]
+            filename_base = f"{issue['year']}_{issue['month']:02d}_{identifier}"
+            if os.path.exists(ISSUES_DIR):
+                existing = [f for f in os.listdir(ISSUES_DIR) if f.startswith(filename_base)]
+                if existing:
+                    pdf_path = os.path.join(ISSUES_DIR, existing[0])
+                    issue["status"] = "downloaded"
+                    issue["pdf_path"] = pdf_path
+                    # Save reconciliation via locked write
+                    self._save_manifest_issue(identifier, {"status": "downloaded", "pdf_path": pdf_path})
+                    continue
+            return issue
+        return None
+
+    def _find_next_ad_archive_issue(self, manifest):
+        """Find the next AD Archive issue — prioritize partial downloads, then new ones."""
+        issues = manifest.get("issues", [])
+
+        # First: resume partial downloads (batches already started)
+        for issue in issues:
+            progress = issue.get("ad_archive_progress")
+            if progress and progress.get("batches_downloaded"):
+                total = progress.get("total_pages")
+                if total:
+                    max_downloaded = max(end for _, end in progress["batches_downloaded"])
+                    if max_downloaded < total:
+                        return issue
+
+        # Then: start new AD Archive issues
+        for issue in issues:
+            if (issue.get("source") == "ad_archive"
+                    and issue.get("month") and issue.get("year")
+                    and issue.get("status") not in ("downloaded", "error", "skipped_pre1988", "extracted", "extraction_error")):
+                # Skip if already downloaded from archive.org
+                identifier = issue["identifier"]
+                filename_base = f"{issue['year']}_{issue['month']:02d}"
+                if os.path.exists(ISSUES_DIR):
+                    existing = [f for f in os.listdir(ISSUES_DIR) if f.startswith(filename_base)]
+                    if existing:
+                        issue["status"] = "downloaded"
+                        issue["pdf_path"] = os.path.join(ISSUES_DIR, existing[0])
+                        continue
+                if not issue.get("ad_archive_progress"):
+                    return issue
+
+        return None
+
+    # ── Main Work Loop ────────────────────────────────────────
+
+    async def work(self):
+        self.load_skills()
+
+        if not os.path.exists(MANIFEST_PATH):
+            self._current_task = "Waiting for Scout"
+            return False
+
+        courier_log = self._load_courier_log()
+        courier_log["cycle_count"] = courier_log.get("cycle_count", 0) + 1
+        courier_log["last_run"] = datetime.now().isoformat()
+
+        manifest = self._load_manifest()
+
+        # Priority 1: archive.org downloads (simple HTTP, no auth)
+        issue = self._find_next_archive_org_issue(manifest)
+        if issue:
+            courier_log["consecutive_idle_cycles"] = 0
+            self._save_courier_log(courier_log)
+            return await self._download_archive_org(issue, manifest, courier_log)
+
+        # Priority 2: AD Archive downloads (Playwright, batched, needs auth)
+        issue = self._find_next_ad_archive_issue(manifest)
+        if issue:
+            courier_log["consecutive_idle_cycles"] = 0
+            self._save_courier_log(courier_log)
+            return await self._download_ad_archive_batch(issue, manifest, courier_log)
+
+        # Idle — check if there are stuck issues we can't process
+        issues = manifest.get("issues", [])
+        stuck_count = sum(
+            1 for i in issues
+            if i.get("status") in ("error", "no_pdf")
+            and i.get("month") and i.get("year")
+        )
+        if stuck_count > 0:
+            courier_log["consecutive_idle_cycles"] = courier_log.get("consecutive_idle_cycles", 0) + 1
+            if courier_log["consecutive_idle_cycles"] >= IDLE_ESCALATION_THRESHOLD:
+                self._maybe_escalate(
+                    "idle_with_errors",
+                    f"Courier idle for {courier_log['consecutive_idle_cycles']} cycles but "
+                    f"{stuck_count} issues are stuck in error/no_pdf state. "
+                    f"May need: retry strategy, alternative sources, or manual download.",
+                    {"idle_cycles": courier_log["consecutive_idle_cycles"], "stuck_issues": stuck_count},
+                )
+        else:
+            courier_log["consecutive_idle_cycles"] = 0
+
+        self._save_courier_log(courier_log)
+        self._current_task = "All available issues downloaded"
+        return False
+
+    # ── archive.org Downloads (existing logic) ────────────────
+
+    async def _download_archive_org(self, issue, manifest, courier_log=None):
+        """Download one issue from archive.org via HTTP."""
+        identifier = issue["identifier"]
+        title = issue.get("title", identifier)
+        self._current_task = f"Downloading: {title}"
+        self.log(f"Downloading from archive.org: {identifier}")
+
+        try:
+            success = await asyncio.to_thread(self._download_one_http, issue)
+            if success:
+                self.log(f"Downloaded: {identifier}")
+                self._current_task = f"Downloaded: {title}"
+                if courier_log:
+                    self._record_issue_success(courier_log, identifier)
+                    self._save_courier_log(courier_log)
+            else:
+                self.log(f"No PDF found for {identifier}", level="WARN")
+                if courier_log:
+                    self._record_issue_failure(courier_log, identifier, "no_pdf")
+                    self._save_courier_log(courier_log)
+        except Exception as e:
+            issue["status"] = "error"
+            self.log(f"Download failed for {identifier}: {e}", level="ERROR")
+            if courier_log:
+                self._record_issue_failure(courier_log, identifier, str(e))
+                self._save_courier_log(courier_log)
+                # Check if this issue has failed too many times
+                failures = courier_log.get("issue_failures", {}).get(identifier, {})
+                if failures.get("failures", 0) >= MAX_ISSUE_FAILURES:
+                    self._maybe_escalate(
+                        "download_failure",
+                        f"Issue {identifier} ({issue.get('year')}-{issue.get('month', '?'):02d}) "
+                        f"has failed download {failures['failures']} times. "
+                        f"Last error: {str(e)[:100]}. May need manual intervention or alternative source.",
+                        {"identifier": identifier, "failures": failures["failures"], "last_error": str(e)[:200]},
+                    )
+
+        # Save the issue's updated status via locked write
+        updates = {"status": issue.get("status", "discovered")}
+        if issue.get("pdf_path"):
+            updates["pdf_path"] = issue["pdf_path"]
+        self._save_manifest_issue(identifier, updates)
+        return True
+
+    def _download_one_http(self, issue):
+        """Download a single issue's PDF via HTTP. Runs in a thread."""
+        import requests
+
+        HEADERS = {"User-Agent": "AD-Epstein-Index-Research/1.0 (academic research project)"}
+        identifier = issue["identifier"]
+        os.makedirs(ISSUES_DIR, exist_ok=True)
+
+        meta_url = METADATA_URL.format(identifier=identifier)
+        meta_resp = requests.get(meta_url, headers=HEADERS)
+        meta_resp.raise_for_status()
+        files = meta_resp.json().get("result", [])
+
+        from archive_download import find_pdf_file
+        pdf_name = find_pdf_file(files)
+        if not pdf_name:
+            issue["status"] = "no_pdf"
+            return False
+
+        dl_url = DOWNLOAD_URL.format(identifier=identifier, filename=pdf_name)
+        ext = os.path.splitext(pdf_name)[1] or ".pdf"
+        filename_base = f"{issue['year']}_{issue['month']:02d}_{identifier}"
+        dest = os.path.join(ISSUES_DIR, f"{filename_base}{ext}")
+
+        from archive_download import download_file
+        download_file(dl_url, dest)
+
+        issue["status"] = "downloaded"
+        issue["pdf_path"] = dest
+
+        time.sleep(DELAY_SECONDS)
+        return True
+
+    # ── AD Archive Downloads (Playwright + LLM) ──────────────
+
+    async def _download_ad_archive_batch(self, issue, manifest, courier_log=None):
+        """Download one 20-page batch from the AD Archive via Playwright."""
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+        email = os.environ.get("AD_ARCHIVE_EMAIL")
+        password = os.environ.get("AD_ARCHIVE_PASSWORD")
+
+        if not email or not password or email == "your-email-here":
+            self._current_task = "AD Archive: set AD_ARCHIVE_EMAIL/PASSWORD in .env"
+            self.log("AD Archive credentials not configured in .env", level="WARN")
+            self._maybe_escalate(
+                "credentials_missing",
+                "AD Archive credentials not configured. Set AD_ARCHIVE_EMAIL and "
+                "AD_ARCHIVE_PASSWORD in .env to enable AD Archive downloads.",
+            )
+            return False
+
+        identifier = issue["identifier"]
+        year = issue["year"]
+        month = issue["month"]
+        url = (issue.get("source_url")
+               or f"https://archive.architecturaldigest.com/issue/{year}{month:02d}01")
+
+        # Get or initialize progress
+        progress = issue.get("ad_archive_progress", {})
+        batches_done = progress.get("batches_downloaded", [])
+        total_pages = progress.get("total_pages")
+
+        # Determine which pages to download next
+        if batches_done:
+            last_end = max(end for _, end in batches_done)
+            start_page = last_end + 1
+        else:
+            start_page = 1
+        end_page = start_page + AD_ARCHIVE_BATCH_SIZE - 1
+
+        # If we know total pages and we're past it, combine
+        if total_pages and start_page > total_pages:
+            return await self._combine_and_finalize(issue, manifest)
+
+        # Cap end_page at total if known
+        if total_pages and end_page > total_pages:
+            end_page = total_pages
+
+        # Create batch directory
+        batch_dir = os.path.join(BATCHES_DIR, identifier)
+        os.makedirs(batch_dir, exist_ok=True)
+
+        batch_filename = f"batch_{start_page:03d}_{end_page:03d}.pdf"
+        batch_path = os.path.join(batch_dir, batch_filename)
+
+        self._current_task = f"AD Archive: {year}-{month:02d} pp.{start_page}-{end_page}"
+        self.log(f"AD Archive batch: {identifier} pages {start_page}-{end_page}")
+
+        # Build prompt and call Claude CLI + Playwright
+        prompt = self._build_ad_archive_prompt(
+            email, password, url, start_page, end_page, batch_path, total_pages
+        )
+        result = await asyncio.to_thread(self._call_claude, prompt)
+
+        if not result:
+            self._current_task = f"AD Archive batch failed: {identifier}"
+            if courier_log:
+                self._record_issue_failure(courier_log, identifier, "no response from Claude CLI")
+                self._save_courier_log(courier_log)
+                failures = courier_log.get("issue_failures", {}).get(identifier, {})
+                if failures.get("failures", 0) >= MAX_ISSUE_FAILURES:
+                    self._maybe_escalate(
+                        "download_failure",
+                        f"Issue {identifier} ({year}-{month:02d}) has failed download "
+                        f"{failures['failures']} times. Last error: no response from Claude CLI. "
+                        f"May need manual intervention or alternative source.",
+                        {"identifier": identifier, "failures": failures["failures"]},
+                    )
+            return False
+
+        # Parse result
+        findings = self._parse_result_json(result)
+
+        if findings and findings.get("downloaded"):
+            # Update total pages if discovered
+            if findings.get("total_pages"):
+                progress["total_pages"] = findings["total_pages"]
+                total_pages = findings["total_pages"]
+
+            actual_start = findings.get("start_page", start_page)
+            actual_end = findings.get("end_page", end_page)
+            batches_done.append([actual_start, actual_end])
+            progress["batches_downloaded"] = batches_done
+            progress["batch_dir"] = batch_dir
+            issue["ad_archive_progress"] = progress
+            issue["status"] = "downloading"
+
+            # Record success — clear failure count
+            if courier_log:
+                self._record_issue_success(courier_log, identifier)
+                self._save_courier_log(courier_log)
+
+            # Check if all batches are now done
+            if total_pages:
+                max_page = max(end for _, end in batches_done)
+                if max_page >= total_pages:
+                    self.log(f"All batches done for {identifier} — combining")
+                    return await self._combine_and_finalize(issue, manifest)
+
+            self._save_manifest_issue(identifier, {
+                "status": "downloading",
+                "ad_archive_progress": progress,
+            })
+            self._current_task = f"AD Archive batch done: pp.{actual_start}-{actual_end}"
+            self.log(f"Batch saved: {identifier} pages {actual_start}-{actual_end}")
+            return True
+
+        # Download failed or unclear result
+        notes = findings.get("notes", "unknown error") if findings else "no response"
+        self.log(f"AD Archive batch failed: {notes}", level="WARN")
+        if courier_log:
+            self._record_issue_failure(courier_log, identifier, notes)
+            self._save_courier_log(courier_log)
+            failures = courier_log.get("issue_failures", {}).get(identifier, {})
+            if failures.get("failures", 0) >= MAX_ISSUE_FAILURES:
+                self._maybe_escalate(
+                    "download_failure",
+                    f"Issue {identifier} ({year}-{month:02d}) has failed download "
+                    f"{failures['failures']} times. Last error: {notes[:100]}. "
+                    f"May need manual intervention or alternative source.",
+                    {"identifier": identifier, "failures": failures["failures"], "last_error": notes[:200]},
+                )
+        # No issue status changes on failure — no manifest write needed
+        return False
+
+    def _build_ad_archive_prompt(self, email, password, url, start_page, end_page, save_path, total_pages):
+        """Build prompt for Claude CLI to download a batch from AD Archive."""
+
+        total_info = ""
+        if total_pages:
+            total_info = f"This issue has {total_pages} total pages."
+        else:
+            total_info = "We don't know the total page count yet — find it on the issue page and report it."
+
+        return f"""You are the Courier agent downloading pages from the Architectural Digest Archive.
+
+TASK: Download pages {start_page} through {end_page} from this issue.
+
+ISSUE URL: {url}
+{total_info}
+
+STEPS:
+1. Navigate to {url}
+2. If prompted to login, use:
+   - Email: {email}
+   - Password: {password}
+3. Find the total number of pages in this issue (look in the page viewer/navigator)
+4. Download pages {start_page}-{end_page} using the site's download feature:
+   - Look for a "Download" button, "Export PDF" option, or page range selector
+   - The site limits downloads to 20 pages at a time
+   - Select the page range {start_page} to {end_page}
+   - Trigger the download
+5. After the download completes, move the file to: {save_path}
+   - Check ~/Downloads/ for the most recently downloaded PDF
+   - Use: mv ~/Downloads/FILENAME "{save_path}"
+
+TIPS:
+- Take a browser_snapshot after each navigation to see the page
+- The viewer toolbar usually has download/export options
+- If you see a page range input, enter {start_page} and {end_page}
+- If there's no range selector, look for print-to-PDF or similar
+
+Respond with ONLY a JSON object:
+{{
+  "downloaded": true,
+  "start_page": {start_page},
+  "end_page": {end_page},
+  "total_pages": 240,
+  "saved_to": "{save_path}",
+  "notes": "observations about the download process"
+}}
+
+If the download FAILED, respond:
+{{
+  "downloaded": false,
+  "total_pages": 240,
+  "notes": "what went wrong"
+}}"""
+
+    # ── Claude CLI ────────────────────────────────────────────
+
+    def _call_claude(self, prompt):
+        """Call Claude Code CLI with Playwright + Bash access."""
+        cmd = [
+            "claude",
+            "-p", prompt,
+            "--model", "haiku",
+            "--allowedTools", *AD_ARCHIVE_TOOLS,
+            "--no-session-persistence",
+            "--output-format", "text",
+        ]
+
+        try:
+            result = subprocess.run(
+                cmd,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 min per batch
+                cwd=BASE_DIR,
+            )
+
+            if result.returncode != 0:
+                self.log(f"Claude CLI error: {result.stderr[:200]}", level="ERROR")
+                return None
+
+            return result.stdout.strip()
+
+        except subprocess.TimeoutExpired:
+            self.log("Claude CLI timed out (5 min limit)", level="WARN")
+            return None
+        except FileNotFoundError:
+            self.log("Claude CLI not found", level="ERROR")
+            return None
+        except Exception as e:
+            self.log(f"Claude CLI failed: {e}", level="ERROR")
+            return None
+
+    def _parse_result_json(self, result):
+        """Extract JSON from Claude's response."""
+        if not result:
+            return None
+
+        text = result.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text[:-3]
+
+        start = text.find("{")
+        end = text.rfind("}") + 1
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start:end])
+            except json.JSONDecodeError:
+                pass
+
+        self.log("Could not parse JSON from Claude response", level="WARN")
+        return None
+
+    # ── PDF Combining ─────────────────────────────────────────
+
+    async def _combine_and_finalize(self, issue, manifest):
+        """Combine all PDF batches into a single file using pdfunite."""
+        progress = issue.get("ad_archive_progress", {})
+        batch_dir = progress.get("batch_dir")
+
+        if not batch_dir or not os.path.isdir(batch_dir):
+            self.log(f"Batch directory not found: {batch_dir}", level="ERROR")
+            return False
+
+        # Find and sort all batch PDFs
+        batch_files = sorted([
+            os.path.join(batch_dir, f)
+            for f in os.listdir(batch_dir)
+            if f.startswith("batch_") and f.endswith(".pdf")
+        ])
+
+        if not batch_files:
+            self.log("No batch files found to combine", level="ERROR")
+            return False
+
+        identifier = issue["identifier"]
+        year = issue["year"]
+        month = issue["month"]
+        dest = os.path.join(ISSUES_DIR, f"{year}_{month:02d}_{identifier}.pdf")
+        os.makedirs(ISSUES_DIR, exist_ok=True)
+
+        if len(batch_files) == 1:
+            # Single batch — just move it
+            import shutil
+            shutil.move(batch_files[0], dest)
+        else:
+            # Multiple batches — combine with pdfunite
+            try:
+                cmd = ["pdfunite"] + batch_files + [dest]
+                result = await asyncio.to_thread(
+                    subprocess.run, cmd, capture_output=True, text=True, timeout=120
+                )
+                if result.returncode != 0:
+                    error_msg = result.stderr[:200]
+                    self.log(f"pdfunite failed: {error_msg}", level="ERROR")
+                    self._maybe_escalate(
+                        "combine_failure",
+                        f"Failed to combine PDF batches for {identifier}: {error_msg}. "
+                        f"Install poppler-utils or investigate corrupted batches.",
+                        {"identifier": identifier, "error": error_msg, "batch_count": len(batch_files)},
+                    )
+                    return False
+            except FileNotFoundError:
+                self.log("pdfunite not found — install poppler-utils", level="ERROR")
+                self._maybe_escalate(
+                    "combine_failure",
+                    f"Failed to combine PDF batches for {identifier}: pdfunite not found. "
+                    f"Install poppler-utils (brew install poppler on macOS).",
+                    {"identifier": identifier, "error": "pdfunite not found"},
+                )
+                return False
+
+        issue["status"] = "downloaded"
+        issue["pdf_path"] = dest
+        self._save_manifest_issue(identifier, {"status": "downloaded", "pdf_path": dest})
+
+        total = progress.get("total_pages", "?")
+        self.log(f"Combined {len(batch_files)} batches → {dest} ({total} pages)")
+        self._current_task = f"Combined: {year}-{month:02d} ({len(batch_files)} batches, {total}pp)"
+        return True
+
+    # ── Progress ──────────────────────────────────────────────
+
+    def get_progress(self):
+        try:
+            if os.path.exists(MANIFEST_PATH):
+                with open(MANIFEST_PATH) as f:
+                    manifest = json.load(f)
+                issues = manifest.get("issues", [])
+                total = len([i for i in issues if i.get("month") and i.get("year")])
+                downloaded = sum(1 for i in issues if i.get("status") in ("downloaded", "extracted"))
+                return {"current": downloaded, "total": total}
+        except Exception:
+            pass
+        return {"current": 0, "total": 0}

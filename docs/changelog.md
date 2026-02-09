@@ -6,6 +6,50 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-08 (Session 5)
+
+### Added — Multi-Agent System
+- Built full autonomous agent framework with 7 specialized agents:
+  - **Scout** (`src/agents/scout.py`) — Discovers AD issues on archive.org
+  - **Courier** (`src/agents/courier.py`) — Downloads PDFs
+  - **Reader** (`src/agents/reader.py`) — Extracts homeowner data via Claude Sonnet
+  - **Detective** (`src/agents/detective.py`) — Cross-references names against Epstein records (BB + DOJ two-pass)
+  - **Researcher** (`src/agents/researcher.py`) — Builds dossiers on Epstein-linked leads using Claude Haiku
+  - **Editor** (`src/agents/editor.py`) — Monitors pipeline health, processes human messages, escalations
+  - **Designer** (`src/agents/designer.py`) — Learns design patterns from training sources
+- **Agent base class** (`src/agents/base.py`) — Async work loop, pause/resume, progress tracking, skills loading, dashboard status reporting
+- **Orchestrator** (`src/orchestrator.py`) — Launches all agents, merges live status into `status.json`, processes pause/resume commands
+- **Dashboard server** (`src/dashboard_server.py`) — HTTP server for Agent Office (inbox API, agent commands, skills editing)
+- **DOJ search module** (`src/doj_search.py`) — Playwright-based DOJ Epstein Library search with WAF bypass, bot check handling, age gate
+- **Agent skills** (`src/agents/skills/*.md`) — Per-agent personality, methodology, and behavior documentation
+
+### Added — Researcher Home Analysis
+- Enhanced Researcher Haiku prompt with home-as-evidence analysis: design style, cost/size, designer choice, location, and temporal relevance to Epstein's active period (1990-2008)
+- New `home_analysis` section in dossier JSON schema with 4 fields: `wealth_indicators`, `social_circle_clues`, `style_significance`, `temporal_relevance`
+- Updated `src/agents/skills/researcher.md` with Home Analysis methodology section
+- Added home-based pattern upgrade factors to connection strength guide (Epstein enclaves, shared designers, UHNW signals)
+
+### Added — Researcher Per-Name Failure Tracking
+- `MAX_INVESTIGATION_FAILURES = 3` — names that fail investigation 3 times are skipped, preventing infinite API quota burn
+- Failure counts tracked in `researcher_log.json` (was already written, now enforced in `_find_uninvestigated_leads()`)
+
+### Added — Article Author Extraction
+- `article_author` field added to `EXTRACT_PROMPT` in `src/extract_features.py` — extracts journalist byline
+- `article_author` added to `FEATURE_FIELDS` in `src/load_features.py`
+- `article_author TEXT` column added to `docs/schema.sql` and live Supabase `features` table
+
+### Fixed — Agent Office Dashboard Real-Time Gaps
+- **Speech bubbles now show live tasks**: Changed to prefer `liveTask` (real-time agent action from orchestrator) over `message` (stale disk summary) — e.g., "Downloading: AD Nov 2013" instead of "18 PDFs ready"
+- **Cycle counts + progress in nametags**: Agent desk labels now show runtime stats like `12 cycles · 164/444` in a smaller sub-line
+- **Error tooltip on hover**: Hovering the `!` error badge now shows the `last_error` message in a red tooltip (was badge-only, no details)
+- **Error details propagated**: `data-error` attribute set from `last_error` field for tooltip content
+
+### Changed
+- Detective verdict system: `confirmed_match` / `likely_match` / `possible_match` / `no_match` / `needs_review` with confidence scores
+- Researcher pattern analysis: cross-lead correlations (shared designers, location clusters, style trends, temporal patterns)
+
+---
+
 ## 2026-02-08 (Session 4)
 
 ### Added — Agent Office Horizontal Dashboard Redesign
