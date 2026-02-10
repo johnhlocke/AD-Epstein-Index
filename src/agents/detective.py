@@ -138,11 +138,16 @@ class DetectiveAgent(Agent):
                             verdict_info = assess_combined_verdict(individual, bb_matches, doj_result)
                         else:
                             doj_verdict = "error"
-                            verdict_info = {"verdict": best_bb_verdict, "confidence_score": 0.5,
-                                            "rationale": f"DOJ search failed for {individual}", "false_positive_indicators": []}
+                            fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
+                            verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.5,
+                                            "rationale": f"DOJ search failed for {individual}; BB match pending DOJ confirmation" if best_bb_verdict == "match" else f"DOJ search failed for {individual}",
+                                            "false_positive_indicators": []}
                     else:
-                        verdict_info = {"verdict": best_bb_verdict, "confidence_score": 0.5,
-                                        "rationale": "DOJ browser unavailable", "false_positive_indicators": []}
+                        # BB match + DOJ unavailable → needs_review so Researcher investigates
+                        fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
+                        verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.5,
+                                        "rationale": "DOJ browser unavailable; BB match pending DOJ confirmation" if best_bb_verdict == "match" else "DOJ browser unavailable",
+                                        "false_positive_indicators": []}
                 except Exception as e:
                     # Diagnose DOJ failure and decide recovery
                     decision = await asyncio.to_thread(
@@ -178,8 +183,10 @@ class DetectiveAgent(Agent):
 
                     if not recovered:
                         doj_verdict = "error"
-                        verdict_info = {"verdict": best_bb_verdict, "confidence_score": 0.3,
-                                        "rationale": f"DOJ error: {decision.get('diagnosis', str(e))}", "false_positive_indicators": []}
+                        fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
+                        verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.3,
+                                        "rationale": f"DOJ error: {decision.get('diagnosis', str(e))}; BB match pending DOJ confirmation" if best_bb_verdict == "match" else f"DOJ error: {decision.get('diagnosis', str(e))}",
+                                        "false_positive_indicators": []}
 
                 # Keep the strongest result across individuals
                 if best_verdict_info is None or verdict_info.get("confidence_score", 0) > best_verdict_info.get("confidence_score", 0):
