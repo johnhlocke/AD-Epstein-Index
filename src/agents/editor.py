@@ -1396,6 +1396,7 @@ Respond with JSON only:
         downloadable = [
             i for i in issues
             if i.get("month") and i.get("year")
+            and i.get("source") != "ad_archive"  # AD Archive issues go through _fill_scrape_queue
             and self.ledger.should_retry(i["identifier"], "download_pdf", max_failures=MAX_TASK_FAILURES)
         ]
 
