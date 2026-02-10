@@ -15,39 +15,62 @@ import os
 import sys
 from datetime import datetime
 
+sys.path.insert(0, os.path.dirname(__file__))
+
+from db import get_supabase, count_issues_by_status
+
+# Total expected AD issues: 12/year from 1988 to 2025 = 38 years × 12 = 456
+TOTAL_EXPECTED_ISSUES = 456
+
 # Paths
 BASE_DIR = os.path.join(os.path.dirname(__file__), "..")
 DATA_DIR = os.path.join(BASE_DIR, "data")
-MANIFEST_PATH = os.path.join(DATA_DIR, "archive_manifest.json")
 ISSUES_DIR = os.path.join(DATA_DIR, "issues")
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
 XREF_DIR = os.path.join(DATA_DIR, "cross_references")
+ACTIVITY_LOG_PATH = os.path.join(DATA_DIR, "agent_activity.log")
+BRIEFING_PATH = os.path.join(DATA_DIR, "editor_briefing.md")
+COST_PATH = os.path.join(DATA_DIR, "editor_cost.json")
+DOSSIERS_DIR = os.path.join(DATA_DIR, "dossiers")
+DESIGNER_TRAINING_LOG_PATH = os.path.join(DATA_DIR, "designer_training", "training_log.json")
+DESIGNER_MODE_PATH = os.path.join(DATA_DIR, "designer_mode.json")
 OUTPUT_PATH = os.path.join(BASE_DIR, "tools", "agent-office", "status.json")
 
 
-def count_downloads():
-    """Count downloaded PDFs in issues directory."""
-    if not os.path.exists(ISSUES_DIR):
-        return 0
-    return len([f for f in os.listdir(ISSUES_DIR) if f.endswith(".pdf")])
+def read_pipeline_stats():
+    """Read pipeline stats from Supabase (single source of truth).
 
+    Returns a dict compatible with the old manifest_stats format, plus feature counts.
+    """
+    try:
+        counts = count_issues_by_status()
+        sb = get_supabase()
+        feat_result = sb.table("features").select("id,homeowner_name,issue_id", count="exact").execute()
+        total_features = feat_result.count or len(feat_result.data)
+        with_name = sum(1 for r in feat_result.data if r.get("homeowner_name"))
+        distinct_issues = len(set(r["issue_id"] for r in feat_result.data if r.get("issue_id")))
 
-def read_manifest():
-    """Read the archive manifest and return summary stats."""
-    if not os.path.exists(MANIFEST_PATH):
-        return {"total": 0, "downloaded": 0, "skipped": 0, "errors": 0, "no_pdf": 0}
-
-    with open(MANIFEST_PATH) as f:
-        manifest = json.load(f)
-
-    issues = manifest.get("issues", [])
-    return {
-        "total": len(issues),
-        "downloaded": sum(1 for i in issues if i.get("status") == "downloaded"),
-        "skipped": sum(1 for i in issues if i.get("status") == "skipped_pre1988"),
-        "errors": sum(1 for i in issues if i.get("status") == "error"),
-        "no_pdf": sum(1 for i in issues if i.get("status") == "no_pdf"),
-    }
+        return {
+            # Issue counts (replaces read_manifest)
+            "total": counts["total"],
+            "downloaded": counts["downloaded"] + counts["extracted"],  # Both have PDFs
+            "extracted": counts["extracted"],
+            "skipped": counts.get("skipped_pre1988", 0),
+            "errors": counts.get("error", 0),
+            "no_pdf": counts.get("no_pdf", 0),
+            # Feature counts (replaces read_supabase_stats)
+            "total_features": total_features,
+            "with_homeowner": with_name,
+            "null_homeowners": total_features - with_name,
+            "distinct_issues": distinct_issues,
+        }
+    except Exception:
+        return {
+            "total": 0, "downloaded": 0, "extracted": 0,
+            "skipped": 0, "errors": 0, "no_pdf": 0,
+            "total_features": 0, "with_homeowner": 0,
+            "null_homeowners": 0, "distinct_issues": 0,
+        }
 
 
 def read_extractions():
@@ -99,22 +122,331 @@ def read_extractions():
 
 
 def read_xref():
-    """Read cross-reference results and return summary."""
-    if not os.path.exists(XREF_DIR):
-        return {"checked": 0, "matches": 0}
+    """Read cross-reference results from Supabase (primary) or disk (fallback).
 
-    matches = 0
-    checked = 0
-    for fname in os.listdir(XREF_DIR):
-        if not fname.endswith(".json"):
-            continue
-        checked += 1
-        with open(os.path.join(XREF_DIR, fname)) as f:
-            data = json.load(f)
-        if data.get("black_book_match") or data.get("doj_match"):
-            matches += 1
+    Returns same shape regardless of source:
+        {"checked": N, "matches": N, "leads": N, "verdicts": {}, "by_name": {}}
+    """
+    empty = {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
 
-    return {"checked": checked, "matches": matches}
+    # Primary source: Supabase cross_references table
+    try:
+        from db import list_cross_references
+        xrefs = list_cross_references()
+        if xrefs:
+            return _build_xref_summary_from_rows(xrefs)
+    except Exception:
+        pass
+
+    # Fallback: local results.json
+    results_path = os.path.join(XREF_DIR, "results.json")
+    if not os.path.exists(results_path):
+        return empty
+    try:
+        with open(results_path) as f:
+            results = json.load(f)
+        return _build_xref_summary_from_rows(results)
+    except Exception:
+        return empty
+
+
+def _build_xref_summary_from_rows(rows):
+    """Build xref summary dict from a list of xref rows (Supabase or disk).
+
+    Works with both Supabase cross_references rows and disk results.json entries
+    because they share the same field names.
+    """
+    checked = len(rows)
+    matches = sum(1 for r in rows if r.get("black_book_status") == "match")
+    verdicts = {}
+    by_name = {}
+
+    for r in rows:
+        # Apply editor override if present (Supabase rows have this field)
+        effective_verdict = r.get("editor_override_verdict") or r.get("combined_verdict", "no_match")
+        verdicts[effective_verdict] = verdicts.get(effective_verdict, 0) + 1
+
+        name = (r.get("homeowner_name") or "").lower().strip()
+        if name:
+            by_name[name] = {
+                "verdict": effective_verdict,
+                "bb_status": r.get("black_book_status", "no_match"),
+                "confidence": float(r.get("confidence_score") or 0),
+                "original_name": r.get("homeowner_name", ""),
+            }
+
+    leads = sum(1 for entry in by_name.values()
+                if entry["verdict"] != "no_match"
+                or entry["bb_status"] == "match")
+
+    return {"checked": checked, "matches": matches, "leads": leads,
+            "verdicts": verdicts, "by_name": by_name}
+
+
+def read_dossiers():
+    """Read dossier stats from Supabase, falling back to local file.
+
+    Returns by_name dict with both connection_strength and editor_verdict.
+    """
+    empty = {"investigated": 0, "high": 0, "medium": 0, "low": 0, "by_name": {}, "confirmed_names": []}
+
+    # Primary source: Supabase
+    try:
+        from db import list_dossiers
+        dossiers = list_dossiers()
+        if dossiers:
+            strengths = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+            by_name = {}
+            confirmed_names = []
+            for d in dossiers:
+                s = (d.get("connection_strength") or "").upper()
+                if s in strengths:
+                    strengths[s] += 1
+                name = (d.get("subject_name") or "").strip()
+                verdict = (d.get("editor_verdict") or "").upper()
+                reasoning = d.get("editor_reasoning") or ""
+                if name:
+                    by_name[name.lower()] = {
+                        "strength": s.lower(),
+                        "editor_verdict": verdict,
+                        "editor_reasoning": reasoning,
+                    }
+                if verdict == "CONFIRMED" and name:
+                    confirmed_names.append({
+                        "name": name,
+                        "strength": s.lower(),
+                        "rationale": (d.get("strength_rationale") or "")[:120],
+                        "editor_verdict": verdict,
+                    })
+            return {
+                "investigated": len(dossiers),
+                "high": strengths["HIGH"],
+                "medium": strengths["MEDIUM"],
+                "low": strengths["LOW"],
+                "by_name": by_name,
+                "confirmed_names": confirmed_names,
+            }
+    except Exception:
+        pass
+
+    # Fallback: local file
+    if not os.path.exists(DOSSIERS_DIR):
+        return empty
+    master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
+    if not os.path.exists(master_path):
+        return empty
+    try:
+        with open(master_path) as f:
+            dossiers = json.load(f)
+        strengths = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+        by_name = {}
+        confirmed_names = []
+        for d in dossiers:
+            s = (d.get("connection_strength") or "").upper()
+            if s in strengths:
+                strengths[s] += 1
+            name = (d.get("subject_name") or "").strip()
+            if name:
+                by_name[name.lower()] = {"strength": s.lower(), "editor_verdict": "", "editor_reasoning": ""}
+            if s in ("HIGH", "MEDIUM") and name:
+                confirmed_names.append({
+                    "name": name,
+                    "strength": s.lower(),
+                    "rationale": (d.get("strength_rationale") or "")[:120],
+                })
+        return {
+            "investigated": len(dossiers),
+            "high": strengths["HIGH"],
+            "medium": strengths["MEDIUM"],
+            "low": strengths["LOW"],
+            "by_name": by_name,
+            "confirmed_names": confirmed_names,
+        }
+    except Exception:
+        return empty
+
+
+def read_activity_log(max_lines=20):
+    """Read recent entries from the agent activity log."""
+    if not os.path.exists(ACTIVITY_LOG_PATH):
+        return []
+
+    entries = []
+    try:
+        with open(ACTIVITY_LOG_PATH) as f:
+            lines = f.readlines()
+        for line in lines[-max_lines:]:
+            parts = line.strip().split("|", 3)
+            if len(parts) == 4:
+                timestamp, agent, level, message = parts
+                if level in ("INFO", "WARN", "ERROR"):
+                    time_part = timestamp.split(" ")[1] if " " in timestamp else timestamp
+                    entries.append({
+                        "time": time_part,
+                        "agent": agent.title(),
+                        "event": message,
+                    })
+    except Exception:
+        pass
+    return entries
+
+
+def read_editor_briefing():
+    """Read the latest editor briefing summary."""
+    if not os.path.exists(BRIEFING_PATH):
+        return None
+    try:
+        with open(BRIEFING_PATH) as f:
+            text = f.read().strip()
+        # Extract the health line
+        for line in text.split("\n"):
+            if "Pipeline Health:" in line:
+                return line.split("Pipeline Health:")[-1].strip()
+        return "Briefing available"
+    except Exception:
+        return None
+
+
+EDITOR_MESSAGES_PATH = os.path.join(DATA_DIR, "editor_messages.json")
+HUMAN_MESSAGES_PATH = os.path.join(DATA_DIR, "human_messages.json")
+
+
+def read_combined_inbox(max_messages=20):
+    """Read and combine editor + human messages, most recent first."""
+    editor_msgs = []
+    human_msgs = []
+
+    if os.path.exists(EDITOR_MESSAGES_PATH):
+        try:
+            with open(EDITOR_MESSAGES_PATH) as f:
+                editor_msgs = json.load(f)
+            for m in editor_msgs:
+                m["sender"] = "editor"
+        except Exception:
+            pass
+
+    if os.path.exists(HUMAN_MESSAGES_PATH):
+        try:
+            with open(HUMAN_MESSAGES_PATH) as f:
+                human_msgs = json.load(f)
+            for m in human_msgs:
+                m["sender"] = "human"
+        except Exception:
+            pass
+
+    combined = editor_msgs + human_msgs
+    # Sort by timestamp — coerce to str to handle mixed float/str values
+    combined.sort(key=lambda m: str(m.get("timestamp", m.get("time", ""))))
+    # Most recent first, capped
+    return combined[-max_messages:][::-1]
+
+
+def read_editor_cost():
+    """Read the editor's API cost tracking data."""
+    if not os.path.exists(COST_PATH):
+        return {"api_calls": 0, "total_cost": 0.0, "input_tokens": 0, "output_tokens": 0}
+    try:
+        with open(COST_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {"api_calls": 0, "total_cost": 0.0, "input_tokens": 0, "output_tokens": 0}
+
+
+def read_designer_training():
+    """Read the Designer's training log and mode for real status reporting."""
+    result = {"sources_studied": 0, "patterns_learned": 0, "mode": "training", "last_updated": None}
+
+    if os.path.exists(DESIGNER_TRAINING_LOG_PATH):
+        try:
+            with open(DESIGNER_TRAINING_LOG_PATH) as f:
+                data = json.load(f)
+            result["sources_studied"] = data.get("sources_studied", 0)
+            result["patterns_learned"] = data.get("patterns_learned", 0)
+            result["last_updated"] = data.get("last_updated")
+        except Exception:
+            pass
+
+    if os.path.exists(DESIGNER_MODE_PATH):
+        try:
+            with open(DESIGNER_MODE_PATH) as f:
+                data = json.load(f)
+            result["mode"] = data.get("mode", "training")
+        except Exception:
+            pass
+
+    return result
+
+
+def build_throughput(manifest_stats, extraction_stats):
+    """Calculate throughput rates and ETA based on activity log timestamps."""
+    rates = {
+        "downloads_per_hour": 0,
+        "extractions_per_hour": 0,
+        "eta_hours": None,
+    }
+
+    # Calculate from activity log timestamps
+    if not os.path.exists(ACTIVITY_LOG_PATH):
+        return rates
+
+    try:
+        with open(ACTIVITY_LOG_PATH) as f:
+            lines = f.readlines()
+
+        download_times = []
+        extract_times = []
+
+        for line in lines:
+            parts = line.strip().split("|", 3)
+            if len(parts) < 4:
+                continue
+            timestamp_str, agent, level, message = parts
+            try:
+                ts = datetime.strptime(timestamp_str.strip(), "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                continue
+
+            if agent.strip().upper() == "COURIER" and "download" in message.lower():
+                download_times.append(ts)
+            elif agent.strip().upper() == "READER" and ("extract" in message.lower() or "process" in message.lower()):
+                extract_times.append(ts)
+
+        now = datetime.now()
+
+        # Calculate rate: events in last 2 hours
+        window_hours = 2
+        cutoff = now.timestamp() - (window_hours * 3600)
+
+        recent_downloads = sum(1 for t in download_times if t.timestamp() > cutoff)
+        recent_extractions = sum(1 for t in extract_times if t.timestamp() > cutoff)
+
+        rates["downloads_per_hour"] = round(recent_downloads / window_hours, 1)
+        rates["extractions_per_hour"] = round(recent_extractions / window_hours, 1)
+
+        # ETA: how long until all pipeline work is done
+        awaiting_download = max(0, manifest_stats["total"] - manifest_stats["downloaded"]
+                                - manifest_stats["skipped"] - manifest_stats.get("no_pdf", 0))
+        awaiting_extraction = max(0, manifest_stats["downloaded"] - extraction_stats["extracted"])
+
+        # Use the slowest bottleneck for ETA
+        if rates["downloads_per_hour"] > 0 and awaiting_download > 0:
+            download_eta = awaiting_download / rates["downloads_per_hour"]
+        else:
+            download_eta = 0
+
+        if rates["extractions_per_hour"] > 0 and awaiting_extraction > 0:
+            extract_eta = awaiting_extraction / rates["extractions_per_hour"]
+        else:
+            extract_eta = 0
+
+        total_eta = max(download_eta, extract_eta)
+        if total_eta > 0:
+            rates["eta_hours"] = round(total_eta, 1)
+
+    except Exception:
+        pass
+
+    return rates
 
 
 def determine_agent_status(current, total, has_data):
@@ -166,81 +498,74 @@ def build_collaborations(manifest_stats, extraction_stats, xref_stats):
 
 
 def build_log(manifest_stats, extraction_stats, xref_stats):
-    """Build a recent activity log from available data."""
+    """Build a recent activity log from available data.
+
+    Prioritizes real timestamped events from agent_activity.log.
+    Only falls back to pipeline summary if no real log entries exist.
+    When the orchestrator is running, it replaces this entirely with live log data.
+    """
+    # Real activity log entries always take priority
+    live_entries = read_activity_log(max_lines=20)
+    if live_entries:
+        return live_entries
+
+    # Fallback: pipeline summary (only when no activity log exists)
+    # These are marked with "--:--" to distinguish from real timestamps
     log = []
-    now = datetime.now().strftime("%H:%M")
-
     if manifest_stats["total"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Scout",
-            "event": f"Tracking {manifest_stats['total']} issues from archive.org"
-        })
-
+        log.append({"time": "--:--", "agent": "Scout",
+                     "event": f"Tracking {manifest_stats['total']} issues"})
     if manifest_stats["downloaded"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Courier",
-            "event": f"{manifest_stats['downloaded']} PDFs downloaded"
-        })
-
-    if manifest_stats["skipped"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Courier",
-            "event": f"{manifest_stats['skipped']} issues skipped (pre-1988)"
-        })
-
+        log.append({"time": "--:--", "agent": "Courier",
+                     "event": f"{manifest_stats['downloaded']} PDFs downloaded"})
     if extraction_stats["extracted"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Reader",
-            "event": f"Extracted {extraction_stats['features']} features from {extraction_stats['extracted']} issues"
-        })
-
-    if extraction_stats["nulls"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Reader",
-            "event": f"{extraction_stats['nulls']} features still missing homeowner names"
-        })
-
+        log.append({"time": "--:--", "agent": "Reader",
+                     "event": f"{extraction_stats['features']} features from {extraction_stats['extracted']} issues"})
     if xref_stats["checked"] > 0:
-        log.append({
-            "time": now,
-            "agent": "Detective",
-            "event": f"Checked {xref_stats['checked']} names, found {xref_stats['matches']} matches"
-        })
+        leads = xref_stats.get("leads", xref_stats.get("matches", 0))
+        log.append({"time": "--:--", "agent": "Detective",
+                     "event": f"Checked {xref_stats['checked']} names, {leads} leads"})
 
     return log
 
 
-def build_pipeline(manifest_stats, extraction_stats, xref_stats):
+def build_pipeline(manifest_stats, extraction_stats, xref_stats, dossier_stats):
     """Build pipeline funnel: stages with counts for visualization."""
     return [
         {
             "stage": "Discovered",
             "agent": "scout",
             "count": manifest_stats["total"],
+            "total": TOTAL_EXPECTED_ISSUES,
             "color": "#e74c3c",
         },
         {
             "stage": "Downloaded",
             "agent": "courier",
             "count": manifest_stats["downloaded"],
+            "total": manifest_stats["total"],
             "color": "#3498db",
         },
         {
             "stage": "Extracted",
             "agent": "reader",
             "count": extraction_stats["extracted"],
+            "total": manifest_stats["downloaded"],
             "color": "#2ecc71",
         },
         {
             "stage": "Cross-Ref'd",
             "agent": "detective",
             "count": xref_stats["checked"],
+            "total": extraction_stats["features"],
             "color": "#9b59b6",
+        },
+        {
+            "stage": "Investigated",
+            "agent": "researcher",
+            "count": dossier_stats["investigated"],
+            "total": xref_stats.get("leads", xref_stats.get("matches", 0)),
+            "color": "#e67e22",
         },
     ]
 
@@ -261,7 +586,7 @@ def build_queue_depths(manifest_stats, extraction_stats, xref_stats):
     ]
 
 
-def build_now_processing(manifest_stats, extraction_stats, xref_stats):
+def build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_stats):
     """Infer what each agent is currently doing."""
     now = {}
     awaiting_download = (manifest_stats["total"]
@@ -271,10 +596,13 @@ def build_now_processing(manifest_stats, extraction_stats, xref_stats):
     awaiting_extraction = manifest_stats["downloaded"] - extraction_stats["extracted"]
     awaiting_xref = extraction_stats["features"] - xref_stats["checked"]
 
+    remaining_to_discover = TOTAL_EXPECTED_ISSUES - manifest_stats["total"]
     if manifest_stats["total"] == 0:
         now["scout"] = {"task": "Ready to discover", "active": False}
+    elif remaining_to_discover > 0:
+        now["scout"] = {"task": f"Found {manifest_stats['total']}/{TOTAL_EXPECTED_ISSUES} ({remaining_to_discover} remaining)", "active": True}
     else:
-        now["scout"] = {"task": f"Indexed {manifest_stats['total']} issues", "active": False}
+        now["scout"] = {"task": f"All {TOTAL_EXPECTED_ISSUES} issues indexed", "active": False}
 
     if awaiting_download > 0:
         now["courier"] = {"task": f"Downloading ({awaiting_download} remaining)", "active": True}
@@ -297,6 +625,33 @@ def build_now_processing(manifest_stats, extraction_stats, xref_stats):
     else:
         now["detective"] = {"task": "Waiting for Reader", "active": False}
 
+    # Researcher
+    researcher_leads = xref_stats.get("leads", xref_stats.get("matches", 0))
+    if dossier_stats["investigated"] > 0:
+        now["researcher"] = {"task": f"{dossier_stats['investigated']} dossiers built", "active": dossier_stats["investigated"] < researcher_leads}
+    elif researcher_leads > 0:
+        now["researcher"] = {"task": f"{researcher_leads} leads to investigate", "active": True}
+    else:
+        now["researcher"] = {"task": "Waiting for Detective leads", "active": False}
+
+    # Editor
+    editor_briefing = read_editor_briefing()
+    if editor_briefing:
+        now["editor"] = {"task": f"Pipeline: {editor_briefing}", "active": True}
+    else:
+        now["editor"] = {"task": "Supervising pipeline", "active": False}
+
+    # Designer
+    dt = read_designer_training()
+    if dt["patterns_learned"] > 0:
+        mode_label = "Training" if dt["mode"] == "training" else "Creating"
+        now["designer"] = {
+            "task": f"{mode_label}: {dt['patterns_learned']} patterns from {dt['sources_studied']} sources",
+            "active": dt["mode"] == "creating" or dt["sources_studied"] > 0,
+        }
+    else:
+        now["designer"] = {"task": "Training mode \u2014 studying design", "active": False}
+
     return now
 
 
@@ -312,22 +667,46 @@ CELEBRITY_NAMES = [
 ]
 
 
-def build_notable_finds(extraction_stats, xref_stats):
-    """Scan features for notable/celebrity names and Epstein matches."""
+def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, researcher_live_task=""):
+    """Build notable finds directly from xref leads — guarantees 1:1 match with XRef Leads stat.
+
+    Iterates xref by_name (deduped, latest verdict per name) and enriches
+    with feature_list metadata where available.
+    """
     finds = []
-    seen = set()
+    by_name = xref_stats.get("by_name", {})
+    dossier_by_name = (dossier_stats or {}).get("by_name", {})
 
+    # Parse Researcher's current task to find who's being investigated right now
+    investigating_now = ""
+    if researcher_live_task:
+        lt = researcher_live_task.lower()
+        if "investigating" in lt:
+            investigating_now = researcher_live_task.split("Investigating ")[-1].split(" (")[0].lower().strip()
+        elif "dossier:" in lt:
+            investigating_now = researcher_live_task.split("Dossier: ")[-1].split(" (")[0].lower().strip()
+
+    # Build a lookup from feature_list for enrichment (issue, location)
+    feature_by_name = {}
     for feat in extraction_stats.get("feature_list", []):
-        name = feat.get("homeowner_name")
-        if not name:
+        n = feat.get("homeowner_name")
+        if n:
+            feature_by_name[n.lower().strip()] = feat
+
+    # Iterate xref leads directly — same source as the leads count
+    for name_key, xref_entry in by_name.items():
+        verdict = xref_entry["verdict"]
+        bb_status = xref_entry.get("bb_status", "no_match")
+
+        # Only include leads: non-no_match verdict OR BB match
+        if verdict == "no_match" and bb_status != "match":
             continue
 
-        # Deduplicate by lowercase name
-        key = name.lower().strip()
-        if key in seen:
-            continue
-        seen.add(key)
+        # Use original_name from xref if available, else title-case the key
+        display_name = xref_entry.get("original_name") or name_key.title()
 
+        # Enrich with feature data if available
+        feat = feature_by_name.get(name_key, {})
         location_parts = [
             feat.get("location_city"),
             feat.get("location_state"),
@@ -335,21 +714,48 @@ def build_notable_finds(extraction_stats, xref_stats):
         ]
         location = ", ".join(p for p in location_parts if p)
 
-        # Check if celebrity
-        name_lower = name.lower()
-        is_celebrity = any(celeb in name_lower for celeb in CELEBRITY_NAMES)
+        # Determine status label
+        if verdict not in ("no_match", None):
+            status = verdict
+        else:
+            status = "bb_match"  # BB-only match
 
-        if is_celebrity:
-            finds.append({
-                "name": name,
-                "issue": feat.get("issue", ""),
-                "location": location,
-                "type": "celebrity",
-            })
+        # Determine research status and editor verdict
+        dossier_info = dossier_by_name.get(name_key)
+        editor_verdict = None
+        editor_reasoning = None
+        if isinstance(dossier_info, dict):
+            research = "dossier_complete"
+            research_detail = dossier_info.get("strength")
+            editor_verdict = dossier_info.get("editor_verdict") or None
+            editor_reasoning = dossier_info.get("editor_reasoning") or None
+        elif isinstance(dossier_info, str):
+            research = "dossier_complete"
+            research_detail = dossier_info
+        elif investigating_now and name_key.startswith(investigating_now[:8]):
+            research = "investigating"
+            research_detail = None
+        else:
+            research = "queued"
+            research_detail = None
 
-    # Sort: epstein matches first, then celebrities
-    type_order = {"epstein_match": 0, "celebrity": 1, "notable": 2}
-    finds.sort(key=lambda f: type_order.get(f["type"], 3))
+        finds.append({
+            "name": display_name,
+            "issue": feat.get("issue", ""),
+            "location": location,
+            "type": "epstein_match",
+            "status": status,
+            "research": research,
+            "research_detail": research_detail,
+            "editor_verdict": editor_verdict,
+            "editor_reasoning": editor_reasoning,
+        })
+
+    # Sort by detective verdict severity
+    def sort_key(f):
+        verdict_order = {"confirmed_match": 0, "likely_match": 1, "possible_match": 2, "needs_review": 3, "bb_match": 4, "pending": 5}
+        return (verdict_order.get(f["status"], 6),)
+    finds.sort(key=sort_key)
 
     return finds
 
@@ -378,15 +784,229 @@ def build_quality(extraction_stats):
     return {"total_features": total, "fields": result}
 
 
+def read_editor_ledger():
+    """Read the EditorLedger and build a summary for the dashboard.
+
+    Returns:
+        {
+            "stuck": [ { "key": "...", "failures": N, "last_error": "...", "agent": "...", "task": "..." } ],
+            "exhausted": [ { "key": "...", "failures": N, "last_error": "...", "agent": "...", "task": "..." } ],
+            "recent_failures": [ { "key": "...", "agent": "...", "error": "...", "time": "..." } ],
+            "total_keys": N,
+            "total_failures": N,
+            "total_successes": N,
+        }
+    """
+    ledger_path = os.path.join(DATA_DIR, "editor_ledger.json")
+    empty = {"stuck": [], "exhausted": [], "recent_failures": [],
+             "total_keys": 0, "total_failures": 0, "total_successes": 0}
+
+    if not os.path.exists(ledger_path):
+        return empty
+
+    try:
+        with open(ledger_path) as f:
+            data = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return empty
+
+    max_failures = 3
+    stuck = []
+    exhausted = []
+    all_failures = []
+    total_failures = 0
+    total_successes = 0
+
+    for key, entries in data.items():
+        failures = [e for e in entries if not e.get("success")]
+        successes = [e for e in entries if e.get("success")]
+        total_failures += len(failures)
+        total_successes += len(successes)
+
+        if not failures:
+            continue
+
+        last_fail = failures[-1]
+        item = {
+            "key": key,
+            "failures": len(failures),
+            "last_error": (last_fail.get("error") or last_fail.get("note", ""))[:80],
+            "agent": last_fail.get("agent", ""),
+            "task": last_fail.get("task", ""),
+        }
+
+        if len(failures) >= max_failures:
+            exhausted.append(item)
+        else:
+            stuck.append(item)
+
+        for f in failures:
+            all_failures.append({
+                "key": key,
+                "agent": f.get("agent", ""),
+                "error": (f.get("error") or f.get("note", ""))[:60],
+                "time": f.get("time", ""),
+            })
+
+    # Sort: most failures first for stuck/exhausted
+    stuck.sort(key=lambda x: -x["failures"])
+    exhausted.sort(key=lambda x: -x["failures"])
+
+    # Recent failures: sorted by time, most recent first
+    all_failures.sort(key=lambda x: x["time"], reverse=True)
+
+    return {
+        "stuck": stuck[:10],
+        "exhausted": exhausted[:10],
+        "recent_failures": all_failures[:8],
+        "total_keys": len(data),
+        "total_failures": total_failures,
+        "total_successes": total_successes,
+    }
+
+
+def _get_memory_count():
+    """Get total episodic memory episode count. Returns 0 on failure."""
+    try:
+        from agents.memory import get_memory
+        mem = get_memory()
+        return mem.count() if mem else 0
+    except Exception:
+        return 0
+
+
+def build_coverage_map():
+    """Build a year×month grid showing pipeline status for each AD issue.
+
+    Returns dict: { "1988": {"1": "extracted", "2": null, ...}, ... }
+    Status priority: extracted > downloaded > discovered > null
+    """
+    coverage = {}
+    # Initialize all months as null (1988-2025)
+    for year in range(1988, 2026):
+        coverage[str(year)] = {str(m): None for m in range(1, 13)}
+
+    try:
+        sb = get_supabase()
+        result = sb.table("issues").select("year,month,status").execute()
+        # Status priority for when multiple issues share a month
+        priority = {"extracted": 4, "downloaded": 3, "discovered": 2,
+                    "skipped_pre1988": 1, "error": 1, "no_pdf": 1,
+                    "extraction_error": 2}
+        for row in result.data:
+            y = row.get("year")
+            m = row.get("month")
+            s = row.get("status", "discovered")
+            if y is None or m is None:
+                continue
+            yk = str(y)
+            mk = str(m)
+            if yk not in coverage or mk not in coverage.get(yk, {}):
+                continue
+            # Keep the highest-priority status
+            existing = coverage[yk][mk]
+            if existing is None or priority.get(s, 0) > priority.get(existing, 0):
+                coverage[yk][mk] = s
+    except Exception:
+        pass
+
+    return coverage
+
+
+def _get_recent_memories(limit=20):
+    """Get recent episodic memory episodes for the Memories popup."""
+    path = os.path.join(DATA_DIR, "agent_memory", "episodes.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path) as f:
+            episodes = json.load(f)
+        recent = episodes[-limit:]
+        result = []
+        for ep in reversed(recent):  # Newest first
+            ts = ep.get("timestamp", 0)
+            time_str = datetime.fromtimestamp(ts).strftime("%I:%M %p") if ts else "?"
+            result.append({
+                "agent": ep.get("agent", "?"),
+                "text": (ep.get("text", "")[:100] + "...") if len(ep.get("text", "")) > 100 else ep.get("text", ""),
+                "outcome": ep.get("outcome", "?"),
+                "time": time_str,
+            })
+        return result
+    except Exception:
+        return []
+
+
+def _get_all_dossier_details():
+    """Get all dossiers with strength + rationale + editor verdict for the Dossiers popup."""
+    details = []
+
+    # Primary: Supabase
+    try:
+        from db import list_dossiers
+        dossiers = list_dossiers()
+        if dossiers:
+            for d in dossiers:
+                name = (d.get("subject_name") or "").strip()
+                if not name:
+                    continue
+                strength = (d.get("connection_strength") or "").upper()
+                details.append({
+                    "name": name,
+                    "strength": strength.lower() if strength else "unknown",
+                    "strength_rationale": (d.get("strength_rationale") or "")[:150],
+                    "editor_verdict": (d.get("editor_verdict") or "").upper() or None,
+                    "editor_reasoning": (d.get("editor_reasoning") or "")[:150] or None,
+                })
+            # Sort: CONFIRMED first, then by strength descending
+            strength_order = {"high": 0, "medium": 1, "low": 2, "coincidence": 3, "unknown": 4}
+            details.sort(key=lambda d: (
+                0 if d.get("editor_verdict") == "CONFIRMED" else 1,
+                strength_order.get(d["strength"], 5),
+            ))
+            return details
+    except Exception:
+        pass
+
+    # Fallback: local file
+    master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
+    if os.path.exists(master_path):
+        try:
+            with open(master_path) as f:
+                dossiers = json.load(f)
+            for d in dossiers:
+                name = (d.get("subject_name") or "").strip()
+                if not name:
+                    continue
+                strength = (d.get("connection_strength") or "").upper()
+                details.append({
+                    "name": name,
+                    "strength": strength.lower() if strength else "unknown",
+                    "strength_rationale": (d.get("strength_rationale") or "")[:150],
+                    "editor_verdict": None,
+                    "editor_reasoning": None,
+                })
+        except Exception:
+            pass
+
+    return details
+
+
 def generate_status():
     """Generate the full status JSON."""
-    manifest_stats = read_manifest()
+    manifest_stats = read_pipeline_stats()
     extraction_stats = read_extractions()
     xref_stats = read_xref()
-    download_count = count_downloads()
+    dossier_stats = read_dossiers()
+
+    # Count confirmed Epstein associates — only those Miranda has CONFIRMED
+    confirmed_names_list = dossier_stats.get("confirmed_names", [])
+    confirmed_associates = len(confirmed_names_list)
 
     # Determine statuses
-    scout_status = "done" if manifest_stats["total"] > 0 else "idle"
+    scout_status = "working" if 0 < manifest_stats["total"] < TOTAL_EXPECTED_ISSUES else (
+        "done" if manifest_stats["total"] >= TOTAL_EXPECTED_ISSUES else "idle"
+    )
     courier_status = determine_agent_status(
         manifest_stats["downloaded"], manifest_stats["total"],
         manifest_stats["total"] > 0
@@ -399,10 +1019,15 @@ def generate_status():
         xref_stats["checked"], extraction_stats["features"],
         extraction_stats["features"] > 0
     )
+    researcher_leads = xref_stats.get("leads", xref_stats.get("matches", 0))
+    researcher_status = determine_agent_status(
+        dossier_stats["investigated"], researcher_leads,
+        researcher_leads > 0
+    )
 
     # Scout message
     if manifest_stats["total"] > 0:
-        scout_msg = f"Found {manifest_stats['total']} issues on archive.org"
+        scout_msg = f"Found {manifest_stats['total']} of {TOTAL_EXPECTED_ISSUES} issues"
     else:
         scout_msg = "Ready to search archive.org"
 
@@ -420,12 +1045,51 @@ def generate_status():
         reader_msg = "Waiting for downloads..."
 
     # Detective message
-    if xref_stats["matches"] > 0:
-        detective_msg = f"{xref_stats['matches']} match(es) found in {xref_stats['checked']} names checked"
+    detective_leads = xref_stats.get("leads", xref_stats.get("matches", 0))
+    if detective_leads > 0:
+        detective_msg = f"{detective_leads} leads found in {xref_stats['checked']} names checked"
     elif xref_stats["checked"] > 0:
         detective_msg = f"No matches yet ({xref_stats['checked']} names checked)"
     else:
         detective_msg = "Waiting for extracted names..."
+
+    # Researcher message
+    if dossier_stats["investigated"] > 0:
+        researcher_msg = f"{dossier_stats['investigated']} dossiers ({dossier_stats['high']} HIGH, {dossier_stats['medium']} MED)"
+    elif researcher_leads > 0:
+        researcher_msg = f"{researcher_leads} leads to investigate"
+    else:
+        researcher_msg = "Waiting for leads..."
+
+    # Editor message
+    editor_briefing = read_editor_briefing()
+    if editor_briefing:
+        editor_status = "working"
+        editor_msg = f"Pipeline: {editor_briefing}"
+    else:
+        editor_status = "idle"
+        editor_msg = "Supervising pipeline"
+
+    # Designer message
+    designer_training = read_designer_training()
+    if designer_training["patterns_learned"] > 0:
+        mode_label = "Training" if designer_training["mode"] == "training" else "Creating"
+        designer_msg = f"{mode_label}: {designer_training['patterns_learned']} patterns from {designer_training['sources_studied']} sources"
+        # Consider "working" if training log was updated recently (within 30 min)
+        designer_status = "idle"
+        if designer_training["last_updated"]:
+            try:
+                last_dt = datetime.fromisoformat(designer_training["last_updated"])
+                if (datetime.now() - last_dt).total_seconds() < 1800:
+                    designer_status = "working"
+            except Exception:
+                pass
+    else:
+        designer_status = "idle"
+        designer_msg = "Training mode \u2014 studying design patterns"
+
+    cost_data = read_editor_cost()
+    throughput = build_throughput(manifest_stats, extraction_stats)
 
     status = {
         "title": "AD-EPSTEIN INDEX \u2014 AGENT OFFICE",
@@ -434,17 +1098,17 @@ def generate_status():
         "agents": [
             {
                 "id": "scout",
-                "name": "Scout",
+                "name": "Arthur",
                 "role": "Discovers AD issues on archive.org",
                 "status": scout_status,
                 "message": scout_msg,
                 "color": "#e74c3c",
                 "deskItems": ["magnifier", "globe"],
-                "progress": {"current": manifest_stats["total"], "total": manifest_stats["total"]}
+                "progress": {"current": manifest_stats["total"], "total": TOTAL_EXPECTED_ISSUES}
             },
             {
                 "id": "courier",
-                "name": "Courier",
+                "name": "Casey",
                 "role": "Downloads & delivers PDFs",
                 "status": courier_status,
                 "message": courier_msg,
@@ -454,39 +1118,80 @@ def generate_status():
             },
             {
                 "id": "reader",
-                "name": "Reader",
+                "name": "Elias",
                 "role": "Extracts homeowners & data",
                 "status": reader_status,
                 "message": reader_msg,
                 "color": "#2ecc71",
                 "deskItems": ["book", "pencil"],
-                "progress": {"current": extraction_stats["extracted"], "total": manifest_stats["downloaded"]}
+                "progress": {"current": manifest_stats["distinct_issues"], "total": manifest_stats["downloaded"]}
             },
             {
                 "id": "detective",
-                "name": "Detective",
+                "name": "Silas",
                 "role": "Cross-refs against Epstein docs",
                 "status": detective_status,
                 "message": detective_msg,
                 "color": "#9b59b6",
                 "deskItems": ["detective-hat", "clipboard"],
-                "progress": {"current": xref_stats["checked"], "total": extraction_stats["features"]}
+                "progress": {"current": xref_stats["checked"], "total": manifest_stats["total_features"]}
+            },
+            {
+                "id": "researcher",
+                "name": "Elena",
+                "role": "Investigates matches & builds dossiers",
+                "status": researcher_status,
+                "message": researcher_msg,
+                "color": "#e67e22",
+                "deskItems": ["notebook", "magnifier"],
+                "progress": {"current": dossier_stats["investigated"], "total": researcher_leads}
+            },
+            {
+                "id": "editor",
+                "name": "Miranda",
+                "role": "Supervises pipeline strategy",
+                "status": editor_status,
+                "message": editor_msg,
+                "color": "#f5c842",
+                "deskItems": ["briefcase", "memo"],
+                "progress": {"current": 0, "total": 0}
+            },
+            {
+                "id": "designer",
+                "name": "Sable",
+                "role": "Designs Phase 3 website",
+                "status": designer_status,
+                "message": designer_msg,
+                "color": "#e91e63",
+                "deskItems": ["palette", "ruler"],
+                "progress": {"current": designer_training["sources_studied"], "total": designer_training["patterns_learned"]}
             }
         ],
         "stats": [
-            {"label": "Discovered", "value": manifest_stats["total"]},
-            {"label": "Downloaded", "value": manifest_stats["downloaded"]},
-            {"label": "Extracted", "value": extraction_stats["extracted"]},
-            {"label": "Features", "value": extraction_stats["features"]},
-            {"label": "XRef Matches", "value": xref_stats["matches"]}
+            {"label": "Discovered", "value": manifest_stats["total"], "total": TOTAL_EXPECTED_ISSUES},
+            {"label": "Downloaded Issues", "value": manifest_stats["downloaded"]},
+            {"label": "Extracted Issues", "value": manifest_stats["distinct_issues"]},
+            {"label": "Features", "value": manifest_stats["total_features"]},
+            {"label": "XRef Leads", "value": xref_stats.get("leads", xref_stats.get("matches", 0))},
+            {"label": "Dossiers", "value": dossier_stats["investigated"],
+             "popup_type": "dossiers", "details": _get_all_dossier_details()},
+            {"label": "Confirmed", "value": confirmed_associates,
+             "popup_type": "confirmed", "details": dossier_stats.get("confirmed_names", [])},
+            {"label": "Memories", "value": _get_memory_count(),
+             "popup_type": "memories", "details": _get_recent_memories()},
         ],
         "collaborations": build_collaborations(manifest_stats, extraction_stats, xref_stats),
         "log": build_log(manifest_stats, extraction_stats, xref_stats),
-        "pipeline": build_pipeline(manifest_stats, extraction_stats, xref_stats),
+        "pipeline": build_pipeline(manifest_stats, extraction_stats, xref_stats, dossier_stats),
         "queue_depths": build_queue_depths(manifest_stats, extraction_stats, xref_stats),
-        "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats),
-        "notable_finds": build_notable_finds(extraction_stats, xref_stats),
+        "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_stats),
+        "editor_inbox": read_combined_inbox(),
+        "notable_finds": build_notable_finds(extraction_stats, xref_stats, dossier_stats),
         "quality": build_quality(extraction_stats),
+        "throughput": throughput,
+        "cost": cost_data,
+        "coverage_map": build_coverage_map(),
+        "editor_ledger": read_editor_ledger(),
     }
 
     return status
