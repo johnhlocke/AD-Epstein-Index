@@ -745,6 +745,13 @@ Check for:
 4. HISTORIC RETROSPECTIVE: AD article about a property from 1800s/early 1900s → likely coincidence
 5. NO EVIDENCE AT ALL: No BB match AND no DOJ results → coincidence
 
+CRITICAL RULES:
+- NEVER dismiss someone as COINCIDENCE just because they are famous, a celebrity, or a public figure.
+  Famous people CAN and DO appear in Epstein records. Fame is NOT evidence against a connection.
+- If someone has a Black Book match (any type), they MUST be investigated. A Black Book match means
+  their name and contact info appeared in Epstein's personal contact book — that is direct evidence.
+- The ONLY valid reasons for COINCIDENCE are the 5 checks above. "This person is too prominent" is NOT valid.
+
 Respond with JSON only:
 {
   "result": "investigate" or "coincidence",
@@ -917,11 +924,19 @@ Connection strength guide:
 - LOW: Weak match with no pattern support
 - COINCIDENCE: Almost certainly false positive
 
-**CRITICAL: False positive identification is one of your most important jobs.**
-- DOJ results referencing a DIFFERENT person with the same surname → COINCIDENCE
-- DOJ context about contractors/vendors/services → COINCIDENCE
-- Common name + no pattern correlations → LOW or COINCIDENCE
-- Person deceased before 1980 → COINCIDENCE
+**CRITICAL RULES:**
+1. **Black Book match = direct evidence.** If someone appears in Epstein's Little Black Book
+   (last_first or full_name match), that is equivalent to appearing in the Epstein files.
+   BB matches should be rated HIGH or MEDIUM at minimum — never COINCIDENCE or LOW.
+2. **Fame is NOT a dismissal factor.** NEVER downgrade or dismiss someone because they are
+   famous, a celebrity, or a public figure. Celebrities and prominent people DID associate
+   with Epstein — that is the entire point of this investigation. "Well-known" is irrelevant
+   to connection strength.
+3. False positive identification matters, but only for EVIDENCE-BASED reasons:
+   - DOJ results referencing a DIFFERENT person with the same surname → COINCIDENCE
+   - DOJ context about contractors/vendors/services → COINCIDENCE
+   - Common name + no pattern correlations + no BB match → LOW or COINCIDENCE
+   - Person deceased before 1980 → COINCIDENCE
 
 Pattern evidence can UPGRADE strength:
 - Shared designer with confirmed match → upgrade one tier

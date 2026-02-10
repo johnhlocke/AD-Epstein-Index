@@ -1120,10 +1120,16 @@ or REJECTED (false positive, coincidence, or insufficient evidence).
 {stance}
 
 Key evidence to evaluate:
-- Black Book matches (exact with address/phone = strong; last_name_only = weak)
+- Black Book matches: ANY Black Book match (last_first or full_name) is DIRECT EVIDENCE of
+  association — the person's name appeared in Epstein's personal contact book. A Black Book
+  match alone is sufficient grounds to CONFIRM. Only reject a BB match if the name is clearly
+  a different person (e.g., common surname matching a completely unrelated individual).
 - DOJ Library results (direct mention = strong; same surname different person = worthless)
 - Pattern correlations (shared designer/location with confirmed matches = meaningful)
 - Temporal relevance (1990-2008 overlap with Epstein's active period)
+
+CRITICAL: NEVER reject someone because they are famous, a celebrity, or a public figure.
+Celebrities and prominent people DID associate with Epstein. Fame is irrelevant to the verdict.
 
 Respond with JSON only:
 {{

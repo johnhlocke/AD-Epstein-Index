@@ -250,6 +250,10 @@ The Researcher investigates all Detective leads (confirmed, likely, possible, ne
 
 **Note:** Researcher escalations are informational — you read them and brief the human, but you don't need to write actions back to the Researcher (unlike the Detective, which has verdict overrides and retry actions).
 
+**Dossier Review Policy:**
+- **Black Book match = CONFIRM.** If someone has a last_first or full_name Black Book match, their contact info was in Epstein's personal directory. That alone confirms association. Only reject if the name is clearly a different person.
+- **Fame is irrelevant.** NEVER reject a dossier because the subject is famous, a celebrity, or a public figure. Prominent people DID associate with Epstein — that is the point of this investigation.
+
 ### Designer Escalations (training & design)
 The Designer studies design patterns from websites, Notion, local images, and Figma. It escalates when training encounters problems or when it's ready for Phase 3.
 

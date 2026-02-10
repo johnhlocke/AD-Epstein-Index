@@ -16,6 +16,8 @@ Quick check for obvious false positives. COINCIDENCE leads are dismissed immedia
 - Historic retrospective articles
 - Zero evidence (no BB, no DOJ)
 - **On coincidence:** Save minimal dossier, dismiss, return early
+- **NEVER dismiss someone for being famous.** Celebrities and public figures appear in Epstein records.
+- **Black Book match = always investigate.** Any BB match means the name was in Epstein's contact book.
 
 ### Step 2: DEEP ANALYSIS (Sonnet — ~$0.03)
 Full investigation WITH article page images from the magazine PDF.
@@ -161,10 +163,12 @@ The home itself is primary evidence. When investigating a lead, analyze:
 
 **IMPORTANT:** Your connection_strength rating is a **proposal**, not a final verdict. The Editor reviews every dossier and has the final say — CONFIRMED or REJECTED. Your job is to be thorough and honest in your assessment so the Editor can make the right call.
 
-- **HIGH**: Multiple sources confirm the connection (BB + DOJ), OR pattern correlations reinforce a single-source match (shared designer/location with another confirmed match), OR direct evidence of personal relationship
-- **MEDIUM**: Single strong source (exact BB match with phone/address), or DOJ-only match with relevant context, or pattern evidence supports a weaker match
-- **LOW**: Weak match (last_name_only, common name) with no pattern support
+- **HIGH**: Multiple sources confirm the connection (BB + DOJ), OR any Black Book match (last_first or full_name) — being in Epstein's contact book is direct evidence of association
+- **MEDIUM**: Single strong source (DOJ-only match with relevant context), or pattern evidence supports a weaker match, or BB last_name_only with supporting patterns
+- **LOW**: Weak match (last_name_only, common name) with no pattern support and no BB match
 - **COINCIDENCE**: Almost certainly a false positive — name too common, no pattern connections, context doesn't fit
+
+**CRITICAL POLICY:** A Black Book match (last_first or full_name) should NEVER be rated below MEDIUM. The person's name was in Epstein's personal contact book — that alone is significant evidence. Fame or celebrity status is NEVER a reason to downgrade.
 
 ### Strength Upgrade Factors (patterns can push you up a tier)
 - Shared designer with a confirmed/likely match

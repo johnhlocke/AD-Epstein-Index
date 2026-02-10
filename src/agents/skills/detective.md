@@ -85,13 +85,15 @@ After both Black Book (BB) and DOJ searches complete:
 | BB Result | DOJ Result | Verdict |
 |-----------|------------|---------|
 | last_first | high | `confirmed_match` (0.95) |
-| last_first | medium/low/none | `likely_match` (0.70-0.80) |
+| last_first | medium/low/none | `confirmed_match` (0.90) — BB is direct evidence |
+| full_name | medium/high | `confirmed_match` (0.85) |
+| full_name | low/none | `confirmed_match` (0.80) or `likely_match` if FP indicators |
 | — | high | `likely_match` (0.75) |
-| full_name | medium/high | `likely_match` (0.70) |
-| full_name | low/none | `possible_match` (0.50) or `needs_review` if FP indicators |
 | last_name_only | any | `possible_match` (0.30-0.45) or `needs_review` if FP indicators |
 | — | medium/low | `possible_match` (0.30) |
 | — | — | `no_match` (0.0) |
+
+**POLICY: Black Book = direct evidence.** A last_first or full_name match in Epstein's Little Black Book means the person's contact info was in his personal directory. That alone confirms association — DOJ results are supplementary, not required.
 
 ## False Positive Detection
 Flag these indicators:

@@ -528,48 +528,41 @@ def _determine_verdict(bb_has_match, bb_best, doj_confidence, doj_total, fp_indi
         return ("needs_review", 0.10,
                 "Name appears to be a business/hotel/landmark, not a person — routing to Researcher for confirmation")
 
-    # Both strong: confirmed
-    if bb_best in ("last_first",) and doj_confidence == "high":
+    # Black Book last_first match = confirmed connection.
+    # Being in Epstein's Little Black Book IS direct evidence of association.
+    if bb_best == "last_first" and doj_confidence == "high":
         return ("confirmed_match", 0.95,
-                "Strong match in both Black Book (last_first) and DOJ (high confidence)")
-
-    # One very strong source
-    if bb_best == "last_first" and doj_confidence in ("medium", "low", "none"):
-        if doj_confidence == "none" and not has_fp_risk:
-            return ("likely_match", 0.75,
-                    "Strong Black Book match (last_first), DOJ returned no results")
-        if doj_confidence == "medium":
-            return ("likely_match", 0.80,
-                    "Strong Black Book match (last_first) + DOJ medium confidence")
-        return ("likely_match", 0.70,
-                "Strong Black Book match (last_first), weak/no DOJ evidence")
+                "Confirmed: Black Book match (last_first) AND DOJ high confidence")
+    if bb_best == "last_first":
+        return ("confirmed_match", 0.90,
+                "Confirmed: Black Book match (last_first) — presence in Epstein's contact book is direct evidence of association")
 
     if doj_confidence == "high" and not bb_has_match:
         return ("likely_match", 0.75,
                 "DOJ high confidence but no Black Book match")
 
-    # Moderate evidence
+    # Black Book full_name match = confirmed connection (name appears in the book).
     if bb_best == "full_name" and doj_confidence in ("medium", "high"):
-        return ("likely_match", 0.70,
-                f"Black Book full_name match + DOJ {doj_confidence} confidence")
-
-    if bb_best == "full_name" and doj_confidence in ("low", "none"):
+        return ("confirmed_match", 0.85,
+                f"Confirmed: Black Book full_name match + DOJ {doj_confidence} confidence")
+    if bb_best == "full_name":
         if has_fp_risk:
-            return ("needs_review", 0.40,
-                    "Black Book full_name match but false positive indicators present")
-        return ("possible_match", 0.50,
-                "Black Book full_name match, weak/no DOJ evidence")
+            return ("likely_match", 0.65,
+                    "Black Book full_name match — direct evidence, but false positive indicators present")
+        return ("confirmed_match", 0.80,
+                "Confirmed: Black Book full_name match — presence in Epstein's contact book is direct evidence")
 
-    # Weak evidence
+    # Black Book last_name_only — weaker match type but still evidence of BB presence.
+    # Upgrade with DOJ support; always route to investigation (never dismiss).
     if bb_best == "last_name_only":
         if doj_confidence in ("high", "medium"):
-            return ("possible_match", 0.45,
-                    f"Black Book last_name_only + DOJ {doj_confidence}")
+            return ("likely_match", 0.65,
+                    f"Black Book last_name_only + DOJ {doj_confidence} — BB presence is direct evidence")
         if has_fp_risk:
-            return ("needs_review", 0.25,
-                    "Last name only match with false positive indicators")
-        return ("possible_match", 0.30,
-                "Black Book last_name_only match, weak/no DOJ evidence")
+            return ("possible_match", 0.40,
+                    "Black Book last_name_only with false positive indicators — needs investigation")
+        return ("likely_match", 0.55,
+                "Black Book last_name_only match — BB presence warrants investigation")
 
     if doj_confidence in ("medium", "low") and not bb_has_match:
         if has_fp_risk:
