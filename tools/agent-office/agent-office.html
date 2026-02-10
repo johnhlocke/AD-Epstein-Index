@@ -1564,7 +1564,7 @@ function showToast(message, type = 'info', duration = 3000) {
 // ── Configuration ──
 const params = new URLSearchParams(window.location.search);
 const STATUS_URL = params.get('status') || 'status.json';
-const POLL_MS = parseInt(params.get('poll') || '5000', 10);
+const POLL_MS = parseInt(params.get('poll') || '2000', 10);
 const FORCE_DEMO = params.get('demo') === 'true';
 
 // ── Character Names ──
@@ -2894,19 +2894,43 @@ function renderChalkboards(taskBoard, editorLedger) {
 // ══════════════════════════════════════
 const MONTH_LABELS = ['J','F','M','A','M','J','J','A','S','O','N','D'];
 
+let coverageMapBuilt = false;
+
 function renderCoverageMap(coverageMap) {
   const el = document.getElementById('coverage-content');
   if (!el || !coverageMap) return;
 
+  // Incremental update: if grid already built, only update changed cells
+  if (coverageMapBuilt && previousState && previousState.coverage_map) {
+    const prev = previousState.coverage_map;
+    for (let y = 1988; y <= 2025; y++) {
+      const yk = String(y);
+      const yearData = coverageMap[yk] || {};
+      const prevYear = prev[yk] || {};
+      for (let m = 1; m <= 12; m++) {
+        const mk = String(m);
+        const newStatus = yearData[mk] || '';
+        const oldStatus = prevYear[mk] || '';
+        if (newStatus !== oldStatus) {
+          const cell = el.querySelector(`[data-y="${y}"][data-m="${m}"]`);
+          if (cell) {
+            cell.className = `coverage-cell ${newStatus}`;
+            cell.title = `${MONTH_LABELS[m-1]} ${y}: ${newStatus || 'missing'}`;
+          }
+        }
+      }
+    }
+    return;
+  }
+
+  // First render: build full grid with data attributes
   let html = '<div class="coverage-grid">';
 
-  // Header row: empty corner + month labels
   html += '<div></div>';
   for (let m = 0; m < 12; m++) {
     html += `<div class="coverage-month-header">${MONTH_LABELS[m]}</div>`;
   }
 
-  // Data rows: one per year (show every 5th year label to save space)
   for (let y = 1988; y <= 2025; y++) {
     const showLabel = (y % 5 === 0 || y === 1988 || y === 2025);
     html += `<div class="coverage-year-label">${showLabel ? y : ''}</div>`;
@@ -2914,13 +2938,12 @@ function renderCoverageMap(coverageMap) {
     for (let m = 1; m <= 12; m++) {
       const status = yearData[String(m)] || '';
       const title = `${MONTH_LABELS[m-1]} ${y}: ${status || 'missing'}`;
-      html += `<div class="coverage-cell ${status}" title="${title}"></div>`;
+      html += `<div class="coverage-cell ${status}" data-y="${y}" data-m="${m}" title="${title}"></div>`;
     }
   }
 
   html += '</div>';
 
-  // Legend
   html += `<div class="coverage-legend">
     <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:var(--scout-color);opacity:0.7"></span>Disc.</div>
     <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:var(--courier-color);opacity:0.8"></span>Down.</div>
@@ -2929,6 +2952,7 @@ function renderCoverageMap(coverageMap) {
   </div>`;
 
   el.innerHTML = html;
+  coverageMapBuilt = true;
 }
 
 // ══════════════════════════════════════
@@ -3149,24 +3173,31 @@ function escHtml(str) {
   return div.innerHTML;
 }
 
+function sectionChanged(key, data) {
+  if (!previousState) return true;
+  return JSON.stringify(data[key]) !== JSON.stringify(previousState[key]);
+}
+
 function renderAll(data) {
   const safe = (fn, label) => { try { fn(); } catch(e) { console.error(`renderAll: ${label} failed:`, e); } };
+  // Always render: title, live badge, agents (already incremental)
   safe(() => renderTitle(data), 'title');
   safe(() => updateLiveBadge(data.timestamp), 'liveBadge');
-  safe(() => renderTopStats(data.stats), 'topStats');
   safe(() => renderAgents(data.agents), 'agents');
-  safe(() => renderPipeline(data.pipeline), 'pipeline');
-  safe(() => renderQueueDepths(data.queue_depths), 'queueDepths');
-  safe(() => renderNowProcessing(data.now_processing), 'nowProcessing');
-  safe(() => renderInbox(data.editor_inbox), 'inbox');
-  safe(() => renderLogWithFilters(data.log), 'log');
-  safe(() => renderNotableFinds(data.notable_finds), 'notableFinds');
-  safe(() => renderThroughput(data.throughput), 'throughput');
-  safe(() => renderCost(data.cost), 'cost');
-  safe(() => renderQuality(data.quality), 'quality');
-  safe(() => renderCollaborations(data.collaborations), 'collaborations');
-  safe(() => renderChalkboards(data.task_board, data.editor_ledger), 'chalkboards');
-  safe(() => renderCoverageMap(data.coverage_map), 'coverageMap');
+  // Diff-gated sections — skip render if data unchanged
+  if (sectionChanged('stats', data))           safe(() => renderTopStats(data.stats), 'topStats');
+  if (sectionChanged('pipeline', data))        safe(() => renderPipeline(data.pipeline), 'pipeline');
+  if (sectionChanged('queue_depths', data))    safe(() => renderQueueDepths(data.queue_depths), 'queueDepths');
+  if (sectionChanged('now_processing', data))  safe(() => renderNowProcessing(data.now_processing), 'nowProcessing');
+  if (sectionChanged('editor_inbox', data))    safe(() => renderInbox(data.editor_inbox), 'inbox');
+  if (sectionChanged('log', data))             safe(() => renderLogWithFilters(data.log), 'log');
+  if (sectionChanged('notable_finds', data))   safe(() => renderNotableFinds(data.notable_finds), 'notableFinds');
+  if (sectionChanged('throughput', data))       safe(() => renderThroughput(data.throughput), 'throughput');
+  if (sectionChanged('cost', data))             safe(() => renderCost(data.cost), 'cost');
+  if (sectionChanged('quality', data))          safe(() => renderQuality(data.quality), 'quality');
+  if (sectionChanged('collaborations', data))   safe(() => renderCollaborations(data.collaborations), 'collaborations');
+  if (sectionChanged('editor_ledger', data))    safe(() => renderChalkboards(data.task_board, data.editor_ledger), 'chalkboards');
+  if (sectionChanged('coverage_map', data))     safe(() => renderCoverageMap(data.coverage_map), 'coverageMap');
   previousState = data;
 }
 

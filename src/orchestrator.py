@@ -328,7 +328,7 @@ async def run_daemon(agents):
         tasks[name] = asyncio.create_task(agent.run())
 
     # Start status update loop
-    status_task = asyncio.create_task(status_loop(agents, interval=5))
+    status_task = asyncio.create_task(status_loop(agents, interval=2))
 
     # Set up signal handlers for graceful shutdown
     loop = asyncio.get_event_loop()

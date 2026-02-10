@@ -13,11 +13,12 @@ Usage:
 import json
 import os
 import sys
+import time
 from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(__file__))
 
-from db import get_supabase, count_issues_by_status
+from db import get_supabase
 
 # Total expected AD issues: 12/year from 1988 to 2025 = 38 years × 12 = 456
 TOTAL_EXPECTED_ISSUES = 456
@@ -36,45 +37,122 @@ DESIGNER_TRAINING_LOG_PATH = os.path.join(DATA_DIR, "designer_training", "traini
 DESIGNER_MODE_PATH = os.path.join(DATA_DIR, "designer_mode.json")
 OUTPUT_PATH = os.path.join(BASE_DIR, "tools", "agent-office", "status.json")
 
+# ── TTL Cache ──────────────────────────────────────────────────────────────
+# Module-level cache: { key: (expire_time, value) }
+_cache = {}
+
+
+def _cached(key, ttl, fn):
+    """Return cached value if fresh, otherwise call fn() and cache the result."""
+    now = time.monotonic()
+    entry = _cache.get(key)
+    if entry and now < entry[0]:
+        return entry[1]
+    value = fn()
+    _cache[key] = (now + ttl, value)
+    return value
+
+
+# ── Issue Rows (shared between pipeline stats and coverage map) ────────────
+def _fetch_issue_rows():
+    """Fetch all issue rows from Supabase once. Used by pipeline stats + coverage map."""
+    try:
+        sb = get_supabase()
+        result = sb.table("issues").select("id,status,year,month").execute()
+        return result.data or []
+    except Exception:
+        return []
+
 
 def read_pipeline_stats():
     """Read pipeline stats from Supabase (single source of truth).
 
     Returns a dict compatible with the old manifest_stats format, plus feature counts.
+    Also caches issue rows for reuse by build_coverage_map_from_rows().
     """
+    def _compute():
+        try:
+            issue_rows = _cached("issue_rows", 10, _fetch_issue_rows)
+
+            # Count issues by status (replaces count_issues_by_status call)
+            counts = {}
+            total = 0
+            for row in issue_rows:
+                total += 1
+                s = row.get("status") or "discovered"
+                counts[s] = counts.get(s, 0) + 1
+            counts.setdefault("downloaded", 0)
+            counts.setdefault("extracted", 0)
+            counts.setdefault("skipped_pre1988", 0)
+            counts.setdefault("error", 0)
+            counts.setdefault("no_pdf", 0)
+
+            sb = get_supabase()
+            feat_result = sb.table("features").select("id,homeowner_name,issue_id", count="exact").execute()
+            total_features = feat_result.count or len(feat_result.data)
+            with_name = sum(1 for r in feat_result.data if r.get("homeowner_name"))
+            distinct_issues = len(set(r["issue_id"] for r in feat_result.data if r.get("issue_id")))
+
+            return {
+                "total": total,
+                "downloaded": counts["downloaded"] + counts["extracted"],
+                "extracted": counts["extracted"],
+                "skipped": counts.get("skipped_pre1988", 0),
+                "errors": counts.get("error", 0),
+                "no_pdf": counts.get("no_pdf", 0),
+                "total_features": total_features,
+                "with_homeowner": with_name,
+                "null_homeowners": total_features - with_name,
+                "distinct_issues": distinct_issues,
+            }
+        except Exception:
+            return {
+                "total": 0, "downloaded": 0, "extracted": 0,
+                "skipped": 0, "errors": 0, "no_pdf": 0,
+                "total_features": 0, "with_homeowner": 0,
+                "null_homeowners": 0, "distinct_issues": 0,
+            }
+
+    return _cached("pipeline_stats", 10, _compute)
+
+
+# ── Extractions: DB-first, disk fallback ───────────────────────────────────
+def _read_extractions_from_db():
+    """Read feature list from Supabase features table instead of scanning disk."""
     try:
-        counts = count_issues_by_status()
         sb = get_supabase()
-        feat_result = sb.table("features").select("id,homeowner_name,issue_id", count="exact").execute()
-        total_features = feat_result.count or len(feat_result.data)
-        with_name = sum(1 for r in feat_result.data if r.get("homeowner_name"))
-        distinct_issues = len(set(r["issue_id"] for r in feat_result.data if r.get("issue_id")))
+        cols = "homeowner_name,designer_name,location_city,location_state,location_country,design_style,year_built,square_footage,issue_id"
+        result = sb.table("features").select(cols).execute()
+        rows = result.data or []
+
+        features = len(rows)
+        nulls = sum(1 for r in rows if not r.get("homeowner_name"))
+        distinct_issues = len(set(r["issue_id"] for r in rows if r.get("issue_id")))
+        feature_list = []
+        for r in rows:
+            feature_list.append({
+                "homeowner_name": r.get("homeowner_name"),
+                "designer_name": r.get("designer_name"),
+                "location_city": r.get("location_city"),
+                "location_state": r.get("location_state"),
+                "location_country": r.get("location_country"),
+                "design_style": r.get("design_style"),
+                "year_built": r.get("year_built"),
+                "square_footage": r.get("square_footage"),
+                "issue": r.get("issue_id", ""),
+            })
 
         return {
-            # Issue counts (replaces read_manifest)
-            "total": counts["total"],
-            "downloaded": counts["downloaded"] + counts["extracted"],  # Both have PDFs
-            "extracted": counts["extracted"],
-            "skipped": counts.get("skipped_pre1988", 0),
-            "errors": counts.get("error", 0),
-            "no_pdf": counts.get("no_pdf", 0),
-            # Feature counts (replaces read_supabase_stats)
-            "total_features": total_features,
-            "with_homeowner": with_name,
-            "null_homeowners": total_features - with_name,
-            "distinct_issues": distinct_issues,
+            "extracted": distinct_issues, "skipped": 0,
+            "features": features, "nulls": nulls,
+            "feature_list": feature_list,
         }
     except Exception:
-        return {
-            "total": 0, "downloaded": 0, "extracted": 0,
-            "skipped": 0, "errors": 0, "no_pdf": 0,
-            "total_features": 0, "with_homeowner": 0,
-            "null_homeowners": 0, "distinct_issues": 0,
-        }
+        return None
 
 
-def read_extractions():
-    """Read extraction results and return summary + feature list."""
+def _read_extractions_disk():
+    """Fallback: read extraction results from disk files."""
     if not os.path.exists(EXTRACTIONS_DIR):
         return {"extracted": 0, "skipped": 0, "features": 0, "nulls": 0, "feature_list": []}
 
@@ -121,48 +199,48 @@ def read_extractions():
     }
 
 
+def read_extractions():
+    """Read extraction results — DB-first with disk fallback. Cached 30s."""
+    def _compute():
+        db_result = _read_extractions_from_db()
+        if db_result is not None:
+            return db_result
+        return _read_extractions_disk()
+    return _cached("extractions", 30, _compute)
+
+
+# ── Cross-References ───────────────────────────────────────────────────────
 def read_xref():
-    """Read cross-reference results from Supabase (primary) or disk (fallback).
-
-    Returns same shape regardless of source:
-        {"checked": N, "matches": N, "leads": N, "verdicts": {}, "by_name": {}}
-    """
-    empty = {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
-
-    # Primary source: Supabase cross_references table
-    try:
-        from db import list_cross_references
-        xrefs = list_cross_references()
-        if xrefs:
-            return _build_xref_summary_from_rows(xrefs)
-    except Exception:
-        pass
-
-    # Fallback: local results.json
-    results_path = os.path.join(XREF_DIR, "results.json")
-    if not os.path.exists(results_path):
-        return empty
-    try:
-        with open(results_path) as f:
-            results = json.load(f)
-        return _build_xref_summary_from_rows(results)
-    except Exception:
-        return empty
+    """Read cross-reference results from Supabase (primary) or disk (fallback). Cached 30s."""
+    def _compute():
+        empty = {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
+        try:
+            from db import list_cross_references
+            xrefs = list_cross_references()
+            if xrefs:
+                return _build_xref_summary_from_rows(xrefs)
+        except Exception:
+            pass
+        results_path = os.path.join(XREF_DIR, "results.json")
+        if not os.path.exists(results_path):
+            return empty
+        try:
+            with open(results_path) as f:
+                results = json.load(f)
+            return _build_xref_summary_from_rows(results)
+        except Exception:
+            return empty
+    return _cached("xref", 30, _compute)
 
 
 def _build_xref_summary_from_rows(rows):
-    """Build xref summary dict from a list of xref rows (Supabase or disk).
-
-    Works with both Supabase cross_references rows and disk results.json entries
-    because they share the same field names.
-    """
+    """Build xref summary dict from a list of xref rows (Supabase or disk)."""
     checked = len(rows)
     matches = sum(1 for r in rows if r.get("black_book_status") == "match")
     verdicts = {}
     by_name = {}
 
     for r in rows:
-        # Apply editor override if present (Supabase rows have this field)
         effective_verdict = r.get("editor_override_verdict") or r.get("combined_verdict", "no_match")
         verdicts[effective_verdict] = verdicts.get(effective_verdict, 0) + 1
 
@@ -183,18 +261,70 @@ def _build_xref_summary_from_rows(rows):
             "verdicts": verdicts, "by_name": by_name}
 
 
-def read_dossiers():
-    """Read dossier stats from Supabase, falling back to local file.
-
-    Returns by_name dict with both connection_strength and editor_verdict.
-    """
-    empty = {"investigated": 0, "high": 0, "medium": 0, "low": 0, "by_name": {}, "confirmed_names": []}
-
-    # Primary source: Supabase
+# ── Dossiers (shared fetch for read_dossiers + _get_all_dossier_details) ──
+def _fetch_dossier_rows():
+    """Fetch dossier rows once from Supabase. Returns list or None on failure."""
     try:
         from db import list_dossiers
         dossiers = list_dossiers()
-        if dossiers:
+        return dossiers if dossiers else None
+    except Exception:
+        return None
+
+
+def _build_dossier_summary(dossiers):
+    """Build read_dossiers()-style summary from raw dossier rows."""
+    strengths = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
+    by_name = {}
+    confirmed_names = []
+    for d in dossiers:
+        s = (d.get("connection_strength") or "").upper()
+        if s in strengths:
+            strengths[s] += 1
+        name = (d.get("subject_name") or "").strip()
+        verdict = (d.get("editor_verdict") or "").upper()
+        reasoning = d.get("editor_reasoning") or ""
+        if name:
+            by_name[name.lower()] = {
+                "strength": s.lower(),
+                "editor_verdict": verdict,
+                "editor_reasoning": reasoning,
+            }
+        if verdict == "CONFIRMED" and name:
+            confirmed_names.append({
+                "name": name,
+                "strength": s.lower(),
+                "rationale": (d.get("strength_rationale") or "")[:120],
+                "editor_verdict": verdict,
+            })
+    return {
+        "investigated": len(dossiers),
+        "high": strengths["HIGH"],
+        "medium": strengths["MEDIUM"],
+        "low": strengths["LOW"],
+        "by_name": by_name,
+        "confirmed_names": confirmed_names,
+    }
+
+
+def read_dossiers():
+    """Read dossier stats from Supabase, falling back to local file. Cached 60s."""
+    empty = {"investigated": 0, "high": 0, "medium": 0, "low": 0, "by_name": {}, "confirmed_names": []}
+
+    def _compute():
+        rows = _cached("dossier_rows", 60, _fetch_dossier_rows)
+        if rows:
+            return _build_dossier_summary(rows)
+
+        # Fallback: local file
+        if not os.path.exists(DOSSIERS_DIR):
+            return empty
+        master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
+        if not os.path.exists(master_path):
+            return empty
+        try:
+            with open(master_path) as f:
+                dossiers = json.load(f)
             strengths = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
             by_name = {}
             confirmed_names = []
@@ -203,20 +333,13 @@ def read_dossiers():
                 if s in strengths:
                     strengths[s] += 1
                 name = (d.get("subject_name") or "").strip()
-                verdict = (d.get("editor_verdict") or "").upper()
-                reasoning = d.get("editor_reasoning") or ""
                 if name:
-                    by_name[name.lower()] = {
-                        "strength": s.lower(),
-                        "editor_verdict": verdict,
-                        "editor_reasoning": reasoning,
-                    }
-                if verdict == "CONFIRMED" and name:
+                    by_name[name.lower()] = {"strength": s.lower(), "editor_verdict": "", "editor_reasoning": ""}
+                if s in ("HIGH", "MEDIUM") and name:
                     confirmed_names.append({
                         "name": name,
                         "strength": s.lower(),
                         "rationale": (d.get("strength_rationale") or "")[:120],
-                        "editor_verdict": verdict,
                     })
             return {
                 "investigated": len(dossiers),
@@ -226,69 +349,45 @@ def read_dossiers():
                 "by_name": by_name,
                 "confirmed_names": confirmed_names,
             }
-    except Exception:
-        pass
+        except Exception:
+            return empty
 
-    # Fallback: local file
-    if not os.path.exists(DOSSIERS_DIR):
-        return empty
-    master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
-    if not os.path.exists(master_path):
-        return empty
+    return _cached("dossier_summary", 60, _compute)
+
+
+# ── Activity Log (shared read for log display + throughput) ────────────────
+def _read_log_lines():
+    """Read activity log file once. Returns list of lines or []."""
+    if not os.path.exists(ACTIVITY_LOG_PATH):
+        return []
     try:
-        with open(master_path) as f:
-            dossiers = json.load(f)
-        strengths = {"HIGH": 0, "MEDIUM": 0, "LOW": 0}
-        by_name = {}
-        confirmed_names = []
-        for d in dossiers:
-            s = (d.get("connection_strength") or "").upper()
-            if s in strengths:
-                strengths[s] += 1
-            name = (d.get("subject_name") or "").strip()
-            if name:
-                by_name[name.lower()] = {"strength": s.lower(), "editor_verdict": "", "editor_reasoning": ""}
-            if s in ("HIGH", "MEDIUM") and name:
-                confirmed_names.append({
-                    "name": name,
-                    "strength": s.lower(),
-                    "rationale": (d.get("strength_rationale") or "")[:120],
-                })
-        return {
-            "investigated": len(dossiers),
-            "high": strengths["HIGH"],
-            "medium": strengths["MEDIUM"],
-            "low": strengths["LOW"],
-            "by_name": by_name,
-            "confirmed_names": confirmed_names,
-        }
+        with open(ACTIVITY_LOG_PATH) as f:
+            return f.readlines()
     except Exception:
-        return empty
+        return []
+
+
+def read_activity_log_from_lines(lines, max_lines=20):
+    """Parse recent log entries from pre-read lines."""
+    entries = []
+    for line in lines[-max_lines:]:
+        parts = line.strip().split("|", 3)
+        if len(parts) == 4:
+            timestamp, agent, level, message = parts
+            if level in ("INFO", "WARN", "ERROR"):
+                time_part = timestamp.split(" ")[1] if " " in timestamp else timestamp
+                entries.append({
+                    "time": time_part,
+                    "agent": agent.title(),
+                    "event": message,
+                })
+    return entries
 
 
 def read_activity_log(max_lines=20):
     """Read recent entries from the agent activity log."""
-    if not os.path.exists(ACTIVITY_LOG_PATH):
-        return []
-
-    entries = []
-    try:
-        with open(ACTIVITY_LOG_PATH) as f:
-            lines = f.readlines()
-        for line in lines[-max_lines:]:
-            parts = line.strip().split("|", 3)
-            if len(parts) == 4:
-                timestamp, agent, level, message = parts
-                if level in ("INFO", "WARN", "ERROR"):
-                    time_part = timestamp.split(" ")[1] if " " in timestamp else timestamp
-                    entries.append({
-                        "time": time_part,
-                        "agent": agent.title(),
-                        "event": message,
-                    })
-    except Exception:
-        pass
-    return entries
+    lines = _read_log_lines()
+    return read_activity_log_from_lines(lines, max_lines)
 
 
 def read_editor_briefing():
@@ -298,7 +397,6 @@ def read_editor_briefing():
     try:
         with open(BRIEFING_PATH) as f:
             text = f.read().strip()
-        # Extract the health line
         for line in text.split("\n"):
             if "Pipeline Health:" in line:
                 return line.split("Pipeline Health:")[-1].strip()
@@ -335,9 +433,7 @@ def read_combined_inbox(max_messages=20):
             pass
 
     combined = editor_msgs + human_msgs
-    # Sort by timestamp — coerce to str to handle mixed float/str values
     combined.sort(key=lambda m: str(m.get("timestamp", m.get("time", ""))))
-    # Most recent first, capped
     return combined[-max_messages:][::-1]
 
 
@@ -353,46 +449,41 @@ def read_editor_cost():
 
 
 def read_designer_training():
-    """Read the Designer's training log and mode for real status reporting."""
-    result = {"sources_studied": 0, "patterns_learned": 0, "mode": "training", "last_updated": None}
+    """Read the Designer's training log and mode. Cached 60s."""
+    def _compute():
+        result = {"sources_studied": 0, "patterns_learned": 0, "mode": "training", "last_updated": None}
+        if os.path.exists(DESIGNER_TRAINING_LOG_PATH):
+            try:
+                with open(DESIGNER_TRAINING_LOG_PATH) as f:
+                    data = json.load(f)
+                result["sources_studied"] = data.get("sources_studied", 0)
+                result["patterns_learned"] = data.get("patterns_learned", 0)
+                result["last_updated"] = data.get("last_updated")
+            except Exception:
+                pass
+        if os.path.exists(DESIGNER_MODE_PATH):
+            try:
+                with open(DESIGNER_MODE_PATH) as f:
+                    data = json.load(f)
+                result["mode"] = data.get("mode", "training")
+            except Exception:
+                pass
+        return result
+    return _cached("designer_training", 60, _compute)
 
-    if os.path.exists(DESIGNER_TRAINING_LOG_PATH):
-        try:
-            with open(DESIGNER_TRAINING_LOG_PATH) as f:
-                data = json.load(f)
-            result["sources_studied"] = data.get("sources_studied", 0)
-            result["patterns_learned"] = data.get("patterns_learned", 0)
-            result["last_updated"] = data.get("last_updated")
-        except Exception:
-            pass
 
-    if os.path.exists(DESIGNER_MODE_PATH):
-        try:
-            with open(DESIGNER_MODE_PATH) as f:
-                data = json.load(f)
-            result["mode"] = data.get("mode", "training")
-        except Exception:
-            pass
-
-    return result
-
-
-def build_throughput(manifest_stats, extraction_stats):
-    """Calculate throughput rates and ETA based on activity log timestamps."""
+def build_throughput_from_lines(lines, manifest_stats, extraction_stats):
+    """Calculate throughput rates from pre-read log lines."""
     rates = {
         "downloads_per_hour": 0,
         "extractions_per_hour": 0,
         "eta_hours": None,
     }
 
-    # Calculate from activity log timestamps
-    if not os.path.exists(ACTIVITY_LOG_PATH):
+    if not lines:
         return rates
 
     try:
-        with open(ACTIVITY_LOG_PATH) as f:
-            lines = f.readlines()
-
         download_times = []
         extract_times = []
 
@@ -412,8 +503,6 @@ def build_throughput(manifest_stats, extraction_stats):
                 extract_times.append(ts)
 
         now = datetime.now()
-
-        # Calculate rate: events in last 2 hours
         window_hours = 2
         cutoff = now.timestamp() - (window_hours * 3600)
 
@@ -423,12 +512,10 @@ def build_throughput(manifest_stats, extraction_stats):
         rates["downloads_per_hour"] = round(recent_downloads / window_hours, 1)
         rates["extractions_per_hour"] = round(recent_extractions / window_hours, 1)
 
-        # ETA: how long until all pipeline work is done
         awaiting_download = max(0, manifest_stats["total"] - manifest_stats["downloaded"]
                                 - manifest_stats["skipped"] - manifest_stats.get("no_pdf", 0))
         awaiting_extraction = max(0, manifest_stats["downloaded"] - extraction_stats["extracted"])
 
-        # Use the slowest bottleneck for ETA
         if rates["downloads_per_hour"] > 0 and awaiting_download > 0:
             download_eta = awaiting_download / rates["downloads_per_hour"]
         else:
@@ -449,6 +536,12 @@ def build_throughput(manifest_stats, extraction_stats):
     return rates
 
 
+def build_throughput(manifest_stats, extraction_stats):
+    """Calculate throughput rates and ETA based on activity log timestamps."""
+    lines = _read_log_lines()
+    return build_throughput_from_lines(lines, manifest_stats, extraction_stats)
+
+
 def determine_agent_status(current, total, has_data):
     """Determine agent status based on progress."""
     if not has_data:
@@ -464,7 +557,6 @@ def build_collaborations(manifest_stats, extraction_stats, xref_stats):
     """Detect handoff events between agents based on pipeline state."""
     collaborations = []
 
-    # Courier → Reader: when there are downloads that haven't been extracted yet
     unextracted = manifest_stats["downloaded"] - extraction_stats["extracted"]
     if unextracted > 0 and extraction_stats["extracted"] > 0:
         collaborations.append({
@@ -474,7 +566,6 @@ def build_collaborations(manifest_stats, extraction_stats, xref_stats):
             "label": f"{unextracted} PDFs to extract"
         })
 
-    # Reader → Detective: when there are features that haven't been cross-referenced yet
     unchecked = extraction_stats["features"] - xref_stats["checked"]
     if unchecked > 0 and xref_stats["checked"] > 0:
         collaborations.append({
@@ -484,7 +575,6 @@ def build_collaborations(manifest_stats, extraction_stats, xref_stats):
             "label": f"{unchecked} names to check"
         })
 
-    # Scout → Courier: when there are discovered issues not yet downloaded
     undownloaded = manifest_stats["total"] - manifest_stats["downloaded"] - manifest_stats["skipped"] - manifest_stats["no_pdf"]
     if undownloaded > 0 and manifest_stats["downloaded"] > 0:
         collaborations.append({
@@ -497,20 +587,19 @@ def build_collaborations(manifest_stats, extraction_stats, xref_stats):
     return collaborations
 
 
-def build_log(manifest_stats, extraction_stats, xref_stats):
+def build_log(manifest_stats, extraction_stats, xref_stats, log_lines=None):
     """Build a recent activity log from available data.
 
-    Prioritizes real timestamped events from agent_activity.log.
-    Only falls back to pipeline summary if no real log entries exist.
-    When the orchestrator is running, it replaces this entirely with live log data.
+    When log_lines are provided, uses them instead of re-reading the file.
     """
-    # Real activity log entries always take priority
-    live_entries = read_activity_log(max_lines=20)
+    if log_lines is not None:
+        live_entries = read_activity_log_from_lines(log_lines, max_lines=20)
+    else:
+        live_entries = read_activity_log(max_lines=20)
+
     if live_entries:
         return live_entries
 
-    # Fallback: pipeline summary (only when no activity log exists)
-    # These are marked with "--:--" to distinguish from real timestamps
     log = []
     if manifest_stats["total"] > 0:
         log.append({"time": "--:--", "agent": "Scout",
@@ -668,16 +757,11 @@ CELEBRITY_NAMES = [
 
 
 def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, researcher_live_task=""):
-    """Build notable finds directly from xref leads — guarantees 1:1 match with XRef Leads stat.
-
-    Iterates xref by_name (deduped, latest verdict per name) and enriches
-    with feature_list metadata where available.
-    """
+    """Build notable finds directly from xref leads — guarantees 1:1 match with XRef Leads stat."""
     finds = []
     by_name = xref_stats.get("by_name", {})
     dossier_by_name = (dossier_stats or {}).get("by_name", {})
 
-    # Parse Researcher's current task to find who's being investigated right now
     investigating_now = ""
     if researcher_live_task:
         lt = researcher_live_task.lower()
@@ -686,26 +770,21 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
         elif "dossier:" in lt:
             investigating_now = researcher_live_task.split("Dossier: ")[-1].split(" (")[0].lower().strip()
 
-    # Build a lookup from feature_list for enrichment (issue, location)
     feature_by_name = {}
     for feat in extraction_stats.get("feature_list", []):
         n = feat.get("homeowner_name")
         if n:
             feature_by_name[n.lower().strip()] = feat
 
-    # Iterate xref leads directly — same source as the leads count
     for name_key, xref_entry in by_name.items():
         verdict = xref_entry["verdict"]
         bb_status = xref_entry.get("bb_status", "no_match")
 
-        # Only include leads: non-no_match verdict OR BB match
         if verdict == "no_match" and bb_status != "match":
             continue
 
-        # Use original_name from xref if available, else title-case the key
         display_name = xref_entry.get("original_name") or name_key.title()
 
-        # Enrich with feature data if available
         feat = feature_by_name.get(name_key, {})
         location_parts = [
             feat.get("location_city"),
@@ -714,13 +793,11 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
         ]
         location = ", ".join(p for p in location_parts if p)
 
-        # Determine status label
         if verdict not in ("no_match", None):
             status = verdict
         else:
-            status = "bb_match"  # BB-only match
+            status = "bb_match"
 
-        # Determine research status and editor verdict
         dossier_info = dossier_by_name.get(name_key)
         editor_verdict = None
         editor_reasoning = None
@@ -751,7 +828,6 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
             "editor_reasoning": editor_reasoning,
         })
 
-    # Sort by detective verdict severity
     def sort_key(f):
         verdict_order = {"confirmed_match": 0, "likely_match": 1, "possible_match": 2, "needs_review": 3, "bb_match": 4, "pending": 5}
         return (verdict_order.get(f["status"], 6),)
@@ -761,139 +837,124 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
 
 
 def build_quality(extraction_stats):
-    """Compute field completion rates across all features."""
-    feature_list = extraction_stats.get("feature_list", [])
-    total = len(feature_list)
-    if total == 0:
-        return {"total_features": 0, "fields": []}
+    """Compute field completion rates across all features. Cached 30s."""
+    def _compute():
+        feature_list = extraction_stats.get("feature_list", [])
+        total = len(feature_list)
+        if total == 0:
+            return {"total_features": 0, "fields": []}
 
-    fields = [
-        ("Names", "homeowner_name"),
-        ("Location", "location_city"),
-        ("Designer", "designer_name"),
-        ("Year Built", "year_built"),
-        ("Style", "design_style"),
-        ("Sq Footage", "square_footage"),
-    ]
-    result = []
-    for label, key in fields:
-        filled = sum(1 for f in feature_list if f.get(key))
-        pct = round(100 * filled / total)
-        result.append({"label": label, "filled": filled, "total": total, "pct": pct})
+        fields = [
+            ("Names", "homeowner_name"),
+            ("Location", "location_city"),
+            ("Designer", "designer_name"),
+            ("Year Built", "year_built"),
+            ("Style", "design_style"),
+            ("Sq Footage", "square_footage"),
+        ]
+        result = []
+        for label, key in fields:
+            filled = sum(1 for f in feature_list if f.get(key))
+            pct = round(100 * filled / total)
+            result.append({"label": label, "filled": filled, "total": total, "pct": pct})
 
-    return {"total_features": total, "fields": result}
+        return {"total_features": total, "fields": result}
+    return _cached("quality", 30, _compute)
 
 
 def read_editor_ledger():
-    """Read the EditorLedger and build a summary for the dashboard.
+    """Read the EditorLedger and build a summary for the dashboard. Cached 15s."""
+    def _compute():
+        ledger_path = os.path.join(DATA_DIR, "editor_ledger.json")
+        empty = {"stuck": [], "exhausted": [], "recent_failures": [],
+                 "total_keys": 0, "total_failures": 0, "total_successes": 0}
 
-    Returns:
-        {
-            "stuck": [ { "key": "...", "failures": N, "last_error": "...", "agent": "...", "task": "..." } ],
-            "exhausted": [ { "key": "...", "failures": N, "last_error": "...", "agent": "...", "task": "..." } ],
-            "recent_failures": [ { "key": "...", "agent": "...", "error": "...", "time": "..." } ],
-            "total_keys": N,
-            "total_failures": N,
-            "total_successes": N,
-        }
-    """
-    ledger_path = os.path.join(DATA_DIR, "editor_ledger.json")
-    empty = {"stuck": [], "exhausted": [], "recent_failures": [],
-             "total_keys": 0, "total_failures": 0, "total_successes": 0}
+        if not os.path.exists(ledger_path):
+            return empty
 
-    if not os.path.exists(ledger_path):
-        return empty
+        try:
+            with open(ledger_path) as f:
+                data = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            return empty
 
-    try:
-        with open(ledger_path) as f:
-            data = json.load(f)
-    except (json.JSONDecodeError, OSError):
-        return empty
+        max_failures = 3
+        stuck = []
+        exhausted = []
+        all_failures = []
+        total_failures = 0
+        total_successes = 0
 
-    max_failures = 3
-    stuck = []
-    exhausted = []
-    all_failures = []
-    total_failures = 0
-    total_successes = 0
+        for key, entries in data.items():
+            failures = [e for e in entries if not e.get("success")]
+            successes = [e for e in entries if e.get("success")]
+            total_failures += len(failures)
+            total_successes += len(successes)
 
-    for key, entries in data.items():
-        failures = [e for e in entries if not e.get("success")]
-        successes = [e for e in entries if e.get("success")]
-        total_failures += len(failures)
-        total_successes += len(successes)
+            if not failures:
+                continue
 
-        if not failures:
-            continue
-
-        last_fail = failures[-1]
-        item = {
-            "key": key,
-            "failures": len(failures),
-            "last_error": (last_fail.get("error") or last_fail.get("note", ""))[:80],
-            "agent": last_fail.get("agent", ""),
-            "task": last_fail.get("task", ""),
-        }
-
-        if len(failures) >= max_failures:
-            exhausted.append(item)
-        else:
-            stuck.append(item)
-
-        for f in failures:
-            all_failures.append({
+            last_fail = failures[-1]
+            item = {
                 "key": key,
-                "agent": f.get("agent", ""),
-                "error": (f.get("error") or f.get("note", ""))[:60],
-                "time": f.get("time", ""),
-            })
+                "failures": len(failures),
+                "last_error": (last_fail.get("error") or last_fail.get("note", ""))[:80],
+                "agent": last_fail.get("agent", ""),
+                "task": last_fail.get("task", ""),
+            }
 
-    # Sort: most failures first for stuck/exhausted
-    stuck.sort(key=lambda x: -x["failures"])
-    exhausted.sort(key=lambda x: -x["failures"])
+            if len(failures) >= max_failures:
+                exhausted.append(item)
+            else:
+                stuck.append(item)
 
-    # Recent failures: sorted by time, most recent first
-    all_failures.sort(key=lambda x: x["time"], reverse=True)
+            for f in failures:
+                all_failures.append({
+                    "key": key,
+                    "agent": f.get("agent", ""),
+                    "error": (f.get("error") or f.get("note", ""))[:60],
+                    "time": f.get("time", ""),
+                })
 
-    return {
-        "stuck": stuck[:10],
-        "exhausted": exhausted[:10],
-        "recent_failures": all_failures[:8],
-        "total_keys": len(data),
-        "total_failures": total_failures,
-        "total_successes": total_successes,
-    }
+        stuck.sort(key=lambda x: -x["failures"])
+        exhausted.sort(key=lambda x: -x["failures"])
+        all_failures.sort(key=lambda x: x["time"], reverse=True)
+
+        return {
+            "stuck": stuck[:10],
+            "exhausted": exhausted[:10],
+            "recent_failures": all_failures[:8],
+            "total_keys": len(data),
+            "total_failures": total_failures,
+            "total_successes": total_successes,
+        }
+    return _cached("editor_ledger", 15, _compute)
 
 
 def _get_memory_count():
-    """Get total episodic memory episode count. Returns 0 on failure."""
-    try:
-        from agents.memory import get_memory
-        mem = get_memory()
-        return mem.count() if mem else 0
-    except Exception:
-        return 0
+    """Get total episodic memory episode count. Cached 60s."""
+    def _compute():
+        try:
+            from agents.memory import get_memory
+            mem = get_memory()
+            return mem.count() if mem else 0
+        except Exception:
+            return 0
+    return _cached("memory_count", 60, _compute)
 
 
 def build_coverage_map():
-    """Build a year×month grid showing pipeline status for each AD issue.
+    """Build a year*month grid showing pipeline status. Uses cached issue rows. Cached 30s."""
+    def _compute():
+        coverage = {}
+        for year in range(1988, 2026):
+            coverage[str(year)] = {str(m): None for m in range(1, 13)}
 
-    Returns dict: { "1988": {"1": "extracted", "2": null, ...}, ... }
-    Status priority: extracted > downloaded > discovered > null
-    """
-    coverage = {}
-    # Initialize all months as null (1988-2025)
-    for year in range(1988, 2026):
-        coverage[str(year)] = {str(m): None for m in range(1, 13)}
-
-    try:
-        sb = get_supabase()
-        result = sb.table("issues").select("year,month,status").execute()
-        # Status priority for when multiple issues share a month
+        issue_rows = _cached("issue_rows", 10, _fetch_issue_rows)
         priority = {"extracted": 4, "downloaded": 3, "discovered": 2,
                     "skipped_pre1988": 1, "error": 1, "no_pdf": 1,
                     "extraction_error": 2}
-        for row in result.data:
+        for row in issue_rows:
             y = row.get("year")
             m = row.get("month")
             s = row.get("status", "discovered")
@@ -903,50 +964,47 @@ def build_coverage_map():
             mk = str(m)
             if yk not in coverage or mk not in coverage.get(yk, {}):
                 continue
-            # Keep the highest-priority status
             existing = coverage[yk][mk]
             if existing is None or priority.get(s, 0) > priority.get(existing, 0):
                 coverage[yk][mk] = s
-    except Exception:
-        pass
 
-    return coverage
+        return coverage
+    return _cached("coverage_map", 30, _compute)
 
 
 def _get_recent_memories(limit=20):
-    """Get recent episodic memory episodes for the Memories popup."""
-    path = os.path.join(DATA_DIR, "agent_memory", "episodes.json")
-    if not os.path.exists(path):
-        return []
-    try:
-        with open(path) as f:
-            episodes = json.load(f)
-        recent = episodes[-limit:]
-        result = []
-        for ep in reversed(recent):  # Newest first
-            ts = ep.get("timestamp", 0)
-            time_str = datetime.fromtimestamp(ts).strftime("%I:%M %p") if ts else "?"
-            result.append({
-                "agent": ep.get("agent", "?"),
-                "text": (ep.get("text", "")[:100] + "...") if len(ep.get("text", "")) > 100 else ep.get("text", ""),
-                "outcome": ep.get("outcome", "?"),
-                "time": time_str,
-            })
-        return result
-    except Exception:
-        return []
+    """Get recent episodic memory episodes. Cached 60s."""
+    def _compute():
+        path = os.path.join(DATA_DIR, "agent_memory", "episodes.json")
+        if not os.path.exists(path):
+            return []
+        try:
+            with open(path) as f:
+                episodes = json.load(f)
+            recent = episodes[-limit:]
+            result = []
+            for ep in reversed(recent):
+                ts = ep.get("timestamp", 0)
+                time_str = datetime.fromtimestamp(ts).strftime("%I:%M %p") if ts else "?"
+                result.append({
+                    "agent": ep.get("agent", "?"),
+                    "text": (ep.get("text", "")[:100] + "...") if len(ep.get("text", "")) > 100 else ep.get("text", ""),
+                    "outcome": ep.get("outcome", "?"),
+                    "time": time_str,
+                })
+            return result
+        except Exception:
+            return []
+    return _cached("recent_memories", 60, _compute)
 
 
 def _get_all_dossier_details():
-    """Get all dossiers with strength + rationale + editor verdict for the Dossiers popup."""
-    details = []
-
-    # Primary: Supabase
-    try:
-        from db import list_dossiers
-        dossiers = list_dossiers()
-        if dossiers:
-            for d in dossiers:
+    """Get all dossiers for popup. Reuses cached dossier rows. Cached 60s."""
+    def _compute():
+        rows = _cached("dossier_rows", 60, _fetch_dossier_rows)
+        if rows:
+            details = []
+            for d in rows:
                 name = (d.get("subject_name") or "").strip()
                 if not name:
                     continue
@@ -958,38 +1016,38 @@ def _get_all_dossier_details():
                     "editor_verdict": (d.get("editor_verdict") or "").upper() or None,
                     "editor_reasoning": (d.get("editor_reasoning") or "")[:150] or None,
                 })
-            # Sort: CONFIRMED first, then by strength descending
             strength_order = {"high": 0, "medium": 1, "low": 2, "coincidence": 3, "unknown": 4}
             details.sort(key=lambda d: (
                 0 if d.get("editor_verdict") == "CONFIRMED" else 1,
                 strength_order.get(d["strength"], 5),
             ))
             return details
-    except Exception:
-        pass
 
-    # Fallback: local file
-    master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
-    if os.path.exists(master_path):
-        try:
-            with open(master_path) as f:
-                dossiers = json.load(f)
-            for d in dossiers:
-                name = (d.get("subject_name") or "").strip()
-                if not name:
-                    continue
-                strength = (d.get("connection_strength") or "").upper()
-                details.append({
-                    "name": name,
-                    "strength": strength.lower() if strength else "unknown",
-                    "strength_rationale": (d.get("strength_rationale") or "")[:150],
-                    "editor_verdict": None,
-                    "editor_reasoning": None,
-                })
-        except Exception:
-            pass
+        # Fallback: local file
+        master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
+        if os.path.exists(master_path):
+            try:
+                with open(master_path) as f:
+                    dossiers = json.load(f)
+                details = []
+                for d in dossiers:
+                    name = (d.get("subject_name") or "").strip()
+                    if not name:
+                        continue
+                    strength = (d.get("connection_strength") or "").upper()
+                    details.append({
+                        "name": name,
+                        "strength": strength.lower() if strength else "unknown",
+                        "strength_rationale": (d.get("strength_rationale") or "")[:150],
+                        "editor_verdict": None,
+                        "editor_reasoning": None,
+                    })
+                return details
+            except Exception:
+                pass
 
-    return details
+        return []
+    return _cached("dossier_details", 60, _compute)
 
 
 def generate_status():
@@ -999,7 +1057,9 @@ def generate_status():
     xref_stats = read_xref()
     dossier_stats = read_dossiers()
 
-    # Count confirmed Epstein associates — only those Miranda has CONFIRMED
+    # Read log lines once — used by both log display and throughput
+    log_lines = _read_log_lines()
+
     confirmed_names_list = dossier_stats.get("confirmed_names", [])
     confirmed_associates = len(confirmed_names_list)
 
@@ -1075,7 +1135,6 @@ def generate_status():
     if designer_training["patterns_learned"] > 0:
         mode_label = "Training" if designer_training["mode"] == "training" else "Creating"
         designer_msg = f"{mode_label}: {designer_training['patterns_learned']} patterns from {designer_training['sources_studied']} sources"
-        # Consider "working" if training log was updated recently (within 30 min)
         designer_status = "idle"
         if designer_training["last_updated"]:
             try:
@@ -1089,7 +1148,7 @@ def generate_status():
         designer_msg = "Training mode \u2014 studying design patterns"
 
     cost_data = read_editor_cost()
-    throughput = build_throughput(manifest_stats, extraction_stats)
+    throughput = build_throughput_from_lines(log_lines, manifest_stats, extraction_stats)
 
     status = {
         "title": "AD-EPSTEIN INDEX \u2014 AGENT OFFICE",
@@ -1181,7 +1240,7 @@ def generate_status():
              "popup_type": "memories", "details": _get_recent_memories()},
         ],
         "collaborations": build_collaborations(manifest_stats, extraction_stats, xref_stats),
-        "log": build_log(manifest_stats, extraction_stats, xref_stats),
+        "log": build_log(manifest_stats, extraction_stats, xref_stats, log_lines=log_lines),
         "pipeline": build_pipeline(manifest_stats, extraction_stats, xref_stats, dossier_stats),
         "queue_depths": build_queue_depths(manifest_stats, extraction_stats, xref_stats),
         "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_stats),
