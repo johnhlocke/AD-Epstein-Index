@@ -62,6 +62,31 @@ class DesignerAgent(Agent):
         self._transition_escalated = False
         self._load_progress()
 
+    def _load_personality(self):
+        """Override: Sable's personality lives in docs/design-rules.md (single source of truth)."""
+        if self._personality is not None:
+            return self._personality
+        if os.path.exists(DESIGN_RULES_PATH):
+            try:
+                with open(DESIGN_RULES_PATH) as f:
+                    content = f.read()
+                # Extract the personality section
+                marker = "## Sable — Design Agent Personality"
+                idx = content.find(marker)
+                if idx != -1:
+                    start = idx + len(marker)
+                    # Find the next --- or ## that isn't part of the personality
+                    end = content.find("\n---", start)
+                    if end == -1:
+                        end = len(content)
+                    self._personality = content[start:end].strip()
+                    return self._personality
+            except Exception:
+                pass
+        # Fallback to skills file
+        self._personality = ""
+        return super()._load_personality()
+
     def _load_progress(self):
         """Load training progress from disk."""
         if os.path.exists(TRAINING_LOG_PATH):
@@ -336,6 +361,27 @@ class DesignerAgent(Agent):
         self._current_task = f"Studying {source_type}: {source_ref[:40]}..."
         self.log(f"Training on {source_type}: {source_ref}")
 
+        # Narrate the start of training in Sable's voice
+        try:
+            self.narrate(f"Starting to study {source_type} source: {source_ref[:50]}")
+        except Exception:
+            pass
+
+        # Recall what we learned from similar sources before (episodic memory)
+        past_learnings = ""
+        try:
+            episodes = self.recall_episodes(
+                f"design patterns from {source_type} {source_ref[:60]}",
+                task_type="training",
+                n=3,
+            )
+            if episodes:
+                past_learnings = "\n\nRelevant past learnings from your memory:\n"
+                for ep in episodes:
+                    past_learnings += f"- {ep['text'][:200]}\n"
+        except Exception:
+            pass
+
         # Explore real data shapes to include in training context
         data_context = self._explore_data_shapes()
 
@@ -343,7 +389,7 @@ class DesignerAgent(Agent):
         knowledge = self._load_knowledge()
         knowledge_summary = self._summarize_knowledge(knowledge)
 
-        prompt = self._build_training_prompt(source_type, source_ref, skills, knowledge_summary, data_context)
+        prompt = self._build_training_prompt(source_type, source_ref, skills, knowledge_summary, data_context, past_learnings)
 
         # Check for empty local source before calling CLI
         if source_type == "local" and "No images found" in prompt:
@@ -384,6 +430,27 @@ class DesignerAgent(Agent):
                                      {"consecutive_failures": self._consecutive_failures,
                                       "recommended_strategy": decision.get("strategy", "unknown")})
             self._current_task = f"Training failed — {source_ref[:30]} ({decision.get('strategy', '?')})"
+            # Narrate the failure in Sable's voice
+            try:
+                self.narrate(
+                    f"Couldn't study {source_type} source '{source_ref[:40]}'. "
+                    f"Problem: {decision.get('diagnosis', 'unknown')[:60]}. "
+                    f"Going to {decision.get('strategy', 'try again later')}."
+                )
+            except Exception:
+                pass
+            # Remember this failure so we can learn from it
+            try:
+                self.commit_episode(
+                    "training",
+                    f"Failed to study {source_type} source '{source_ref[:60]}'. "
+                    f"Diagnosis: {decision.get('diagnosis', 'unknown')[:100]}. "
+                    f"Strategy: {decision.get('strategy', 'unknown')}",
+                    "failure",
+                    {"source_type": source_type, "source_ref": source_ref[:100]},
+                )
+            except Exception:
+                pass
             return False
 
         # Reset consecutive failures on success
@@ -399,6 +466,30 @@ class DesignerAgent(Agent):
         self._sources_studied += 1
         self._save_progress()
 
+        # Commit learnings to episodic memory (the 384-dim vector constellation)
+        # This makes design knowledge searchable by semantic similarity and
+        # visible to other agents' curiosity exploration
+        try:
+            learned_items = []
+            for key in ["patterns", "color_palettes", "layout_ideas", "typography", "inspirations"]:
+                for item in (learnings or {}).get(key, []):
+                    learned_items.append(f"{key}: {item}")
+            if learned_items:
+                episode_text = (
+                    f"Studied {source_type} source '{source_ref[:60]}'. "
+                    f"Learned {len(learned_items)} design patterns: "
+                    + "; ".join(learned_items[:5])  # First 5 for the embedding
+                )
+                self.commit_episode(
+                    "training",
+                    episode_text,
+                    "success",
+                    {"source_type": source_type, "source_ref": source_ref[:100],
+                     "patterns_count": len(learned_items)},
+                )
+        except Exception:
+            pass
+
         # Check if ready for mode transition
         total_sources = len(self._parse_sources(skills))
         if (not self._transition_escalated
@@ -412,6 +503,34 @@ class DesignerAgent(Agent):
 
         self._current_task = f"Learned from {source_type} ({self._patterns_learned} patterns total)"
         self.log(f"Training complete: {source_type} — {self._patterns_learned} patterns in knowledge base")
+
+        # Post bulletin about new patterns learned
+        try:
+            learned_count = sum(len(v) for v in (learnings or {}).values() if isinstance(v, list))
+            if learned_count > 0:
+                self.post_bulletin(
+                    f"Design training: learned {learned_count} patterns from {source_type} ({self._patterns_learned} total)",
+                    tags=["design", "training", source_type],
+                )
+        except Exception:
+            pass
+
+        # Narrate what was learned in Sable's voice
+        try:
+            learned_summary = []
+            for key in ["patterns", "layout_ideas", "color_palettes", "typography", "inspirations"]:
+                items = (learnings or {}).get(key, [])
+                if items:
+                    learned_summary.append(f"{key.replace('_', ' ')}: {items[0][:60]}")
+            narration_facts = (
+                f"Just finished studying {source_type} source '{source_ref[:40]}'. "
+                f"Found {sum(len(v) for v in (learnings or {}).values() if isinstance(v, list))} new patterns. "
+                + (f"Highlights: {'; '.join(learned_summary[:2])}" if learned_summary else "")
+            )
+            self.narrate(narration_facts)
+        except Exception:
+            pass
+
         return True
 
     async def _creation_cycle(self, skills, task=None):
@@ -440,6 +559,25 @@ class DesignerAgent(Agent):
 
         self._current_task = f"Generating {spec_type} design spec..."
         self.log(f"Generating design spec: {spec_type}")
+
+        # Check pipeline state to inform design decisions
+        try:
+            world = self.get_world_state()
+            if world:
+                pipeline_context = (
+                    f"Pipeline: {world.get('total_issues', '?')} issues, "
+                    f"{world.get('total_features', '?')} features, "
+                    f"bottleneck: {world.get('bottleneck', 'unknown')}"
+                )
+                self.log(f"World state: {pipeline_context}")
+        except Exception:
+            pass
+
+        # Narrate the start of creation in Sable's voice
+        try:
+            self.narrate(f"Starting to generate the {spec_type} design spec using {sum(len(v) for v in self._load_knowledge().values() if isinstance(v, list))} accumulated patterns")
+        except Exception:
+            pass
 
         knowledge = self._load_knowledge()
         knowledge_summary = self._summarize_knowledge(knowledge)
@@ -495,6 +633,33 @@ class DesignerAgent(Agent):
         self._current_task = f"Wrote {spec_type}.json ({len(spec)} keys)"
         self.log(f"Design spec written: {spec_path}")
 
+        # Narrate the creation success in Sable's voice
+        try:
+            self.narrate(f"Wrote the {spec_type} design spec — {len(spec)} keys, informed by all my training patterns. This one feels solid.")
+        except Exception:
+            pass
+
+        # Commit creation success to memory
+        try:
+            self.commit_episode(
+                "generate_design_spec",
+                f"Generated {spec_type} design spec with {len(spec)} keys. "
+                f"Used {sum(len(v) for v in knowledge.values() if isinstance(v, list))} accumulated patterns.",
+                "success",
+                {"spec_type": spec_type, "keys": list(spec.keys())[:10]},
+            )
+        except Exception:
+            pass
+
+        # Post bulletin about new spec
+        try:
+            self.post_bulletin(
+                f"Design spec generated: {spec_type}.json ({len(spec)} keys). Ready for frontend integration.",
+                tags=["design", "spec", spec_type],
+            )
+        except Exception:
+            pass
+
         # Report success to Editor
         if task_id:
             await self.outbox.put(TaskResult(
@@ -549,7 +714,7 @@ class DesignerAgent(Agent):
         summary = f"{len(all_images)} images across {len(subfolders)} subfolders: {', '.join(sorted(subfolders)[:10])}"
         return sample, summary
 
-    def _build_training_prompt(self, source_type, source_ref, skills, knowledge_summary, data_context=""):
+    def _build_training_prompt(self, source_type, source_ref, skills, knowledge_summary, data_context="", past_learnings=""):
         """Build a prompt for Claude Code to study a source."""
 
         if source_type == "websites":
@@ -606,7 +771,8 @@ Context — the project's design goals:
 Real Data Context — the actual data you'll be designing for:
 {data_context}
 
-Focus on patterns relevant to: data visualization, investigative journalism, interactive timelines, searchable databases, and name/connection mapping."""
+Focus on patterns relevant to: data visualization, investigative journalism, interactive timelines, searchable databases, and name/connection mapping.
+{past_learnings}"""
 
     def _build_spec_prompt(self, spec_type, knowledge_summary, data_context, design_rules):
         """Build a prompt for generating a JSON design spec."""

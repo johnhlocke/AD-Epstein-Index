@@ -24,3 +24,13 @@ data/
 
 # Playwright MCP
 .playwright-mcp/
+
+# Scratch/temp files (browser snapshots, Photoshop)
+*.psd
+context.json
+*-snapshot.md
+page-state.md
+viewer-*.md
+viewer_*.md
+current-viewer-state.md
+pudding-article.md

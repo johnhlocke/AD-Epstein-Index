@@ -145,6 +145,8 @@ class Agent(ABC):
 
         # Personality-driven speech
         self._speech = ""              # Latest narrated speech bubble text
+        self._speech_time = 0.0        # When speech was last set (for expiry)
+        self._speech_ttl = 90          # Speech bubble disappears after 90 seconds
         self._personality = None       # Cached personality from skills file
         self._agent_name = None        # Character name from skills file (e.g. "Arthur")
         self._last_idle_chatter = 0.0  # Timestamp of last idle narration
@@ -394,6 +396,7 @@ class Agent(ABC):
         personality = self._load_personality()
         if not personality:
             self._speech = facts
+            self._speech_time = _time.time()
             return facts
         try:
             import anthropic
@@ -411,10 +414,12 @@ class Agent(ABC):
             )
             text = response.content[0].text.strip()
             self._speech = text
+            self._speech_time = _time.time()
             return text
         except Exception as e:
             self.log(f"Narrate failed: {e}", level="DEBUG")
             self._speech = facts
+            self._speech_time = _time.time()
             return facts
 
     def _load_agent_name(self):
@@ -470,6 +475,7 @@ class Agent(ABC):
             )
             text = response.content[0].text.strip()
             self._speech = text
+            self._speech_time = _time.time()
         except Exception:
             pass  # Silently fail — idle chatter is non-critical
 
@@ -1104,7 +1110,7 @@ Respond with JSON only:
             "id": self.name,
             "status": status,
             "message": self._current_task,
-            "speech": self._speech or None,
+            "speech": self._speech if (self._speech and _time.time() - self._speech_time < self._speech_ttl) else None,
             "active": self._active,
             "paused": self.is_paused,
             "cycles": self._cycles,

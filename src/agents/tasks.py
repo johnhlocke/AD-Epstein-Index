@@ -9,6 +9,7 @@ The EditorLedger tracks all task attempts for retry logic and debugging.
 import json
 import os
 import uuid
+from collections import deque
 from dataclasses import dataclass, field, asdict
 from datetime import datetime
 from typing import Optional
@@ -132,3 +133,58 @@ class EditorLedger:
         for f in failures[-3:]:  # Last 3 failures
             lines.append(f"  - {f['agent']}/{f['task']}: {f.get('error') or f.get('note', 'unknown')}")
         return f"Previous failures ({len(failures)} total):\n" + "\n".join(lines)
+
+
+@dataclass
+class PlannedTask:
+    """A task sitting in an agent's ready queue, waiting for dispatch."""
+    task: Task
+    agent: str
+    created_at: float = field(default_factory=lambda: __import__('time').time())
+    source: str = "plan"  # "plan" or "cascade"
+
+
+class ExecutionPlan:
+    """Per-agent ready queues. NOT a dependency DAG.
+
+    Dependencies are implicit in Supabase status:
+    - Courier queue: issues with status="discovered"
+    - Reader queue: issues with status="downloaded"
+
+    The 30s cycle refreshes queues. Between cycles, agents draw
+    from their queue immediately after finishing a task.
+    """
+
+    def __init__(self):
+        self._queues: dict[str, deque] = {}
+
+    def enqueue(self, agent, task, source="plan"):
+        """Add a task to an agent's ready queue. Deduplicates by task key."""
+        if agent not in self._queues:
+            self._queues[agent] = deque()
+        key = self._task_key(task)
+        for pt in self._queues[agent]:
+            if self._task_key(pt.task) == key:
+                return
+        self._queues[agent].append(PlannedTask(task=task, agent=agent, source=source))
+
+    def next_for(self, agent):
+        """Pop and return the next ready task, or None."""
+        q = self._queues.get(agent)
+        if not q:
+            return None
+        return q.popleft().task
+
+    def queue_depth(self, agent):
+        return len(self._queues.get(agent, []))
+
+    def clear_agent(self, agent):
+        self._queues[agent] = deque()
+
+    def summary(self):
+        return {a: len(q) for a, q in self._queues.items() if q}
+
+    def _task_key(self, task):
+        p = task.params
+        ident = p.get("identifier") or p.get("name") or str(p.get("missing_months", ""))
+        return f"{task.type}:{ident}"

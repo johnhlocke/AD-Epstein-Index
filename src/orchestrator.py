@@ -254,11 +254,26 @@ def process_commands(agents):
 
 
 async def status_loop(agents, interval=5):
-    """Periodically write status.json and process dashboard commands."""
+    """Periodically write status.json and process dashboard commands.
+
+    If an Editor is running, its _status_refresh event triggers an immediate
+    refresh (e.g., after committing features to Supabase) instead of waiting
+    for the full 5-second interval.
+    """
+    editor = agents.get("editor")
+    refresh_event = getattr(editor, '_status_refresh', None) if editor else None
     while True:
         process_commands(agents)
         await write_status(agents)
-        await asyncio.sleep(interval)
+
+        if refresh_event:
+            try:
+                await asyncio.wait_for(refresh_event.wait(), timeout=interval)
+                refresh_event.clear()
+            except asyncio.TimeoutError:
+                pass  # Normal 5s tick
+        else:
+            await asyncio.sleep(interval)
 
 
 async def run_single_pass(agents):

@@ -112,163 +112,168 @@ class ReaderAgent(Agent):
             if 'text_extraction' in briefing.lower() and 'scanned' in briefing.lower():
                 recovery_context = {"strategy": "text_extraction", "source": "memory"}
 
-        for attempt in range(max_attempts):
-            try:
-                if task.type == "reextract_features":
-                    strategy = task.params.get("strategy", "wider_scan")
-                    old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
-                    backup_path = old_path + ".backup"
-                    if os.path.exists(old_path):
-                        shutil.copy2(old_path, backup_path)
-                        os.remove(old_path)
+        try:
+            for attempt in range(max_attempts):
+                try:
+                    if task.type == "reextract_features":
+                        strategy = task.params.get("strategy", "wider_scan")
+                        old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                        backup_path = old_path + ".backup"
+                        if os.path.exists(old_path):
+                            shutil.copy2(old_path, backup_path)
+                            os.remove(old_path)
 
-                    from extract_features import process_issue_reextract
-                    output_path = await asyncio.to_thread(process_issue_reextract, issue, strategy)
-                else:
-                    from extract_features import process_issue
-                    output_path = await asyncio.to_thread(process_issue, issue)
+                        from extract_features import process_issue_reextract
+                        output_path = await asyncio.to_thread(process_issue_reextract, issue, strategy)
+                    else:
+                        from extract_features import process_issue
+                        output_path = await asyncio.to_thread(process_issue, issue)
 
-                if not output_path:
-                    last_error = "process_issue returned None"
-                    raise RuntimeError(last_error)
+                    if not output_path:
+                        last_error = "process_issue returned None"
+                        raise RuntimeError(last_error)
 
-                # Read the extraction output
-                with open(output_path) as f:
-                    data = json.load(f)
+                    # Read the extraction output
+                    with open(output_path) as f:
+                        data = json.load(f)
 
-                features = data.get("features", [])
-                quality_metrics = {
-                    "feature_count": len(features),
-                    "null_homeowner_count": sum(
-                        1 for f in features
-                        if not f.get("homeowner_name") or f["homeowner_name"] in ("null", "None")
-                    ),
-                }
-                if len(features) > 0:
-                    quality_metrics["null_homeowner_rate"] = round(
-                        quality_metrics["null_homeowner_count"] / len(features), 2
-                    )
-
-                self._extracted_count += 1
-                self._features_count += len(features)
-
-                result_data = {
-                    "identifier": identifier,
-                    "features": features,
-                    "quality_metrics": quality_metrics,
-                    "extraction_path": output_path,
-                }
-                if recovery_context:
-                    result_data["recovery_used"] = recovery_context
-                    result_data["summary"] = f"Extracted {len(features)} features from {identifier} (recovered via {recovery_context.get('strategy', 'unknown')})"
-                    # Post what recovery strategy worked
-                    try:
-                        self._post_task_learning(
-                            "extract_features",
-                            f"Recovered {identifier[:30]} via {recovery_context.get('strategy')}. "
-                            f"{len(features)} features extracted."
-                        )
-                    except Exception:
-                        pass
-                else:
-                    result_data["summary"] = f"Extracted {len(features)} features from {identifier}"
-                    # Post clean extraction stats
+                    features = data.get("features", [])
+                    quality_metrics = {
+                        "feature_count": len(features),
+                        "null_homeowner_count": sum(
+                            1 for f in features
+                            if not f.get("homeowner_name") or f["homeowner_name"] in ("null", "None")
+                        ),
+                    }
                     if len(features) > 0:
+                        quality_metrics["null_homeowner_rate"] = round(
+                            quality_metrics["null_homeowner_count"] / len(features), 2
+                        )
+
+                    self._extracted_count += 1
+                    self._features_count += len(features)
+
+                    result_data = {
+                        "identifier": identifier,
+                        "features": features,
+                        "quality_metrics": quality_metrics,
+                        "extraction_path": output_path,
+                    }
+                    if recovery_context:
+                        result_data["recovery_used"] = recovery_context
+                        result_data["summary"] = f"Extracted {len(features)} features from {identifier} (recovered via {recovery_context.get('strategy', 'unknown')})"
+                        # Post what recovery strategy worked
                         try:
                             self._post_task_learning(
                                 "extract_features",
-                                f"Clean extraction of {identifier[:30]}: {len(features)} features, "
-                                f"null rate {quality_metrics.get('null_homeowner_rate', 0):.0%}"
+                                f"Recovered {identifier[:30]} via {recovery_context.get('strategy')}. "
+                                f"{len(features)} features extracted."
                             )
                         except Exception:
                             pass
+                    else:
+                        result_data["summary"] = f"Extracted {len(features)} features from {identifier}"
+                        # Post clean extraction stats
+                        if len(features) > 0:
+                            try:
+                                self._post_task_learning(
+                                    "extract_features",
+                                    f"Clean extraction of {identifier[:30]}: {len(features)} features, "
+                                    f"null rate {quality_metrics.get('null_homeowner_rate', 0):.0%}"
+                                )
+                            except Exception:
+                                pass
 
-                return TaskResult(
-                    task_id=task.id, task_type=task.type, status="success",
-                    result=result_data, agent=self.name,
-                )
-
-            except Exception as e:
-                last_error = str(e)
-
-                if attempt < max_attempts - 1:
-                    # ── Problem-solving loop ──
-                    # Ask the LLM to diagnose the error and pick a recovery strategy
-                    pdf_path = issue.get("pdf_path", "")
-                    pdf_size_mb = 0
-                    try:
-                        pdf_size_mb = round(os.path.getsize(pdf_path) / 1024 / 1024, 1)
-                    except Exception:
-                        pass
-
-                    decision = await asyncio.to_thread(
-                        self.problem_solve,
-                        error=last_error,
-                        context={
-                            "identifier": identifier,
-                            "pdf_path": pdf_path,
-                            "pdf_size_mb": pdf_size_mb,
-                            "task_type": task.type,
-                            "attempt": attempt + 1,
-                        },
-                        strategies=READER_STRATEGIES,
+                    return TaskResult(
+                        task_id=task.id, task_type=task.type, status="success",
+                        result=result_data, agent=self.name,
                     )
 
-                    strategy = decision.get("strategy", "escalate")
-                    recovery_context = decision
+                except Exception as e:
+                    last_error = str(e)
 
-                    if strategy == "escalate":
-                        break  # Give up, return failure
+                    if attempt < max_attempts - 1:
+                        # ── Problem-solving loop ──
+                        # Ask the LLM to diagnose the error and pick a recovery strategy
+                        pdf_path = issue.get("pdf_path", "")
+                        pdf_size_mb = 0
+                        try:
+                            pdf_size_mb = round(os.path.getsize(pdf_path) / 1024 / 1024, 1)
+                        except Exception:
+                            pass
 
-                    # Execute the chosen recovery strategy
-                    self.log(f"Recovering: {strategy} — {decision.get('reasoning', '')}")
+                        decision = await asyncio.to_thread(
+                            self.problem_solve,
+                            error=last_error,
+                            context={
+                                "identifier": identifier,
+                                "pdf_path": pdf_path,
+                                "pdf_size_mb": pdf_size_mb,
+                                "task_type": task.type,
+                                "attempt": attempt + 1,
+                            },
+                            strategies=READER_STRATEGIES,
+                        )
 
-                    if strategy == "compress_images":
-                        # The JPEG compression is now automatic in make_image_content()
-                        # Just clear the old extraction and retry
-                        old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
+                        strategy = decision.get("strategy", "escalate")
+                        recovery_context = decision
 
-                    elif strategy == "reduce_batch":
-                        # Set an env hint that process_issue reads for smaller batches
-                        os.environ["READER_SMALL_BATCHES"] = "1"
-                        old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
+                        if strategy == "escalate":
+                            break  # Give up, return failure
 
-                    elif strategy == "text_extraction":
-                        # Check if PDF has text, if so try text-based extraction
-                        from extract_features import pdf_has_text_layer
-                        if pdf_has_text_layer(pdf_path):
-                            self.log(f"PDF has text layer — using text extraction for {identifier}")
-                        old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
+                        # Execute the chosen recovery strategy
+                        self.log(f"Recovering: {strategy} — {decision.get('reasoning', '')}")
 
-                    elif strategy == "wider_scan":
-                        # Switch to reextract mode with wider_scan
-                        task.type = "reextract_features"
-                        task.params["strategy"] = "wider_scan"
-                        old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
+                        if strategy == "compress_images":
+                            # The JPEG compression is now automatic in make_image_content()
+                            # Just clear the old extraction and retry
+                            old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                            if os.path.exists(old_path):
+                                os.remove(old_path)
 
-                    elif strategy == "lower_resolution":
-                        os.environ["READER_LOW_RES"] = "1"
-                        old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
-                        if os.path.exists(old_path):
-                            os.remove(old_path)
+                        elif strategy == "reduce_batch":
+                            # Set an env hint that process_issue reads for smaller batches
+                            os.environ["READER_SMALL_BATCHES"] = "1"
+                            old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                            if os.path.exists(old_path):
+                                os.remove(old_path)
 
-                    continue  # Retry with the recovery strategy applied
+                        elif strategy == "text_extraction":
+                            # Check if PDF has text, if so try text-based extraction
+                            from extract_features import pdf_has_text_layer
+                            if pdf_has_text_layer(pdf_path):
+                                self.log(f"PDF has text layer — using text extraction for {identifier}")
+                            old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                            if os.path.exists(old_path):
+                                os.remove(old_path)
 
-        # All attempts exhausted
-        return TaskResult(
-            task_id=task.id, task_type=task.type, status="failure",
-            result={"identifier": identifier, "recovery_attempted": recovery_context},
-            error=last_error,
-            agent=self.name,
-        )
+                        elif strategy == "wider_scan":
+                            # Switch to reextract mode with wider_scan
+                            task.type = "reextract_features"
+                            task.params["strategy"] = "wider_scan"
+                            old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                            if os.path.exists(old_path):
+                                os.remove(old_path)
+
+                        elif strategy == "lower_resolution":
+                            os.environ["READER_LOW_RES"] = "1"
+                            old_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                            if os.path.exists(old_path):
+                                os.remove(old_path)
+
+                        continue  # Retry with the recovery strategy applied
+
+            # All attempts exhausted
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier, "recovery_attempted": recovery_context},
+                error=last_error,
+                agent=self.name,
+            )
+        finally:
+            # Clean up recovery env vars so next task starts fresh
+            os.environ.pop("READER_SMALL_BATCHES", None)
+            os.environ.pop("READER_LOW_RES", None)
 
     # ── Quality Assessment ──────────────────────────────────
 

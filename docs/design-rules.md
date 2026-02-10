@@ -99,15 +99,53 @@ Sable: This is starting to look like a real publication
 - **Data/labels:** JetBrains Mono (monospace, tabular figures)
 - All fonts loaded via `next/font/google` (self-hosted, no external requests)
 
-## Layout
+## Grid System
 
-- Maximum content width: ~720px for text, ~1200px for data visualizations
-- Generous white space — let content breathe
-- Clear visual hierarchy: headline → summary → visualization → detail
+The site uses a **12-column editorial grid** with fixed margins. This is the backbone — everything aligns to it.
+
+- **Margins:** 100px left and right (`px-6 lg:px-[100px]`). All section content starts at this edge.
+- **Columns:** 12 equal columns between the margins. On a 1440px viewport, each column is ~103px.
+- **Grid overlay:** Dev-only tool at `web/src/components/dev/GridOverlay.tsx`. Toggle with **Ctrl+G** (columns) and **Ctrl+Shift+G** (8px baseline). Magenta = margin guides, cyan = column grid.
+
+### Column Assignments
+
+| Section | Columns | Notes |
+|---|---|---|
+| Hero text (title, quote, description, stats) | 1–6 | `max-w-[50%]` inside `px-[100px]` container. Right half is intentional negative space. |
+| Key Findings heading | 1–12 | Left-aligned on column 1, "Live from pipeline" right-aligned on column 12 |
+| Key Findings buckets | 1–4, 5–8, 9–12 | Three equal buckets: Pipeline, Investigation, Archive |
+| Section headings (Coverage Map, etc.) | Start at column 1 | All section headings share the same left edge |
+
+### Layout Rules
+
+- **Consistent left edge:** Every section heading starts at the 100px left margin. This vertical line runs the full page. Non-negotiable.
+- **No arbitrary max-widths:** Don't use `max-w-[720px]` or `max-w-lg` — size content to column boundaries using `max-w-[50%]` (6 cols) or `max-w-[33%]` (4 cols) or full width.
+- **Generous white space** — let content breathe, but keep spacing tight *within* sections.
+- **Clear visual hierarchy:** headline → summary → visualization → detail.
+
+### Section Backgrounds
+
+- **Light sections** (`bg-background`): Hero, Coverage Map, Charts, Methodology
+- **Dark sections** (`bg-[#1A1A1A]`): Key Findings — the anchor section. Dark background creates a strong visual break and signals "data lives here." Use for the most information-dense section.
 
 ## Component Patterns
 
-*(Will be populated as we build components)*
+### Bucket Cards (Key Findings pattern)
+Self-contained information modules on dark backgrounds. Each bucket has:
+1. **Copper label** — `text-xs uppercase tracking-[0.2em] text-copper`
+2. **Hero metric** — `font-mono text-5xl font-bold text-white`
+3. **Sublabel** — `text-sm text-white/40`
+4. **Detail zone** — unique per bucket (progress bar, verdict badges, data rows)
+- Card style: `rounded-lg border border-white/[0.08] bg-white/[0.03] p-8`
+
+### Verdict Badges
+Color-coded status indicators with dot + label:
+- **Confirmed:** `bg-[#2D6A4F]/20 text-[#7DDBA3]` with green dot
+- **Pending:** `bg-[#B8860B]/20 text-[#FFD666]` with amber dot
+- **Rejected:** `bg-[#9B2226]/20 text-[#FF9B9B]` with red dot
+
+### Stats Row (Hero pattern)
+Horizontal row of key metrics: `font-mono text-3xl font-bold` numbers with `text-sm text-muted-foreground` labels. Separated by `gap-12`. Bordered above with `border-t border-border`.
 
 ## Reference Source: Notion Images Database
 
