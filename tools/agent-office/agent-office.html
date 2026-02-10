@@ -1024,6 +1024,18 @@ body {
 .agent-char.hub-bored .char-back { display: none !important; }
 .agent-char.hub-bored .char-waiting { display: block !important; }
 
+/* ── Hub-and-Spoke: Done Agent (relaxing sprite, subtle green glow) ── */
+.char-img.char-done { display: none; }
+.agent-char.hub-done {
+  filter:
+    drop-shadow(0 0 2px rgba(46, 204, 113, 0.4))
+    drop-shadow(0 0 6px rgba(46, 204, 113, 0.2));
+}
+.agent-char.hub-done .char-front { display: none !important; }
+.agent-char.hub-done .char-back { display: none !important; }
+.agent-char.hub-done .char-waiting { display: none !important; }
+.agent-char.hub-done .char-done { display: block !important; }
+
 /* ── Hub-and-Spoke: Editor Engagement (yellow glow on both) ── */
 .agent-char.editor-engage {
   filter:
@@ -1660,8 +1672,8 @@ const ASSETS = {
                   failure: 'editor_front_failure_trans.png', clipboard: 'editor_back_clipboard_trans.png',
                   studying: 'editor_front_studying_trans.png' },
     designer:  { front: 'designer_front_trans.png',  back: 'designer_back_trans.png',  waiting: 'designer_front_waiting_trans.png' },
-    scout:     { front: 'scout_front_trans.png',     back: 'scout_back_trans.png',     waiting: 'scout_front_waiting_trans.png' },
-    courier:   { front: 'courier_front_trans.png',   back: 'courier_back_trans.png',   waiting: 'courier_front_waiting_trans.png' },
+    scout:     { front: 'scout_front_trans.png',     back: 'scout_back_trans.png',     waiting: 'scout_front_waiting_trans.png', done: 'scout_front_done_trans.png' },
+    courier:   { front: 'courier_front_trans.png',   back: 'courier_back_trans.png',   waiting: 'courier_front_waiting_trans.png', done: 'courier_front_done_trans.png' },
     reader:    { front: 'reader_front_trans.png',    back: 'reader_back_trans.png',    waiting: 'reader_front_waiting_trans.png' },
     detective: { front: 'detective_front_trans.png',  back: 'detective_back_trans.png', waiting: 'detective_front_waiting_trans.png' },
     researcher: { front: 'researcher_front_trans.png', back: 'researcher_back_trans.png', waiting: 'researcher_front_waiting_trans.png' },
@@ -1754,6 +1766,17 @@ function initAgents() {
       waitImg.draggable = false;
       waitImg.onerror = () => { waitImg.style.display = 'none'; };
       charEl.appendChild(waitImg);
+    }
+
+    // Done/relaxing sprite (agents that have completed their work)
+    if (ASSETS.chars[id].done) {
+      const doneImg = document.createElement('img');
+      doneImg.className = 'char-img char-done';
+      doneImg.src = ASSETS.chars[id].done;
+      doneImg.alt = '';
+      doneImg.draggable = false;
+      doneImg.onerror = () => { doneImg.style.display = 'none'; };
+      charEl.appendChild(doneImg);
     }
 
     // Editor gets extra pose sprites
@@ -1952,7 +1975,7 @@ function updateAgent(agentData) {
   charEl.className = charEl.className.replace(/\banim-\w+/g, '');
   // Only remove hub states if not in an editor-engage animation
   if (!charEl.classList.contains('editor-engage')) {
-    charEl.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'show-front');
+    charEl.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done', 'show-front');
   }
 
   const isWorking = status === 'working' && agentData.liveTask;
@@ -1978,8 +2001,14 @@ function updateAgent(agentData) {
     updateSpeechBubble(aid, agentData.speech || agentData.last_error || 'Error!');
     agentWaitCycles[aid] = 0;
     delete agentBoredThreshold[aid];
+  } else if (status === 'done' && ASSETS.chars[aid]?.done) {
+    // Done with a done sprite: show relaxing pose
+    charEl.classList.add('hub-done', 'anim-done');
+    updateSpeechBubble(aid, agentData.speech || agentData.message || '');
+    agentWaitCycles[aid] = 0;
+    delete agentBoredThreshold[aid];
   } else {
-    // Waiting/Idle/Done: increment wait counter
+    // Waiting/Idle/Done (no done sprite): increment wait counter
     agentWaitCycles[aid] = (agentWaitCycles[aid] || 0) + 1;
     // Randomized threshold per agent (3-6 cycles = 15-30s) — set once per wait period
     if (!agentBoredThreshold[aid]) {
@@ -2195,7 +2224,7 @@ async function editorMeeting(agentId, label) {
   // Yellow glow on both Editor and target agent
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
 
@@ -3500,7 +3529,7 @@ async function editorVisitAgent(agentId) {
   const targetChar = agentCharElements[agentId];
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
 
@@ -3686,7 +3715,7 @@ async function editorAssignTask(agentId, label) {
   // Step 2: Yellow glow on both — agent steps to aisle
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
   moveAgentTo(agentId, target.exitX, target.homeY, true);
@@ -3726,7 +3755,7 @@ async function editorCollectResult(agentId, label) {
   // Yellow glow
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
 
@@ -3775,7 +3804,7 @@ async function editorHandleFailure(agentId, label) {
     editorChar.style.setProperty('--glow-color', '#e74c3c');
   }
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
     targetChar.classList.add('collab-glow', 'show-front');
     targetChar.style.setProperty('--glow-color', '#e74c3c');
   }
