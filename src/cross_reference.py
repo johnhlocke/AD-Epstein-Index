@@ -206,22 +206,36 @@ def _get_context(search_term, text, context_lines=5):
 def get_unchecked_features():
     """Get features from Supabase that haven't been cross-referenced yet.
 
-    Supabase is the source of truth. A feature is only considered "checked" if:
-    1. It has an entry in results.json (even with pending DOJ), OR
-    2. It has no homeowner_name / name is in SKIP_NAMES (nothing to check)
+    Primary: Uses cross_references table in Supabase (one row per checked feature).
+    Fallback: Uses local results.json if cross_references table not available.
 
-    This prevents names from falling through the cracks if checked_features.json
-    got out of sync with results.json (e.g., crash between marking checked and
-    saving results).
+    A feature is considered "checked" if it has a row in cross_references OR
+    has no homeowner_name / name is in SKIP_NAMES.
     """
     # Get all features from Supabase (source of truth)
     result = supabase.table("features").select("*").execute()
     features = result.data
 
-    os.makedirs(XREF_DIR, exist_ok=True)
+    # Try Supabase cross_references table first
+    has_xref_ids = set()
+    try:
+        from db import get_features_without_xref
+        unchecked_from_db = get_features_without_xref()
+        # Build checked set from features NOT in unchecked list
+        unchecked_ids = {f["id"] for f in unchecked_from_db}
+        # Features that don't need checking (no name or skip-listed)
+        skip_ids = set(
+            f["id"] for f in features
+            if not f.get("homeowner_name") or f["homeowner_name"].strip().lower() in SKIP_NAMES
+        )
+        checked_ids = {f["id"] for f in features if f["id"] not in unchecked_ids} | skip_ids
+        unchecked = [f for f in features if f["id"] not in checked_ids]
+        return unchecked, checked_ids
+    except Exception:
+        pass
 
-    # Build set of feature IDs that have ANY entry in results.json
-    # (BB pass done, DOJ may still be pending — that's fine, DOJ pass handles it)
+    # Fallback: local results.json
+    os.makedirs(XREF_DIR, exist_ok=True)
     results_path = os.path.join(XREF_DIR, "results.json")
     has_result_ids = set()
     if os.path.exists(results_path):
@@ -230,7 +244,6 @@ def get_unchecked_features():
         for r in results:
             has_result_ids.add(r["feature_id"])
 
-    # Features that don't need checking (no name or skip-listed)
     skip_ids = set(
         f["id"] for f in features
         if not f.get("homeowner_name") or f["homeowner_name"].strip().lower() in SKIP_NAMES
@@ -238,8 +251,6 @@ def get_unchecked_features():
 
     truly_done = has_result_ids | skip_ids
     unchecked = [f for f in features if f["id"] not in truly_done]
-
-    # Rebuild checked_ids to match reality
     checked_ids = truly_done
 
     return unchecked, checked_ids

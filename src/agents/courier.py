@@ -57,7 +57,10 @@ class CourierAgent(Agent):
     # ═══════════════════════════════════════════════════════════
 
     async def execute(self, task):
-        """Execute a download task from the Editor. Returns a TaskResult."""
+        """Execute a download or scrape task from the Editor. Returns a TaskResult."""
+        if task.type == "scrape_features":
+            return await self._scrape_ad_archive(task)
+
         if task.type != "download_pdf":
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="failure",
@@ -256,7 +259,8 @@ class CourierAgent(Agent):
         downloadable.sort(key=lambda x: (x["year"], x["month"]), reverse=True)
         for issue in downloadable:
             identifier = issue["identifier"]
-            filename_base = f"{issue['year']}_{issue['month']:02d}_{identifier}"
+            m = issue['month']
+            filename_base = f"{issue['year']}_{m:02d}_{identifier}" if isinstance(m, int) else f"{issue['year']}_XX_{identifier}"
             if os.path.exists(ISSUES_DIR):
                 existing = [f for f in os.listdir(ISSUES_DIR) if f.startswith(filename_base)]
                 if existing:
@@ -300,6 +304,12 @@ class CourierAgent(Agent):
     # ── Main Work Loop ────────────────────────────────────────
 
     async def work(self):
+        # If the Editor is managing us (sent a task recently), defer to inbox tasks
+        # instead of independently finding downloads. This prevents double-downloading.
+        if self._last_task_time and (time.time() - self._last_task_time) < 300:
+            self._current_task = "Waiting for Editor assignment"
+            return False
+
         self.load_skills()
 
         courier_log = self._load_courier_log()
@@ -325,7 +335,9 @@ class CourierAgent(Agent):
 
             # Narrate the download start
             try:
-                self.narrate(f"Downloading {issue.get('year', '?')}-{issue.get('month', '??'):02d} from archive.org: {issue['identifier'][:40]}")
+                m = issue.get('month')
+                m_str = f"{m:02d}" if isinstance(m, int) else "??"
+                self.narrate(f"Downloading {issue.get('year', '?')}-{m_str} from archive.org: {issue['identifier'][:40]}")
             except Exception:
                 pass
 
@@ -334,10 +346,12 @@ class CourierAgent(Agent):
             # Commit episode based on result
             try:
                 status = issue.get("status", "unknown")
+                ep_m = issue.get('month')
+                ep_m_str = f"{ep_m:02d}" if isinstance(ep_m, int) else "??"
                 if status == "downloaded":
                     self.commit_episode(
                         "download_pdf",
-                        f"Downloaded {issue['identifier'][:40]} ({issue.get('year', '?')}-{issue.get('month', '??'):02d}) from archive.org",
+                        f"Downloaded {issue['identifier'][:40]} ({issue.get('year', '?')}-{ep_m_str}) from archive.org",
                         "success",
                         {"identifier": issue["identifier"], "year": issue.get("year"), "month": issue.get("month")},
                     )
@@ -452,7 +466,7 @@ class CourierAgent(Agent):
         if issue.get("pdf_path"):
             updates["pdf_path"] = issue["pdf_path"]
         update_issue(identifier, updates)
-        return True
+        return bool(issue.get("pdf_path"))
 
     def _download_one_http(self, issue):
         """Download a single issue's PDF via HTTP. Runs in a thread."""
@@ -475,7 +489,9 @@ class CourierAgent(Agent):
 
         dl_url = DOWNLOAD_URL.format(identifier=identifier, filename=pdf_name)
         ext = os.path.splitext(pdf_name)[1] or ".pdf"
-        filename_base = f"{issue['year']}_{issue['month']:02d}_{identifier}"
+        m = issue['month']
+        m_str = f"{m:02d}" if isinstance(m, int) else "00"
+        filename_base = f"{issue['year']}_{m_str}_{identifier}"
         dest = os.path.join(ISSUES_DIR, f"{filename_base}{ext}")
 
         from archive_download import download_file
@@ -677,13 +693,20 @@ If the download FAILED, respond:
 
     # ── Claude CLI ────────────────────────────────────────────
 
-    def _call_claude(self, prompt):
-        """Call Claude Code CLI with Playwright + Bash access."""
+    def _call_claude(self, prompt, timeout=300, tools=None):
+        """Call Claude Code CLI with Playwright + Bash access.
+
+        Args:
+            prompt: The prompt to send
+            timeout: Timeout in seconds (default 300s / 5 min)
+            tools: List of allowed tools (default: AD_ARCHIVE_TOOLS)
+        """
+        allowed = tools or AD_ARCHIVE_TOOLS
         cmd = [
             "claude",
             "-p", prompt,
             "--model", "haiku",
-            "--allowedTools", *AD_ARCHIVE_TOOLS,
+            "--allowedTools", *allowed,
             "--no-session-persistence",
             "--output-format", "text",
         ]
@@ -693,7 +716,7 @@ If the download FAILED, respond:
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5 min per batch
+                timeout=timeout,
                 cwd=BASE_DIR,
             )
 
@@ -704,7 +727,7 @@ If the download FAILED, respond:
             return result.stdout.strip()
 
         except subprocess.TimeoutExpired:
-            self.log("Claude CLI timed out (5 min limit)", level="WARN")
+            self.log(f"Claude CLI timed out ({timeout}s limit)", level="WARN")
             return None
         except FileNotFoundError:
             self.log("Claude CLI not found", level="ERROR")
@@ -800,6 +823,229 @@ If the download FAILED, respond:
         self.log(f"Combined {len(batch_files)} batches → {dest} ({total} pages)")
         self._current_task = f"Combined: {year}-{month:02d} ({len(batch_files)} batches, {total}pp)"
         return True
+
+    # ── AD Archive Text Scraping ─────────────────────────────
+
+    async def _scrape_ad_archive(self, task):
+        """Scrape article text directly from AD Archive pages (no PDF needed).
+
+        Phase A: Read TOC / article listing to find feature article URLs.
+        Phase B: For each feature article, navigate + extract structured data.
+        Produces same extraction JSON format as Reader output.
+        """
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+        email = os.environ.get("AD_ARCHIVE_EMAIL")
+        password = os.environ.get("AD_ARCHIVE_PASSWORD")
+        identifier = task.params.get("identifier", "")
+        year = task.params.get("year")
+        month = task.params.get("month")
+        source_url = task.params.get("source_url", "")
+
+        if not email or not password or email == "your-email-here":
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier},
+                error="AD Archive credentials not configured in .env",
+                agent=self.name,
+            )
+
+        if not source_url:
+            source_url = f"https://archive.architecturaldigest.com/issue/{year}{month:02d}01"
+
+        month_str = f"{month:02d}" if month else "??"
+        self._current_task = f"Scraping AD Archive {year}-{month_str}..."
+        self.log(f"Scrape start: {identifier} from {source_url}")
+
+        # Phase A: Get TOC / article listing
+        toc_prompt = self._build_scrape_toc_prompt(email, password, source_url, year, month)
+        toc_result = await asyncio.to_thread(self._call_claude, toc_prompt, timeout=600)
+
+        if not toc_result:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier},
+                error="TOC scrape failed: no response from Claude CLI",
+                agent=self.name,
+            )
+
+        toc_data = self._parse_result_json(toc_result)
+        if not toc_data or not toc_data.get("articles"):
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier},
+                error=f"TOC scrape returned no articles: {(toc_data or {}).get('notes', 'parse error')}",
+                agent=self.name,
+            )
+
+        articles = toc_data["articles"]
+        self.log(f"TOC found {len(articles)} articles in {year}-{month_str}")
+
+        # Phase B: Scrape each feature article
+        features = []
+        for idx, article in enumerate(articles):
+            article_url = article.get("url", "")
+            article_title = article.get("title", f"Article {idx+1}")
+
+            if not article_url:
+                self.log(f"Skipping article '{article_title}': no URL", level="WARN")
+                continue
+
+            self._current_task = f"Scraping: {article_title[:40]}..."
+            article_prompt = self._build_scrape_article_prompt(
+                email, password, article_url, year, month
+            )
+            article_result = await asyncio.to_thread(self._call_claude, article_prompt, timeout=600)
+
+            if not article_result:
+                self.log(f"Article scrape failed for '{article_title}'", level="WARN")
+                continue
+
+            article_data = self._parse_result_json(article_result)
+            if article_data and article_data.get("homeowner_name"):
+                # Assign sequential page_number for load_extraction dedup compat
+                article_data["page_number"] = idx + 1
+                article_data["article_title"] = article_title
+                article_data["article_url"] = article_url
+                features.append(article_data)
+                self.log(f"Extracted: {article_data.get('homeowner_name')} from '{article_title[:30]}'")
+            else:
+                self.log(f"No homeowner found in '{article_title[:30]}'", level="DEBUG")
+
+            await asyncio.sleep(2)  # Rate limit between articles
+
+        if not features:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"identifier": identifier},
+                error="No features extracted from any articles",
+                agent=self.name,
+            )
+
+        # Build extraction JSON (same format as Reader output)
+        extraction = {
+            "identifier": identifier,
+            "title": task.params.get("title", f"AD {year}-{month_str}"),
+            "year": year,
+            "month": month,
+            "verified_year": year,
+            "verified_month": month,
+            "source": "ad_archive_scrape",
+            "features": features,
+        }
+
+        # Save to disk
+        extractions_dir = os.path.join(DATA_DIR, "extractions")
+        os.makedirs(extractions_dir, exist_ok=True)
+        extraction_path = os.path.join(extractions_dir, f"{identifier}.json")
+        with open(extraction_path, "w") as f:
+            json.dump(extraction, f, indent=2)
+
+        self.log(f"Scraped {len(features)} features from {year}-{month_str}")
+
+        return TaskResult(
+            task_id=task.id, task_type=task.type, status="success",
+            result={
+                "identifier": identifier,
+                "features": features,
+                "extraction_path": extraction_path,
+            },
+            agent=self.name,
+        )
+
+    def _build_scrape_toc_prompt(self, email, password, url, year, month):
+        """Build prompt for Claude CLI to scrape the TOC from AD Archive."""
+        return f"""You are the Courier agent scraping article listings from the Architectural Digest Archive.
+
+TASK: Navigate to the AD Archive issue page and list all HOME FEATURE articles.
+
+ISSUE URL: {url}
+ISSUE: {year}-{month:02d if isinstance(month, int) else month}
+
+STEPS:
+1. Navigate to {url}
+2. If prompted to login, use:
+   - Email: {email}
+   - Password: {password}
+3. Take a browser_snapshot to see the page layout
+4. Find the table of contents or article listing
+5. Identify articles that are HOME FEATURES — these typically show a person's home, apartment, estate
+6. Skip articles about: products, trends, travel, restaurant reviews, editor letters, advertisements
+7. For each home feature article, record its title and URL
+
+HOME FEATURE INDICATORS:
+- Titles mentioning a person's name + "home", "house", "apartment", "estate", "retreat"
+- "Inside [Person]'s [Location] Home"
+- "[Designer] Creates [Something] for [Person]"
+- Articles in sections like "AD Visits", "AD Exclusives", "Before & After"
+
+Respond with ONLY a JSON object:
+{{
+  "articles": [
+    {{
+      "title": "Inside Cindy Crawford's Malibu Home",
+      "url": "https://archive.architecturaldigest.com/article/...",
+      "section": "AD Visits"
+    }}
+  ],
+  "total_articles_on_page": 25,
+  "home_features_found": 8,
+  "notes": "any observations"
+}}
+
+If you cannot access the page or find no articles:
+{{
+  "articles": [],
+  "notes": "what went wrong"
+}}"""
+
+    def _build_scrape_article_prompt(self, email, password, article_url, year, month):
+        """Build prompt for Claude CLI to extract feature data from one article page."""
+        return f"""You are the Courier agent extracting data from an Architectural Digest article.
+
+TASK: Navigate to this article and extract structured home feature data.
+
+ARTICLE URL: {article_url}
+ISSUE: {year}-{month:02d if isinstance(month, int) else month}
+
+STEPS:
+1. Navigate to {article_url}
+2. If prompted to login, use:
+   - Email: {email}
+   - Password: {password}
+3. Take a browser_snapshot to read the article
+4. Extract the following information from the article text:
+
+EXTRACT:
+- **homeowner_name**: The person whose home is featured (e.g., "Cindy Crawford and Rande Gerber")
+- **designer_name**: The interior designer or architect (e.g., "Michael S. Smith")
+- **location_city**: City (e.g., "Malibu")
+- **location_state**: State (e.g., "California")
+- **location_country**: Country (e.g., "United States")
+- **design_style**: Architectural/design style (e.g., "Mid-Century Modern", "Contemporary")
+- **year_built**: Year built or renovated, if mentioned
+- **square_footage**: Square footage, if mentioned
+- **cost**: Cost of home or renovation, if mentioned
+
+RULES:
+- Only extract what's explicitly stated in the article
+- For homeowner_name, use the featured person(s), not the writer or photographer
+- If the article is NOT about a private residence (it's a hotel, restaurant, etc.), set homeowner_name to null
+- Use null for any field not mentioned in the article
+
+Respond with ONLY a JSON object:
+{{
+  "homeowner_name": "Cindy Crawford and Rande Gerber",
+  "designer_name": "Michael S. Smith",
+  "location_city": "Malibu",
+  "location_state": "California",
+  "location_country": "United States",
+  "design_style": "Contemporary Beach House",
+  "year_built": null,
+  "square_footage": null,
+  "cost": null
+}}"""
 
     # ── Progress ──────────────────────────────────────────────
 

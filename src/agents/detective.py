@@ -734,12 +734,35 @@ Respond with JSON only. Format:
         )
 
     def get_progress(self):
-        """Real progress from Supabase features vs checked."""
+        """Real progress from Supabase cross_references + features."""
+        # Primary: Supabase cross_references table
+        try:
+            from db import list_cross_references, get_features_without_xref
+            xrefs = list_cross_references()
+            unchecked = get_features_without_xref()
+            total = len(xrefs) + len(unchecked)
+            doj_done = sum(1 for r in xrefs if r.get("doj_status") == "searched")
+            matches = sum(
+                1 for r in xrefs
+                if r.get("combined_verdict") in ("confirmed_match", "likely_match")
+                or r.get("black_book_status") == "match"
+            )
+            return {
+                "current": doj_done,
+                "total": total,
+                "bb_checked": len(xrefs),
+                "doj_pending": sum(1 for r in xrefs if r.get("doj_status") == "pending"),
+                "doj_errors": sum(1 for r in xrefs if r.get("doj_status") == "error"),
+                "matches": matches,
+            }
+        except Exception:
+            pass
+
+        # Fallback: local results.json
         results = self._load_results()
         total = len(results)
         doj_done = sum(1 for r in results if r.get("doj_status") == "searched")
 
-        # Try to get total features from Supabase for a more accurate total
         try:
             from cross_reference import get_unchecked_features
             unchecked, checked_ids = get_unchecked_features()

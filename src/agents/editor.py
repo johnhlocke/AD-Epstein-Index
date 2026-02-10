@@ -50,12 +50,15 @@ from typing import Any
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from agents.base import Agent, DATA_DIR, LOG_PATH, update_json_locked, read_json_locked
-from agents.tasks import Task, TaskResult, EditorLedger
+from agents.tasks import Task, TaskResult, EditorLedger, ExecutionPlan
 from db import (
     get_supabase, update_issue, delete_features_for_issue, list_issues,
     count_issues_by_status, upsert_issue, get_issue_by_identifier,
     update_editor_verdict, update_detective_verdict, get_features_needing_detective,
     get_dossier, upsert_dossier, upload_to_storage, insert_dossier_image,
+    upsert_cross_reference, get_cross_reference, list_cross_references,
+    get_xref_leads, update_xref_editor_override, get_features_without_xref,
+    delete_cross_references, reset_xref_doj,
 )
 
 @dataclass
@@ -117,6 +120,7 @@ class EditorAgent(Agent):
 
         # Event-driven architecture
         self._event_queue = asyncio.Queue()
+        self._status_refresh = asyncio.Event()  # Signal orchestrator to refresh status.json immediately
         self._human_messages_mtime = 0.0  # last known mtime of human_messages.json
 
         # Timing
@@ -142,12 +146,19 @@ class EditorAgent(Agent):
         self._tasks_in_flight = {}  # task_id -> {"agent": name, "task": Task, "assigned_at": iso}
         self._tasks_completed = []  # List of completed task summaries (capped at 20)
         self._tasks_failed = []     # List of failed task summaries (capped at 20)
+        self._plan = ExecutionPlan()  # Per-agent ready queues for instant dispatch
 
         # Memory
         memory = self._load_memory()
         memory["restart_count"] = memory.get("restart_count", 0) + 1
         self._last_health = memory.get("last_assessment_health")
         self._save_memory(memory)
+
+    # ── Status Refresh ─────────────────────────────────────────
+
+    def _request_status_refresh(self):
+        """Signal the orchestrator to refresh status.json immediately."""
+        self._status_refresh.set()
 
     # ── Anthropic Client ────────────────────────────────────────
 
@@ -518,6 +529,9 @@ class EditorAgent(Agent):
                     self._tasks_failed = self._tasks_failed[-20:]
                 self._handle_failure(agent_name, result)
 
+            # Immediately dispatch next task for this agent from the ready queue
+            self._dispatch_next(agent_name)
+
     def _handle_success(self, agent_name, result):
         """Process a successful task result — validate and commit to Supabase."""
         task_type = result.task_type
@@ -537,6 +551,8 @@ class EditorAgent(Agent):
             self._commit_cross_reference(data)
         elif task_type == "investigate_lead":
             self._commit_investigation(data)
+        elif task_type == "scrape_features":
+            self._commit_extraction(data)
         else:
             self.log(f"Unknown task type '{task_type}' from {agent_name}", level="WARN")
 
@@ -567,18 +583,43 @@ class EditorAgent(Agent):
                 "source_url": issue.get("url"),
             })
             self.ledger.record(ident, "scout", "discover_issues", True)
-            self.log(f"Committed: {year}-{month:02d} ({ident[:40]})")
+            m_str = f"{month:02d}" if isinstance(month, int) else "??"
+            self.log(f"Committed: {year}-{m_str} ({ident[:40]})")
 
         if found:
             valid = [i for i in found if i.get("year") and i["year"] >= MIN_YEAR]
             if valid:
                 self._narrate_event(f"Scout discovered {len(valid)} new AD issues on archive.org.")
 
+        # Cascade: enqueue Courier tasks for newly discovered issues
+        if "courier" in self.workers:
+            valid = [i for i in found if i.get("year") and i["year"] >= MIN_YEAR and i.get("identifier")]
+            for issue in valid:
+                ident = issue["identifier"]
+                if not self.ledger.should_retry(ident, "download_pdf", max_failures=MAX_TASK_FAILURES):
+                    continue
+                _m = issue.get("month")
+                _ms = f"{_m:02d}" if isinstance(_m, int) else "??"
+                task = Task(
+                    type="download_pdf",
+                    goal=f"Download {issue.get('year')}-{_ms} ({ident[:30]})",
+                    params={
+                        "identifier": ident, "title": issue.get("title", ""),
+                        "year": issue.get("year"), "month": issue.get("month"),
+                        "source": issue.get("source", "archive.org"),
+                        "source_url": issue.get("url"),
+                    },
+                    priority=2,
+                )
+                self._plan.enqueue("courier", task, source="cascade")
+            self._dispatch_next("courier")
+
         not_found = data.get("not_found", [])
         for month_key in not_found:
             self.ledger.record(month_key, "scout", "discover_issues", False,
                                note="not found")
         self.ledger.save()
+        self._request_status_refresh()
 
     def _commit_fixed_dates(self, data):
         """Commit Scout's date fixes to Supabase."""
@@ -599,6 +640,7 @@ class EditorAgent(Agent):
             self.ledger.record(ident, "scout", "fix_dates", True)
             self.log(f"Date fixed: {ident} → {year}-{month or '??'}")
         self.ledger.save()
+        self._request_status_refresh()
 
     def _commit_download(self, data):
         """Commit Courier's download result to Supabase."""
@@ -608,7 +650,30 @@ class EditorAgent(Agent):
             update_issue(identifier, {"status": "downloaded", "pdf_path": pdf_path})
             self.ledger.record(identifier, "courier", "download_pdf", True)
             self.log(f"Downloaded: {identifier}")
+
+            # Cascade: enqueue Reader task for just-downloaded issue
+            if "reader" in self.workers:
+                output_path = os.path.join(EXTRACTIONS_DIR, f"{identifier}.json")
+                if not os.path.exists(output_path):
+                    issue = get_issue_by_identifier(identifier)
+                    if issue:
+                        _rm = issue.get("month")
+                        _rms = f"{_rm:02d}" if isinstance(_rm, int) else "??"
+                        task = Task(
+                            type="extract_features",
+                            goal=f"Extract features from {issue.get('year', '?')}-{_rms}",
+                            params={
+                                "identifier": identifier, "pdf_path": pdf_path,
+                                "title": issue.get("title", ""), "year": issue.get("year"),
+                                "month": issue.get("month"),
+                            },
+                            priority=2,
+                        )
+                        self._plan.enqueue("reader", task, source="cascade")
+                        self._dispatch_next("reader")
+
         self.ledger.save()
+        self._request_status_refresh()
 
     def _commit_extraction(self, data):
         """Validate Reader's extraction and load into Supabase if quality passes."""
@@ -660,6 +725,7 @@ class EditorAgent(Agent):
             self.log(f"HELD {identifier}: {esc_type} — {quality_metrics}", level="WARN")
 
         self.ledger.save()
+        self._request_status_refresh()
 
     def _queue_detective_for_issue(self, identifier):
         """Queue Detective to cross-reference features from a just-loaded issue."""
@@ -703,7 +769,10 @@ class EditorAgent(Agent):
             params={"names": names, "feature_ids": feature_ids},
             priority=2,
         )
-        if self._assign_task("detective", task):
+        if not self._assign_task("detective", task):
+            self._plan.enqueue("detective", task, source="cascade")
+            self.log(f"Detective busy — queued {len(names)} names for later")
+        else:
             self.log(f"Queued {len(names)} names for Detective from {identifier[:30]}")
 
     def _quality_gate(self, features, metrics):
@@ -729,7 +798,7 @@ class EditorAgent(Agent):
         return "load"
 
     def _commit_cross_reference(self, data):
-        """Write Detective's binary YES/NO verdicts to Supabase and queue Researcher for YES names."""
+        """Write Detective's full xref data to Supabase cross_references + binary verdict to features."""
         checked = data.get("checked", [])
         if not checked:
             return
@@ -745,23 +814,40 @@ class EditorAgent(Agent):
             binary_verdict = entry.get("binary_verdict", "NO")
             combined = entry.get("combined", "unknown")
 
-            # Write verdict to ALL feature IDs for this name
+            # Write full xref + binary verdict to ALL feature IDs for this name
             write_ok = True
             for fid in feature_id_list:
                 try:
+                    # Write full xref data to cross_references table
+                    xref_data = {
+                        "homeowner_name": name,
+                        "black_book_status": entry.get("bb_verdict", "no_match"),
+                        "black_book_matches": entry.get("bb_matches"),
+                        "doj_status": entry.get("doj_verdict", "pending"),
+                        "doj_results": entry.get("doj_results"),
+                        "combined_verdict": combined if combined != "unknown" else "pending",
+                        "confidence_score": float(entry.get("confidence_score") or 0),
+                        "verdict_rationale": entry.get("rationale"),
+                        "false_positive_indicators": entry.get("false_positive_indicators"),
+                        "binary_verdict": binary_verdict,
+                        "individuals_searched": entry.get("individuals_searched"),
+                    }
+                    upsert_cross_reference(fid, xref_data)
+
+                    # Also write binary verdict to features table for compat
                     update_detective_verdict(fid, binary_verdict)
                 except Exception as e:
                     write_ok = False
                     decision = self.problem_solve(
                         error=str(e)[:200],
-                        context={"name": name, "feature_id": fid, "verdict": binary_verdict, "operation": "update_detective_verdict"},
+                        context={"name": name, "feature_id": fid, "verdict": binary_verdict, "operation": "upsert_cross_reference"},
                         strategies={
                             "continue": "Skip this feature — others may succeed",
                             "retry_batch": "DB connection issue — retry entire batch later",
                             "escalate": "Persistent failure — needs investigation",
                         },
                     )
-                    self.log(f"Failed to write verdict for {name} (fid={fid}): {e} → {decision.get('strategy', '?')}", level="ERROR")
+                    self.log(f"Failed to write xref for {name} (fid={fid}): {e} → {decision.get('strategy', '?')}", level="ERROR")
 
             if binary_verdict == "YES":
                 self.log(f"YES: {name} ({combined})")
@@ -791,6 +877,7 @@ class EditorAgent(Agent):
             self._queue_researcher_tasks(yes_entries)
 
         self.ledger.save()
+        self._request_status_refresh()
 
     def _queue_researcher_tasks(self, yes_entries):
         """Queue Researcher investigation for YES-verdict names (one at a time)."""
@@ -842,7 +929,9 @@ class EditorAgent(Agent):
             if self._assign_task("researcher", task):
                 self.log(f"Queued Researcher: {name}")
                 self._narrate_event(f"Assigned Researcher to investigate {name} — flagged YES by Detective.")
-                break  # One at a time — Researcher is slow
+            else:
+                self._plan.enqueue("researcher", task, source="cascade")
+                self.log(f"Researcher busy — queued investigation for {name}")
 
     def _commit_investigation(self, data):
         """Review Researcher's dossier as gatekeeper — confirm or reject.
@@ -990,6 +1079,7 @@ class EditorAgent(Agent):
         if verdict == "CONFIRMED" and strength in ("HIGH", "MEDIUM"):
             self._remember("milestone", f"CONFIRMED dossier: {name} ({strength})")
         self.ledger.save()
+        self._request_status_refresh()
 
     def _review_dossier(self, name, proposed_strength, dossier):
         """LLM review of a Researcher dossier. Uses Sonnet (~$0.005/review).
@@ -1138,23 +1228,26 @@ Respond with JSON only:
     # ═══════════════════════════════════════════════════════════
 
     async def _plan_and_assign(self):
-        """Scan Supabase state, figure out what needs doing, assign tasks to agents."""
+        """Refresh ready queues from Supabase state, then dispatch."""
         self._editor_state = "assessing"
         self._current_task = "Planning next tasks..."
 
         try:
-            counts = count_issues_by_status()
             all_issues = list_issues()
         except Exception as e:
             self.log(f"Planning failed — Supabase error: {e}", level="ERROR")
             return
 
-        # Assign work to each agent (if they have capacity — inbox empty)
-        self._plan_scout_tasks(all_issues, counts)
-        self._plan_courier_tasks(counts)
-        self._plan_reader_tasks(counts)
-        self._plan_detective_tasks()
-        self._plan_researcher_tasks()
+        # Fill per-agent ready queues from current Supabase state
+        self._fill_scout_queue(all_issues)
+        self._fill_courier_queue()
+        self._fill_scrape_queue()
+        self._fill_reader_queue()
+        self._fill_detective_queue()
+        self._fill_researcher_queue()
+
+        # Dispatch one task per idle agent
+        self._dispatch_ready_tasks()
 
     def _memory_informed_priority(self, agent_name, task):
         """Adjust task priority based on episodic memory of past attempts.
@@ -1210,13 +1303,33 @@ Respond with JSON only:
         self.log(f"Assigned {agent_name}: {task.goal[:60]}", level="DEBUG")
         return True
 
-    def _plan_scout_tasks(self, all_issues, counts):
-        """Gap analysis — what issues are missing? Assign Scout to find them."""
-        if "scout" not in self.workers:
-            return
+    def _dispatch_next(self, agent_name):
+        """Pop the next ready task from the plan and assign it.
 
-        # Don't assign if Scout already has a task
-        if not self.workers["scout"].inbox.empty():
+        Skips tasks whose identifier/name has exhausted retries since enqueue time.
+        """
+        agent = self.workers.get(agent_name)
+        if not agent or agent.is_paused or not agent.inbox.empty():
+            return False
+        # Pop tasks, skipping any that have since exhausted retries
+        while True:
+            task = self._plan.next_for(agent_name)
+            if not task:
+                return False
+            key = task.params.get("identifier") or task.params.get("name")
+            if key and not self.ledger.should_retry(key, task.type, max_failures=MAX_TASK_FAILURES):
+                self.log(f"Skipping exhausted task for {key[:40]}", level="DEBUG")
+                continue
+            return self._assign_task(agent_name, task)
+
+    def _dispatch_ready_tasks(self):
+        """Dispatch one task per idle agent from the plan."""
+        for name in self.workers:
+            self._dispatch_next(name)
+
+    def _fill_scout_queue(self, all_issues):
+        """Gap analysis — what issues are missing? Enqueue Scout tasks."""
+        if "scout" not in self.workers:
             return
 
         # Build gap analysis
@@ -1245,7 +1358,7 @@ Respond with JSON only:
                                     "year": i.get("year"), "month": i.get("month")} for i in batch]},
                 priority=3,  # LOW priority — don't block discovery
             )
-            self._assign_task("scout", task)
+            self._plan.enqueue("scout", task)
             return
 
         # Priority 2: Discover missing issues
@@ -1272,16 +1385,13 @@ Respond with JSON only:
                 },
                 priority=1,  # HIGH — this is the main bottleneck
             )
-            self._assign_task("scout", task)
+            self._plan.enqueue("scout", task)
 
-    def _plan_courier_tasks(self, counts):
-        """What's discovered but not downloaded? Assign Courier."""
+    def _fill_courier_queue(self):
+        """What's discovered but not downloaded? Enqueue up to 10 Courier tasks."""
         if "courier" not in self.workers:
             return
-        if not self.workers["courier"].inbox.empty():
-            return
 
-        # Find next issue to download
         issues = list_issues(status="discovered")
         downloadable = [
             i for i in issues
@@ -1289,53 +1399,88 @@ Respond with JSON only:
             and self.ledger.should_retry(i["identifier"], "download_pdf", max_failures=MAX_TASK_FAILURES)
         ]
 
-        if not downloadable:
+        for issue in downloadable[:10]:
+            ident = issue["identifier"]
+            context = self.ledger.get_context_for_agent(ident)
+            _cm = issue.get("month")
+            _cms = f"{_cm:02d}" if isinstance(_cm, int) else "??"
+            task = Task(
+                type="download_pdf",
+                goal=f"Download {issue.get('year')}-{_cms} ({ident[:30]})",
+                params={
+                    "identifier": ident,
+                    "title": issue.get("title", ""),
+                    "year": issue.get("year"),
+                    "month": issue.get("month"),
+                    "source": issue.get("source", "archive.org"),
+                    "source_url": issue.get("source_url"),
+                    "previous_failures": context,
+                },
+                priority=2,
+            )
+            self._plan.enqueue("courier", task)
+
+    def _fill_scrape_queue(self):
+        """Find AD Archive issues that need scraping and enqueue Courier scrape tasks."""
+        if "courier" not in self.workers:
             return
 
-        issue = downloadable[0]
-        ident = issue["identifier"]
-        context = self.ledger.get_context_for_agent(ident)
+        try:
+            issues = list_issues(status="discovered", source="ad_archive")
+        except Exception:
+            return
 
-        task = Task(
-            type="download_pdf",
-            goal=f"Download {issue.get('year')}-{issue.get('month', '?'):02d} ({ident[:30]})",
-            params={
-                "identifier": ident,
-                "title": issue.get("title", ""),
-                "year": issue.get("year"),
-                "month": issue.get("month"),
-                "source": issue.get("source", "archive.org"),
-                "source_url": issue.get("source_url"),
-                "previous_failures": context,
-            },
-            priority=2,
-        )
-        self._assign_task("courier", task)
+        scrapeable = [
+            i for i in issues
+            if i.get("month") and i.get("year")
+            and i.get("source_url")
+            and self.ledger.should_retry(i["identifier"], "scrape_features", max_failures=MAX_TASK_FAILURES)
+        ]
 
-    def _plan_reader_tasks(self, counts):
-        """What's downloaded but not extracted? Assign Reader."""
+        for issue in scrapeable[:5]:
+            ident = issue["identifier"]
+            _m = issue.get("month")
+            _ms = f"{_m:02d}" if isinstance(_m, int) else "??"
+            task = Task(
+                type="scrape_features",
+                goal=f"Scrape AD Archive {issue.get('year')}-{_ms}",
+                params={
+                    "identifier": ident,
+                    "year": issue.get("year"),
+                    "month": issue.get("month"),
+                    "source_url": issue.get("source_url"),
+                    "title": issue.get("title", ""),
+                },
+                priority=2,
+            )
+            self._plan.enqueue("courier", task)
+
+    def _fill_reader_queue(self):
+        """What's downloaded but not extracted? Enqueue up to 10 Reader tasks."""
         if "reader" not in self.workers:
-            return
-        if not self.workers["reader"].inbox.empty():
             return
 
         issues = list_issues(status="downloaded")
+        enqueued = 0
         for issue in issues:
+            if enqueued >= 10:
+                break
             ident = issue["identifier"]
             # Check if extraction already exists on disk
             output_path = os.path.join(EXTRACTIONS_DIR, f"{ident}.json")
             if os.path.exists(output_path):
                 # Already extracted on disk — maybe needs loading
-                # Check if it was already loaded (status would be 'extracted')
                 continue
 
             if not self.ledger.should_retry(ident, "extract_features", max_failures=MAX_TASK_FAILURES):
                 continue
 
             context = self.ledger.get_context_for_agent(ident)
+            _em = issue.get("month")
+            _ems = f"{_em:02d}" if isinstance(_em, int) else "??"
             task = Task(
                 type="extract_features",
-                goal=f"Extract features from {issue.get('year', '?')}-{issue.get('month', '?'):02d}",
+                goal=f"Extract features from {issue.get('year', '?')}-{_ems}",
                 params={
                     "identifier": ident,
                     "pdf_path": issue.get("pdf_path", ""),
@@ -1346,8 +1491,8 @@ Respond with JSON only:
                 },
                 priority=2,
             )
-            self._assign_task("reader", task)
-            return
+            self._plan.enqueue("reader", task)
+            enqueued += 1
 
         # Also check for extractions on disk that need loading
         for issue in issues:
@@ -1372,13 +1517,9 @@ Respond with JSON only:
                 except Exception as e:
                     self.log(f"Failed to load extraction for {ident}: {e}", level="ERROR")
 
-    def _plan_detective_tasks(self):
-        """Catch-up: find features with detective_verdict IS NULL and queue Detective."""
+    def _fill_detective_queue(self):
+        """Catch-up: find features with detective_verdict IS NULL and enqueue Detective."""
         if "detective" not in self.workers:
-            return
-        detective = self.workers["detective"]
-        # Skip if Detective already has work queued or is actively executing a task
-        if not detective.inbox.empty() or detective._current_task_obj is not None:
             return
 
         try:
@@ -1412,15 +1553,11 @@ Respond with JSON only:
             params={"names": names, "feature_ids": feature_ids},
             priority=3,  # Lower priority than extraction-triggered
         )
-        if self._assign_task("detective", task):
-            self.log(f"Planning fallback: queued {len(names)} names for Detective")
+        self._plan.enqueue("detective", task)
 
-    def _plan_researcher_tasks(self):
-        """Catch-up: find YES-verdict features without dossiers and queue Researcher."""
+    def _fill_researcher_queue(self):
+        """Catch-up: find YES-verdict features without dossiers and enqueue Researcher."""
         if "researcher" not in self.workers:
-            return
-        researcher = self.workers["researcher"]
-        if not researcher.inbox.empty() or researcher._current_task_obj is not None:
             return
 
         try:
@@ -1439,19 +1576,27 @@ Respond with JSON only:
         if not yes_features:
             return
 
-        # Load cross-reference results for enrichment
+        # Load cross-reference enrichment from Supabase (primary) or disk (fallback)
         xref_by_name = {}
-        results_path = os.path.join(XREF_DIR, "results.json")
         try:
-            if os.path.exists(results_path):
-                with open(results_path) as f:
-                    xref_results = json.load(f)
-                for r in xref_results:
-                    rname = (r.get("homeowner_name") or "").strip().lower()
-                    if rname:
-                        xref_by_name[rname] = r
+            xrefs = list_cross_references()
+            for r in xrefs:
+                rname = (r.get("homeowner_name") or "").strip().lower()
+                if rname:
+                    xref_by_name[rname] = r
         except Exception:
-            pass
+            # Fallback to local file
+            results_path = os.path.join(XREF_DIR, "results.json")
+            try:
+                if os.path.exists(results_path):
+                    with open(results_path) as f:
+                        xref_results = json.load(f)
+                    for r in xref_results:
+                        rname = (r.get("homeowner_name") or "").strip().lower()
+                        if rname:
+                            xref_by_name[rname] = r
+            except Exception:
+                pass
 
         for feat in yes_features:
             feature_id = feat["id"]
@@ -1470,7 +1615,7 @@ Respond with JSON only:
             if not self.ledger.should_retry(name, "investigate_lead", max_failures=MAX_TASK_FAILURES):
                 continue
 
-            # Enrich lead with actual BB/DOJ evidence from results.json
+            # Enrich lead with actual BB/DOJ evidence from Supabase xref
             xref = xref_by_name.get(name.lower(), {})
             lead = {
                 "homeowner_name": name,
@@ -1480,7 +1625,7 @@ Respond with JSON only:
                 "doj_status": xref.get("doj_status", "unknown"),
                 "doj_results": xref.get("doj_results"),
                 "combined_verdict": xref.get("combined_verdict", "yes_verdict"),
-                "confidence_score": xref.get("confidence_score", 0.5),
+                "confidence_score": float(xref.get("confidence_score") or 0.5),
             }
 
             task = Task(
@@ -1489,9 +1634,7 @@ Respond with JSON only:
                 params={"name": name, "lead": lead},
                 priority=3,
             )
-            if self._assign_task("researcher", task):
-                self.log(f"Planning fallback: queued Researcher for {name}")
-                break  # One at a time
+            self._plan.enqueue("researcher", task)
 
     # ═══════════════════════════════════════════════════════════
     # PHASE 4: STRATEGIC ASSESSMENT (periodic LLM call)
@@ -1532,8 +1675,9 @@ Respond with JSON only:
                 self.log("Using previous assessment as fallback")
             elif decision.get("strategy") == "minimal_planning":
                 # Run planning fallbacks directly without LLM assessment
-                self._plan_detective_tasks()
-                self._plan_researcher_tasks()
+                self._fill_detective_queue()
+                self._fill_researcher_queue()
+                self._dispatch_ready_tasks()
                 return
             else:
                 return
@@ -1615,6 +1759,9 @@ Respond with JSON only:
 
         # Agent improvement proposals (from episodic memory)
         report["improvement_proposals"] = self._get_improvement_proposals()
+
+        # Ready queue depths
+        report["plan_queues"] = self._plan.summary()
 
         return report
 
@@ -1774,8 +1921,27 @@ Respond with JSON only:
         return report
 
     def _build_xref_summary(self):
-        """Read cross-reference results summary."""
+        """Read cross-reference results summary from Supabase (primary) or disk (fallback)."""
         summary = {"total_checked": 0, "total_matches": 0, "recent_matches": []}
+
+        try:
+            xrefs = list_cross_references()
+            if xrefs:
+                summary["total_checked"] = len(xrefs)
+                matches = [r for r in xrefs if r.get("black_book_status") == "match"]
+                summary["total_matches"] = len(matches)
+                for m in matches[-5:]:
+                    bb = m.get("black_book_matches") or []
+                    match_type = bb[0].get("match_type", "?") if bb else "?"
+                    summary["recent_matches"].append({
+                        "name": m.get("homeowner_name", "?"),
+                        "match_type": match_type,
+                    })
+                return summary
+        except Exception:
+            pass
+
+        # Fallback to local files
         checked_path = os.path.join(XREF_DIR, "checked_features.json")
         results_path = os.path.join(XREF_DIR, "results.json")
 
@@ -1796,7 +1962,6 @@ Respond with JSON only:
                     summary["recent_matches"].append({
                         "name": m.get("homeowner_name", "?"),
                         "match_type": m.get("match_type", "?"),
-                        "issue": f"{m.get('year', '?')}-{m.get('month', '?')}",
                     })
         except Exception:
             pass
@@ -2098,6 +2263,13 @@ Analyze and provide your assessment."""
         self.log(f"Reset {identifier}: {' | '.join(steps_done)} — {reason}")
 
     def _remove_from_xref(self, feature_ids):
+        # Remove from Supabase cross_references table
+        try:
+            delete_cross_references(feature_ids)
+        except Exception as e:
+            self.log(f"Failed to delete xrefs from Supabase: {e}", level="ERROR")
+
+        # Also clean up local files (backward compat)
         results_path = os.path.join(XREF_DIR, "results.json")
         if os.path.exists(results_path):
             try:
@@ -2129,6 +2301,22 @@ Analyze and provide your assessment."""
         valid_verdicts = {"confirmed_match", "likely_match", "possible_match", "no_match"}
         if verdict not in valid_verdicts:
             return
+
+        # Write override to Supabase cross_references (find by name)
+        try:
+            xrefs = list_cross_references()
+            name_lower = name.lower().strip()
+            for xr in xrefs:
+                if (xr.get("homeowner_name") or "").lower().strip() == name_lower:
+                    update_xref_editor_override(xr["feature_id"], verdict, reason)
+                    # Also update binary verdict on features table
+                    from cross_reference import verdict_to_binary
+                    binary = verdict_to_binary(verdict, float(xr.get("confidence_score") or 0))
+                    update_detective_verdict(xr["feature_id"], binary)
+        except Exception as e:
+            self.log(f"Override Supabase write failed: {e}", level="ERROR")
+
+        # Also write to local file (backward compat)
         verdicts_path = os.path.join(DATA_DIR, "detective_verdicts.json")
         new_verdict = {
             "name": name, "verdict": verdict, "reason": reason,
@@ -2143,8 +2331,19 @@ Analyze and provide your assessment."""
         reason = action.get("reason", "Editor requested retry")
         if not name:
             return
+        name_lower = name.lower().strip()
+
+        # Reset in Supabase cross_references
+        try:
+            xrefs = list_cross_references()
+            for xr in xrefs:
+                if (xr.get("homeowner_name") or "").lower().strip() == name_lower:
+                    reset_xref_doj(xr["feature_id"])
+        except Exception as e:
+            self.log(f"retry_doj_search Supabase reset failed: {e}", level="ERROR")
+
+        # Also reset in local file (backward compat)
         results_path = os.path.join(XREF_DIR, "results.json")
-        name_lower = name.lower()
         try:
             def reset_doj(results):
                 for r in results:
@@ -2156,7 +2355,7 @@ Analyze and provide your assessment."""
                         break
             update_json_locked(results_path, reset_doj, default=[])
         except Exception as e:
-            self.log(f"retry_doj_search failed: {e}", level="ERROR")
+            self.log(f"retry_doj_search local reset failed: {e}", level="ERROR")
         self.log(f"Queued DOJ retry: {name}")
 
     def _set_designer_mode(self, action):

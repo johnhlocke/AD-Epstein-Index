@@ -152,9 +152,21 @@ def count_issues_by_status():
     """Count issues grouped by status. Returns dict like {"discovered": N, "downloaded": M, ...}.
 
     Also includes total count and other useful aggregates.
+    Returns empty default dict on any error (never None).
     """
-    sb = get_supabase()
-    result = sb.table("issues").select("id,status,year,month").execute()
+    _defaults = {
+        "total": 0, "downloaded_plus_extracted": 0, "discovered": 0,
+        "downloaded": 0, "extracted": 0, "skipped_pre1988": 0,
+        "error": 0, "no_pdf": 0, "extraction_error": 0,
+    }
+    try:
+        sb = get_supabase()
+        result = sb.table("issues").select("id,status,year,month").execute()
+    except Exception:
+        return _defaults
+
+    if not result or not result.data:
+        return _defaults
 
     counts = {}
     total = 0
@@ -405,6 +417,287 @@ def upload_to_storage(bucket, path, file_data, content_type="image/png"):
 
 
 # ── Migration ───────────────────────────────────────────────
+
+
+# ── Cross-Reference Operations ────────────────────────────
+
+
+def upsert_cross_reference(feature_id, data):
+    """Upsert a cross-reference result by feature_id (one row per feature).
+
+    Args:
+        feature_id: The feature's numeric primary key
+        data: Dict of xref fields (feature_id added automatically)
+
+    Returns:
+        The upserted row dict, or None on failure.
+    """
+    sb = get_supabase()
+
+    existing = sb.table("cross_references").select("id").eq("feature_id", feature_id).execute()
+
+    data["feature_id"] = feature_id
+    data["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    if existing.data:
+        xref_id = existing.data[0]["id"]
+        result = sb.table("cross_references").update(data).eq("id", xref_id).execute()
+        return result.data[0] if result.data else None
+    else:
+        result = sb.table("cross_references").insert(data).execute()
+        return result.data[0] if result.data else None
+
+
+def get_cross_reference(feature_id):
+    """Fetch a single cross-reference by feature_id. Returns dict or None."""
+    sb = get_supabase()
+    result = sb.table("cross_references").select("*").eq("feature_id", feature_id).execute()
+    return result.data[0] if result.data else None
+
+
+def list_cross_references(combined_verdict=None):
+    """List all cross-references, optionally filtered by combined_verdict.
+
+    Args:
+        combined_verdict: Optional filter (e.g., "confirmed_match", "no_match")
+
+    Returns:
+        List of xref dicts.
+    """
+    sb = get_supabase()
+    query = sb.table("cross_references").select("*")
+    if combined_verdict is not None:
+        query = query.eq("combined_verdict", combined_verdict)
+    result = query.order("checked_at", desc=True).execute()
+    return result.data
+
+
+def get_xref_leads():
+    """Build the by_name leads dict from Supabase cross-references.
+
+    Returns a dict keyed by lowercase homeowner name, with overrides applied:
+    {
+        "miranda brooks": {
+            "name": "Miranda Brooks",
+            "feature_ids": [123, 456],
+            "bb_verdict": "match",
+            "bb_matches": [...],
+            "doj_verdict": "searched",
+            "doj_results": {...},
+            "combined": "likely_match",
+            "confidence_score": 0.75,
+            "binary": "YES",
+            "editor_override": "confirmed_match",  # if present
+        }
+    }
+    """
+    xrefs = list_cross_references()
+    by_name = {}
+
+    for xr in xrefs:
+        name = (xr.get("homeowner_name") or "").strip()
+        if not name:
+            continue
+        key = name.lower()
+
+        # Apply editor override if present
+        effective_verdict = xr.get("editor_override_verdict") or xr.get("combined_verdict", "pending")
+
+        if key not in by_name:
+            by_name[key] = {
+                "name": name,
+                "feature_ids": [],
+                "bb_verdict": xr.get("black_book_status", "pending"),
+                "bb_matches": xr.get("black_book_matches"),
+                "doj_verdict": xr.get("doj_status", "pending"),
+                "doj_results": xr.get("doj_results"),
+                "combined": effective_verdict,
+                "confidence_score": float(xr.get("confidence_score") or 0),
+                "binary": xr.get("binary_verdict", "NO"),
+                "rationale": xr.get("verdict_rationale"),
+                "false_positive_indicators": xr.get("false_positive_indicators"),
+            }
+            if xr.get("editor_override_verdict"):
+                by_name[key]["editor_override"] = xr["editor_override_verdict"]
+                by_name[key]["editor_override_reason"] = xr.get("editor_override_reason")
+
+        by_name[key]["feature_ids"].append(xr.get("feature_id"))
+
+    return by_name
+
+
+def update_xref_editor_override(feature_id, verdict, reason):
+    """Write an editor override to a cross-reference row.
+
+    Args:
+        feature_id: The feature's numeric primary key
+        verdict: Override verdict (e.g., "confirmed_match", "no_match")
+        reason: Editor's reason for the override
+    """
+    sb = get_supabase()
+    sb.table("cross_references").update({
+        "editor_override_verdict": verdict,
+        "editor_override_reason": reason,
+        "editor_override_at": datetime.now(timezone.utc).isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("feature_id", feature_id).execute()
+
+
+def get_features_without_xref():
+    """Get features that have no cross-reference row yet.
+
+    Replaces the old checked_features.json approach.
+    Returns list of feature dicts needing xref.
+    """
+    sb = get_supabase()
+
+    # Get all features with valid homeowner names
+    all_features = (
+        sb.table("features")
+        .select("id, homeowner_name, issue_id")
+        .neq("homeowner_name", "")
+        .not_.is_("homeowner_name", "null")
+        .neq("homeowner_name", "null")
+        .neq("homeowner_name", "None")
+        .execute()
+    )
+
+    if not all_features.data:
+        return []
+
+    # Get all feature_ids that already have xref rows
+    xref_rows = sb.table("cross_references").select("feature_id").execute()
+    has_xref = {r["feature_id"] for r in xref_rows.data}
+
+    return [f for f in all_features.data if f["id"] not in has_xref]
+
+
+def delete_cross_references(feature_ids):
+    """Delete cross-reference rows for the given feature IDs.
+
+    Args:
+        feature_ids: Set or list of feature IDs to delete xref rows for
+    """
+    if not feature_ids:
+        return
+    sb = get_supabase()
+    for fid in feature_ids:
+        sb.table("cross_references").delete().eq("feature_id", fid).execute()
+
+
+def reset_xref_doj(feature_id):
+    """Reset DOJ search status for a cross-reference (for retry).
+
+    Args:
+        feature_id: The feature's numeric primary key
+    """
+    sb = get_supabase()
+    sb.table("cross_references").update({
+        "doj_status": "pending",
+        "doj_results": None,
+        "combined_verdict": "pending",
+        "confidence_score": 0.0,
+        "verdict_rationale": None,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).eq("feature_id", feature_id).execute()
+
+
+def migrate_disk_xrefs():
+    """One-time migration from disk JSON files to Supabase cross_references table.
+
+    Reads data/cross_references/results.json (19 entries) and
+    data/detective_verdicts.json (17 overrides), then upserts into cross_references.
+
+    Run once: python3 -c "from db import migrate_disk_xrefs; migrate_disk_xrefs()"
+    """
+    base_dir = os.path.join(os.path.dirname(__file__), "..", "data")
+    results_path = os.path.join(base_dir, "cross_references", "results.json")
+    verdicts_path = os.path.join(base_dir, "detective_verdicts.json")
+
+    # Load results
+    results = []
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            results = json.load(f)
+        print(f"Loaded {len(results)} entries from results.json")
+    else:
+        print("No results.json found — nothing to migrate")
+        return
+
+    # Load editor verdicts (keyed by lowercase name)
+    editor_overrides = {}
+    if os.path.exists(verdicts_path):
+        with open(verdicts_path) as f:
+            verdicts = json.load(f)
+        for v in verdicts:
+            name_key = (v.get("name") or "").strip().lower()
+            if name_key and v.get("verdict"):
+                editor_overrides[name_key] = v
+        print(f"Loaded {len(editor_overrides)} editor overrides from detective_verdicts.json")
+
+    # Import verdict_to_binary for computing binary verdict
+    try:
+        from cross_reference import verdict_to_binary
+    except ImportError:
+        def verdict_to_binary(v, s, o=None):
+            if v in ("confirmed_match", "likely_match"):
+                return "YES"
+            if v == "possible_match" and s >= 0.40:
+                return "YES"
+            if v == "needs_review":
+                return "YES"
+            return "NO"
+
+    migrated = 0
+    skipped = 0
+
+    for r in results:
+        feature_id = r.get("feature_id")
+        name = r.get("homeowner_name", "")
+        if not feature_id or not name:
+            print(f"  SKIP: missing feature_id or name in entry")
+            skipped += 1
+            continue
+
+        combined = r.get("combined_verdict", "pending")
+        score = float(r.get("confidence_score") or 0)
+        binary = verdict_to_binary(combined, score)
+
+        data = {
+            "homeowner_name": name,
+            "black_book_status": r.get("black_book_status", "pending"),
+            "black_book_matches": r.get("black_book_matches"),
+            "doj_status": r.get("doj_status", "pending"),
+            "doj_results": r.get("doj_results"),
+            "combined_verdict": combined,
+            "confidence_score": score,
+            "verdict_rationale": r.get("verdict_rationale"),
+            "false_positive_indicators": r.get("false_positive_indicators"),
+            "binary_verdict": binary,
+        }
+
+        # Apply editor override if one exists for this name
+        name_lower = name.strip().lower()
+        if name_lower in editor_overrides:
+            ov = editor_overrides[name_lower]
+            data["editor_override_verdict"] = ov["verdict"]
+            data["editor_override_reason"] = ov.get("reason", "Editor override")
+            data["editor_override_at"] = ov.get("queued_time")
+
+        try:
+            result = upsert_cross_reference(feature_id, data)
+            if result:
+                override_note = f" [override: {data.get('editor_override_verdict')}]" if data.get("editor_override_verdict") else ""
+                print(f"  OK {name} → feature_id={feature_id} ({combined}){override_note}")
+                migrated += 1
+            else:
+                print(f"  FAIL {name}: upsert returned None")
+                skipped += 1
+        except Exception as e:
+            print(f"  FAIL {name}: {e}")
+            skipped += 1
+
+    print(f"\nXRef migration complete: {migrated} migrated, {skipped} skipped")
 
 
 def migrate_disk_dossiers():

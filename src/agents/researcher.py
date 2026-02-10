@@ -389,9 +389,9 @@ class ResearcherAgent(Agent):
 
         leads = []
 
-        # Primary: Supabase features with detective_verdict='YES'
+        # Primary: Supabase features with detective_verdict='YES', enriched with xref data
         try:
-            from db import get_supabase, get_dossier
+            from db import get_supabase, get_dossier, get_cross_reference
             sb = get_supabase()
             result = (
                 sb.table("features")
@@ -414,15 +414,23 @@ class ResearcherAgent(Agent):
                         continue
                 except Exception:
                     pass
+
+                # Enrich with xref data from Supabase cross_references
+                xref = {}
+                try:
+                    xref = get_cross_reference(feature_id) or {}
+                except Exception:
+                    pass
+
                 leads.append({
                     "feature_id": feature_id,
                     "homeowner_name": name,
-                    "combined_verdict": "yes_verdict",
-                    "black_book_status": "unknown",
-                    "black_book_matches": None,
-                    "doj_status": "unknown",
-                    "doj_results": None,
-                    "confidence_score": 0.5,
+                    "combined_verdict": xref.get("combined_verdict", "yes_verdict"),
+                    "black_book_status": xref.get("black_book_status", "unknown"),
+                    "black_book_matches": xref.get("black_book_matches"),
+                    "doj_status": xref.get("doj_status", "unknown"),
+                    "doj_results": xref.get("doj_results"),
+                    "confidence_score": float(xref.get("confidence_score") or 0.5),
                 })
         except Exception:
             pass  # Fall through to legacy path

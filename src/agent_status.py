@@ -122,38 +122,65 @@ def read_extractions():
 
 
 def read_xref():
-    """Read cross-reference results from results.json and return summary."""
+    """Read cross-reference results from Supabase (primary) or disk (fallback).
+
+    Returns same shape regardless of source:
+        {"checked": N, "matches": N, "leads": N, "verdicts": {}, "by_name": {}}
+    """
+    empty = {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
+
+    # Primary source: Supabase cross_references table
+    try:
+        from db import list_cross_references
+        xrefs = list_cross_references()
+        if xrefs:
+            return _build_xref_summary_from_rows(xrefs)
+    except Exception:
+        pass
+
+    # Fallback: local results.json
     results_path = os.path.join(XREF_DIR, "results.json")
     if not os.path.exists(results_path):
-        return {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
+        return empty
     try:
         with open(results_path) as f:
             results = json.load(f)
-        checked = len(results)
-        # BB-only matches (legacy)
-        matches = sum(1 for r in results if r.get("black_book_status") == "match")
-        # All leads = any non-no_match verdict OR BB match
-        leads = sum(1 for r in results
-                    if r.get("combined_verdict", "no_match") != "no_match"
-                    or r.get("black_book_status") == "match")
-        # Verdict breakdown
-        verdicts = {}
-        # Per-name lookup for notable finds
-        by_name = {}
-        for r in results:
-            v = r.get("combined_verdict", "no_match")
-            verdicts[v] = verdicts.get(v, 0) + 1
-            name = r.get("homeowner_name", "").lower().strip()
-            if name:
-                by_name[name] = {
-                    "verdict": v,
-                    "bb_status": r.get("black_book_status", "no_match"),
-                    "confidence": r.get("confidence_score", 0.0),
-                }
-        return {"checked": checked, "matches": matches, "leads": leads,
-                "verdicts": verdicts, "by_name": by_name}
+        return _build_xref_summary_from_rows(results)
     except Exception:
-        return {"checked": 0, "matches": 0, "leads": 0, "verdicts": {}, "by_name": {}}
+        return empty
+
+
+def _build_xref_summary_from_rows(rows):
+    """Build xref summary dict from a list of xref rows (Supabase or disk).
+
+    Works with both Supabase cross_references rows and disk results.json entries
+    because they share the same field names.
+    """
+    checked = len(rows)
+    matches = sum(1 for r in rows if r.get("black_book_status") == "match")
+    verdicts = {}
+    by_name = {}
+
+    for r in rows:
+        # Apply editor override if present (Supabase rows have this field)
+        effective_verdict = r.get("editor_override_verdict") or r.get("combined_verdict", "no_match")
+        verdicts[effective_verdict] = verdicts.get(effective_verdict, 0) + 1
+
+        name = (r.get("homeowner_name") or "").lower().strip()
+        if name:
+            by_name[name] = {
+                "verdict": effective_verdict,
+                "bb_status": r.get("black_book_status", "no_match"),
+                "confidence": float(r.get("confidence_score") or 0),
+                "original_name": r.get("homeowner_name", ""),
+            }
+
+    leads = sum(1 for entry in by_name.values()
+                if entry["verdict"] != "no_match"
+                or entry["bb_status"] == "match")
+
+    return {"checked": checked, "matches": matches, "leads": leads,
+            "verdicts": verdicts, "by_name": by_name}
 
 
 def read_dossiers():
@@ -641,43 +668,45 @@ CELEBRITY_NAMES = [
 
 
 def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, researcher_live_task=""):
-    """Scan features for notable/celebrity names and Epstein matches.
+    """Build notable finds directly from xref leads — guarantees 1:1 match with XRef Leads stat.
 
-    Names that have been checked by the Detective and found to be no_match
-    are removed. Names with matches are shown with their verdict.
-    Research status shows whether the Researcher is investigating each lead.
+    Iterates xref by_name (deduped, latest verdict per name) and enriches
+    with feature_list metadata where available.
     """
     finds = []
-    seen = set()
     by_name = xref_stats.get("by_name", {})
     dossier_by_name = (dossier_stats or {}).get("by_name", {})
 
     # Parse Researcher's current task to find who's being investigated right now
     investigating_now = ""
     if researcher_live_task:
-        # Format: "Investigating Name (verdict)..." or "Dossier: Name (strength)"
         lt = researcher_live_task.lower()
         if "investigating" in lt:
             investigating_now = researcher_live_task.split("Investigating ")[-1].split(" (")[0].lower().strip()
         elif "dossier:" in lt:
             investigating_now = researcher_live_task.split("Dossier: ")[-1].split(" (")[0].lower().strip()
 
+    # Build a lookup from feature_list for enrichment (issue, location)
+    feature_by_name = {}
     for feat in extraction_stats.get("feature_list", []):
-        name = feat.get("homeowner_name")
-        if not name:
+        n = feat.get("homeowner_name")
+        if n:
+            feature_by_name[n.lower().strip()] = feat
+
+    # Iterate xref leads directly — same source as the leads count
+    for name_key, xref_entry in by_name.items():
+        verdict = xref_entry["verdict"]
+        bb_status = xref_entry.get("bb_status", "no_match")
+
+        # Only include leads: non-no_match verdict OR BB match
+        if verdict == "no_match" and bb_status != "match":
             continue
 
-        # Deduplicate by lowercase name
-        key = name.lower().strip()
-        if key in seen:
-            continue
-        seen.add(key)
+        # Use original_name from xref if available, else title-case the key
+        display_name = xref_entry.get("original_name") or name_key.title()
 
-        # Check xref status — skip names already cleared as no_match
-        xref_entry = by_name.get(key)
-        if xref_entry and xref_entry["verdict"] == "no_match" and xref_entry["bb_status"] == "no_match":
-            continue  # Cleared by Detective — remove from notable finds
-
+        # Enrich with feature data if available
+        feat = feature_by_name.get(name_key, {})
         location_parts = [
             feat.get("location_city"),
             feat.get("location_state"),
@@ -685,21 +714,14 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
         ]
         location = ", ".join(p for p in location_parts if p)
 
-        # Determine type: Epstein match > celebrity > notable
-        if xref_entry and xref_entry["verdict"] not in ("no_match", None):
-            find_type = "epstein_match"
-            status = xref_entry["verdict"]
-        elif any(celeb in key for celeb in CELEBRITY_NAMES):
-            find_type = "celebrity"
-            status = "pending" if not xref_entry else "cleared"
+        # Determine status label
+        if verdict not in ("no_match", None):
+            status = verdict
         else:
-            continue  # Not a celebrity and not an Epstein match — skip
-
-        if status == "cleared":
-            continue  # Celebrity checked and cleared
+            status = "bb_match"  # BB-only match
 
         # Determine research status and editor verdict
-        dossier_info = dossier_by_name.get(key)
+        dossier_info = dossier_by_name.get(name_key)
         editor_verdict = None
         editor_reasoning = None
         if isinstance(dossier_info, dict):
@@ -708,28 +730,20 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
             editor_verdict = dossier_info.get("editor_verdict") or None
             editor_reasoning = dossier_info.get("editor_reasoning") or None
         elif isinstance(dossier_info, str):
-            # Legacy format: just the strength string
             research = "dossier_complete"
             research_detail = dossier_info
-        elif investigating_now and key.startswith(investigating_now[:8]):
+        elif investigating_now and name_key.startswith(investigating_now[:8]):
             research = "investigating"
             research_detail = None
-        elif find_type == "epstein_match":
+        else:
             research = "queued"
             research_detail = None
-        else:
-            research = None
-            research_detail = None
-
-        # Skip names Miranda has rejected — her word is final
-        if editor_verdict == "REJECTED":
-            continue
 
         finds.append({
-            "name": name,
+            "name": display_name,
             "issue": feat.get("issue", ""),
             "location": location,
-            "type": find_type,
+            "type": "epstein_match",
             "status": status,
             "research": research,
             "research_detail": research_detail,
@@ -737,37 +751,10 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
             "editor_reasoning": editor_reasoning,
         })
 
-    # Add CONFIRMED dossiers that aren't already in finds (e.g. from pre-extraction era)
-    for name_key, info in dossier_by_name.items():
-        if name_key in seen:
-            continue
-        if not isinstance(info, dict):
-            continue
-        verdict = (info.get("editor_verdict") or "").upper()
-        if verdict == "REJECTED":
-            continue
-        # Include CONFIRMED and PENDING_REVIEW dossiers not yet in feature list
-        strength = info.get("strength", "")
-        if verdict == "CONFIRMED" or strength in ("high", "medium"):
-            finds.append({
-                "name": name_key.title(),
-                "issue": "",
-                "location": "",
-                "type": "epstein_match",
-                "status": "confirmed" if verdict == "CONFIRMED" else "likely_match",
-                "research": "dossier_complete",
-                "research_detail": strength,
-                "editor_verdict": verdict or None,
-                "editor_reasoning": info.get("editor_reasoning"),
-            })
-            seen.add(name_key)
-
-    # Sort: confirmed first, then epstein matches, then celebrities
+    # Sort by detective verdict severity
     def sort_key(f):
-        if f.get("editor_verdict") == "CONFIRMED":
-            return (0,)
-        type_order = {"epstein_match": 1, "celebrity": 2, "notable": 3}
-        return (type_order.get(f["type"], 4),)
+        verdict_order = {"confirmed_match": 0, "likely_match": 1, "possible_match": 2, "needs_review": 3, "bb_match": 4, "pending": 5}
+        return (verdict_order.get(f["status"], 6),)
     finds.sort(key=sort_key)
 
     return finds
@@ -926,6 +913,85 @@ def build_coverage_map():
     return coverage
 
 
+def _get_recent_memories(limit=20):
+    """Get recent episodic memory episodes for the Memories popup."""
+    path = os.path.join(DATA_DIR, "agent_memory", "episodes.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path) as f:
+            episodes = json.load(f)
+        recent = episodes[-limit:]
+        result = []
+        for ep in reversed(recent):  # Newest first
+            ts = ep.get("timestamp", 0)
+            time_str = datetime.fromtimestamp(ts).strftime("%I:%M %p") if ts else "?"
+            result.append({
+                "agent": ep.get("agent", "?"),
+                "text": (ep.get("text", "")[:100] + "...") if len(ep.get("text", "")) > 100 else ep.get("text", ""),
+                "outcome": ep.get("outcome", "?"),
+                "time": time_str,
+            })
+        return result
+    except Exception:
+        return []
+
+
+def _get_all_dossier_details():
+    """Get all dossiers with strength + rationale + editor verdict for the Dossiers popup."""
+    details = []
+
+    # Primary: Supabase
+    try:
+        from db import list_dossiers
+        dossiers = list_dossiers()
+        if dossiers:
+            for d in dossiers:
+                name = (d.get("subject_name") or "").strip()
+                if not name:
+                    continue
+                strength = (d.get("connection_strength") or "").upper()
+                details.append({
+                    "name": name,
+                    "strength": strength.lower() if strength else "unknown",
+                    "strength_rationale": (d.get("strength_rationale") or "")[:150],
+                    "editor_verdict": (d.get("editor_verdict") or "").upper() or None,
+                    "editor_reasoning": (d.get("editor_reasoning") or "")[:150] or None,
+                })
+            # Sort: CONFIRMED first, then by strength descending
+            strength_order = {"high": 0, "medium": 1, "low": 2, "coincidence": 3, "unknown": 4}
+            details.sort(key=lambda d: (
+                0 if d.get("editor_verdict") == "CONFIRMED" else 1,
+                strength_order.get(d["strength"], 5),
+            ))
+            return details
+    except Exception:
+        pass
+
+    # Fallback: local file
+    master_path = os.path.join(DOSSIERS_DIR, "all_dossiers.json")
+    if os.path.exists(master_path):
+        try:
+            with open(master_path) as f:
+                dossiers = json.load(f)
+            for d in dossiers:
+                name = (d.get("subject_name") or "").strip()
+                if not name:
+                    continue
+                strength = (d.get("connection_strength") or "").upper()
+                details.append({
+                    "name": name,
+                    "strength": strength.lower() if strength else "unknown",
+                    "strength_rationale": (d.get("strength_rationale") or "")[:150],
+                    "editor_verdict": None,
+                    "editor_reasoning": None,
+                })
+        except Exception:
+            pass
+
+    return details
+
+
 def generate_status():
     """Generate the full status JSON."""
     manifest_stats = read_pipeline_stats()
@@ -1032,7 +1098,7 @@ def generate_status():
         "agents": [
             {
                 "id": "scout",
-                "name": "Scout",
+                "name": "Arthur",
                 "role": "Discovers AD issues on archive.org",
                 "status": scout_status,
                 "message": scout_msg,
@@ -1042,7 +1108,7 @@ def generate_status():
             },
             {
                 "id": "courier",
-                "name": "Courier",
+                "name": "Casey",
                 "role": "Downloads & delivers PDFs",
                 "status": courier_status,
                 "message": courier_msg,
@@ -1052,7 +1118,7 @@ def generate_status():
             },
             {
                 "id": "reader",
-                "name": "Reader",
+                "name": "Elias",
                 "role": "Extracts homeowners & data",
                 "status": reader_status,
                 "message": reader_msg,
@@ -1062,7 +1128,7 @@ def generate_status():
             },
             {
                 "id": "detective",
-                "name": "Detective",
+                "name": "Silas",
                 "role": "Cross-refs against Epstein docs",
                 "status": detective_status,
                 "message": detective_msg,
@@ -1072,7 +1138,7 @@ def generate_status():
             },
             {
                 "id": "researcher",
-                "name": "Researcher",
+                "name": "Elena",
                 "role": "Investigates matches & builds dossiers",
                 "status": researcher_status,
                 "message": researcher_msg,
@@ -1082,7 +1148,7 @@ def generate_status():
             },
             {
                 "id": "editor",
-                "name": "Editor",
+                "name": "Miranda",
                 "role": "Supervises pipeline strategy",
                 "status": editor_status,
                 "message": editor_msg,
@@ -1092,7 +1158,7 @@ def generate_status():
             },
             {
                 "id": "designer",
-                "name": "Designer",
+                "name": "Sable",
                 "role": "Designs Phase 3 website",
                 "status": designer_status,
                 "message": designer_msg,
@@ -1107,9 +1173,12 @@ def generate_status():
             {"label": "Extracted Issues", "value": manifest_stats["distinct_issues"]},
             {"label": "Features", "value": manifest_stats["total_features"]},
             {"label": "XRef Leads", "value": xref_stats.get("leads", xref_stats.get("matches", 0))},
-            {"label": "Dossiers", "value": dossier_stats["investigated"]},
-            {"label": "Confirmed", "value": confirmed_associates, "details": dossier_stats.get("confirmed_names", [])},
-            {"label": "Memories", "value": _get_memory_count()},
+            {"label": "Dossiers", "value": dossier_stats["investigated"],
+             "popup_type": "dossiers", "details": _get_all_dossier_details()},
+            {"label": "Confirmed", "value": confirmed_associates,
+             "popup_type": "confirmed", "details": dossier_stats.get("confirmed_names", [])},
+            {"label": "Memories", "value": _get_memory_count(),
+             "popup_type": "memories", "details": _get_recent_memories()},
         ],
         "collaborations": build_collaborations(manifest_stats, extraction_stats, xref_stats),
         "log": build_log(manifest_stats, extraction_stats, xref_stats),

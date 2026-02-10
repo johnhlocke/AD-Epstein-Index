@@ -157,3 +157,51 @@ CREATE TABLE dossier_images (
 CREATE INDEX idx_dossier_images_dossier_id ON dossier_images(dossier_id);
 
 -- NOTE: Also create Supabase Storage bucket "dossier-images" (public) in Dashboard.
+
+-- ============================================================
+-- Cross-Reference Tables (Detective agent output)
+-- ============================================================
+
+-- Cross-references: full detective work per feature (one row per feature)
+-- Replaces local results.json + detective_verdicts.json
+CREATE TABLE cross_references (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE UNIQUE,
+  homeowner_name TEXT NOT NULL,
+
+  -- Black Book results
+  black_book_status TEXT DEFAULT 'pending'
+    CHECK (black_book_status IN ('match', 'no_match', 'pending')),
+  black_book_matches JSONB,
+
+  -- DOJ search results
+  doj_status TEXT DEFAULT 'pending'
+    CHECK (doj_status IN ('searched', 'pending', 'error', 'skipped')),
+  doj_results JSONB,
+
+  -- Combined verdict (from assess_combined_verdict)
+  combined_verdict TEXT DEFAULT 'pending'
+    CHECK (combined_verdict IN ('confirmed_match', 'likely_match', 'possible_match',
+                                 'needs_review', 'no_match', 'pending')),
+  confidence_score NUMERIC(3,2) DEFAULT 0.0,
+  verdict_rationale TEXT,
+  false_positive_indicators JSONB,
+
+  -- Binary verdict for features table compat
+  binary_verdict TEXT CHECK (binary_verdict IN ('YES', 'NO')),
+
+  -- Editor overrides (preserve original verdict alongside override)
+  editor_override_verdict TEXT,
+  editor_override_reason TEXT,
+  editor_override_at TIMESTAMPTZ,
+
+  -- Individuals actually searched (from name analysis)
+  individuals_searched JSONB,
+
+  -- Timestamps
+  checked_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_xref_combined_verdict ON cross_references(combined_verdict);
+CREATE INDEX idx_xref_homeowner_name ON cross_references(homeowner_name);
