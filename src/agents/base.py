@@ -178,6 +178,14 @@ class Agent(ABC):
                         self._current_task = f"Task: {task.goal[:60]}"
                         self.log(f"Executing task {task.id}: {task.goal}")
 
+                        # Build task briefing from memory + bulletin
+                        try:
+                            briefing = await asyncio.to_thread(self._get_task_briefing, task)
+                            if briefing:
+                                task.briefing = briefing
+                        except Exception:
+                            pass
+
                         from agents.tasks import TaskResult
                         try:
                             result = await self.execute(task)
@@ -524,6 +532,9 @@ class Agent(ABC):
                     "You're reflecting on your recent work. Review these episodes and identify:\n"
                     "1. A pattern you notice (recurring problem, common strategy that works)\n"
                     "2. Something you should do differently next time\n"
+                    "3. If you identify a concrete actionable rule, state it as a single clear "
+                    "sentence starting with 'RULE:' (e.g., 'RULE: Always retry with lower "
+                    "resolution when PDF extraction hits a size limit')\n"
                     "Be specific and practical — this note is for your future self."
                 ),
                 messages=[{"role": "user", "content": f"Your recent episodes:\n{episodes_text}\n\nWhat patterns do you see? What would you do differently?"}],
@@ -538,6 +549,13 @@ class Agent(ABC):
                 outcome="insight",
                 extra_meta={"episode_count": len(recent)},
             )
+
+            # Extract and share behavioral rules from the reflection
+            if "RULE:" in insight:
+                rule_start = insight.index("RULE:")
+                rule = insight[rule_start + 5:].strip().split("\n")[0].strip()
+                if rule:
+                    self._post_task_learning("reflection", rule)
 
             # Show reflection as speech
             self._speech = insight[:120] if len(insight) > 120 else insight
@@ -652,6 +670,62 @@ class Agent(ABC):
             return board.read(n=n, tag=tag, exclude_agent=self.name)
         except Exception:
             return []
+
+    # ── Task Briefing & Learning ─────────────────────────────
+
+    def _get_task_briefing(self, task):
+        """Recall relevant memory + bulletin context before executing a task.
+
+        Queries own episodic memory for similar past tasks and reads the
+        bulletin board for warnings, tips, and learned rules from other agents.
+        Returns a formatted string ready to inject into any LLM prompt.
+        Cost: ~5ms (numpy dot product + JSON read). No LLM call.
+        """
+        lines = []
+
+        # 1. Recall past episodes for this task type
+        past = self.recall_episodes(
+            f"{task.type} {task.goal[:80]}",
+            task_type=task.type,
+            n=5,
+        )
+        if past:
+            lines.append("PAST EXPERIENCE (your own memory of similar tasks):")
+            for ep in past:
+                outcome = ep["metadata"].get("outcome", "?")
+                lines.append(f"  - [{outcome}] {ep['episode'][:150]}")
+
+        # 2. Read relevant bulletins (warnings + learned rules)
+        bulletins = self.read_bulletin(n=5, tag="warning")
+        bulletins += self.read_bulletin(n=5, tag="learned")
+        # Deduplicate by timestamp
+        seen = set()
+        unique_bulletins = []
+        for b in bulletins:
+            ts = b.get("timestamp", 0)
+            if ts not in seen:
+                seen.add(ts)
+                unique_bulletins.append(b)
+
+        if unique_bulletins:
+            lines.append("NOTES FROM OTHER AGENTS (bulletin board):")
+            for note in unique_bulletins[:8]:
+                lines.append(f"  - [{note.get('agent', '?')}] {note.get('text', '')[:150]}")
+
+        return "\n".join(lines) if lines else ""
+
+    def _post_task_learning(self, task_type, lesson):
+        """Share a learned insight with other agents via the bulletin board.
+
+        Posts a structured note tagged "learned" so other agents pick it up
+        in their pre-execution briefing. Only posts non-trivial lessons.
+        """
+        if not lesson or len(lesson) < 10:
+            return
+        self.post_bulletin(
+            f"[{task_type}] {lesson[:200]}",
+            tag="learned",
+        )
 
     # ── Self-Improvement ──────────────────────────────────────
 

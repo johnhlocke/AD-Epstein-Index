@@ -25,6 +25,7 @@ class Task:
     params: dict            # Everything the agent needs
     priority: int = 2       # 0=critical, 1=high, 2=normal, 3=low
     id: str = field(default_factory=lambda: uuid.uuid4().hex[:8])
+    briefing: str = ""      # Pre-execution context from memory + bulletin board
 
     def to_dict(self):
         return asdict(self)

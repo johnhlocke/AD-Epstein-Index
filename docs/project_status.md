@@ -45,6 +45,7 @@ This file should be automatically updated when necessary to answer three key que
 | Curiosity (cross-agent pattern exploration) | Tooling | Done |
 | World model (structured pipeline state awareness) | Tooling | Done |
 | Inter-agent communication (bulletin board) | Tooling | Done |
+| Memory feedback loop (briefing + learning + reflection rules) | Tooling | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
 | Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
 | Build cross-reference engine | Phase 2 | Done |
@@ -147,6 +148,7 @@ Built a 7-agent autonomous pipeline that runs continuously:
 - **Editor-directed Detective flow** — Editor routes features through Detective (YES/NO verdict) and Researcher (dossier), replacing self-managing queries. Binary verdicts stored on `features` table.
 - **Agent personalities** — Each agent has a character name (Arthur, Casey, Elias, Silas, Elena, Miranda) chosen via Gemini Vision analysis of their pixel sprites
 - **Idle chatter** — Agents generate personality-driven idle thoughts via Haiku when waiting for work (replaces static "Waiting for assignment...")
+- **Memory feedback loop** — Agents now read before they act: `_get_task_briefing()` queries episodic memory + bulletin board before every task (~5ms, no LLM). `_post_task_learning()` shares lessons after tasks. `reflect()` extracts behavioral rules and posts them for all agents to pick up. Dead recall blocks removed from Detective and Researcher.
 
 ### Phase 3: Interactive Website
 
@@ -197,7 +199,13 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 
 ## 3. What's Next
 
-**Immediate — Agent Intelligence Upgrades:**
+**Immediate — Editor Planning Decomposition:**
+- Replace Editor's flat priority waterfall (`_plan_scout_tasks()`, `_plan_courier_tasks()`, etc.) with dependency-aware execution plans
+- Step 1: Plan objects with explicit dependencies (`PlannedTask` with `depends_on` field)
+- Step 2: Look-ahead dispatch (event-driven cascading instead of 30s poll)
+- Step 3: Duration tracking + idle minimization (from episodic memory)
+
+**Completed — Agent Intelligence Upgrades (All 7 Gaps Closed):**
 - ~~Implement episodic memory~~ **Done** (ONNX all-MiniLM-L6-v2, 384-dim, JSON-backed)
 - ~~Add reflection loops~~ **Done** (10-min periodic self-assessment via Haiku)
 - ~~Implement self-improvement~~ **Done** (30-min methodology proposals via Haiku)
@@ -205,7 +213,7 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 - ~~Implement curiosity~~ **Done** (15-min cross-agent pattern exploration)
 - ~~Implement world model~~ **Done** (structured pipeline state + bottleneck detection)
 - ~~Implement inter-agent communication~~ **Done** (bulletin board for peer tips/warnings)
-- All 7 intelligence gaps closed!
+- ~~Wire memory/bulletin/reflection feedback loop~~ **Done** (briefing + learning + rules)
 - Fix Courier `work()` bug (`'NoneType' object has no attribute 'get'`)
 
 **Ongoing — Scale the Pipeline:**

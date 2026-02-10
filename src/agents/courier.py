@@ -77,7 +77,13 @@ class CourierAgent(Agent):
                 agent=self.name,
             )
 
-        self._current_task = f"Downloading {year}-{month:02d if month else '??'}..."
+        month_str = f"{month:02d}" if month else "??"
+        self._current_task = f"Downloading {year}-{month_str}..."
+
+        # Log briefing if present
+        briefing = getattr(task, 'briefing', '')
+        if briefing:
+            self.log(f"Briefing: {briefing[:120]}")
 
         # Build a minimal issue dict for existing download logic
         issue = {
@@ -96,6 +102,15 @@ class CourierAgent(Agent):
                 success = await self._download_archive_org(issue)
 
             if success and issue.get("pdf_path"):
+                # Post what download pattern succeeded
+                try:
+                    self._post_task_learning(
+                        "download_pdf",
+                        f"Downloaded {identifier[:30]} from {source}. "
+                        f"Year: {year}, month: {month_str}."
+                    )
+                except Exception:
+                    pass
                 return TaskResult(
                     task_id=task.id, task_type=task.type, status="success",
                     result={
@@ -296,7 +311,47 @@ class CourierAgent(Agent):
         if issue:
             courier_log["consecutive_idle_cycles"] = 0
             self._save_courier_log(courier_log)
-            return await self._download_archive_org(issue, courier_log)
+
+            # Recall past download issues for this identifier
+            try:
+                past = self.recall_episodes(
+                    f"download {issue['identifier']} archive.org PDF",
+                    task_type="download_pdf", n=2,
+                )
+                if past:
+                    self.log(f"Memory: {len(past)} past download episodes recalled")
+            except Exception:
+                pass
+
+            # Narrate the download start
+            try:
+                self.narrate(f"Downloading {issue.get('year', '?')}-{issue.get('month', '??'):02d} from archive.org: {issue['identifier'][:40]}")
+            except Exception:
+                pass
+
+            success = await self._download_archive_org(issue, courier_log)
+
+            # Commit episode based on result
+            try:
+                status = issue.get("status", "unknown")
+                if status == "downloaded":
+                    self.commit_episode(
+                        "download_pdf",
+                        f"Downloaded {issue['identifier'][:40]} ({issue.get('year', '?')}-{issue.get('month', '??'):02d}) from archive.org",
+                        "success",
+                        {"identifier": issue["identifier"], "year": issue.get("year"), "month": issue.get("month")},
+                    )
+                elif status in ("no_pdf", "error"):
+                    self.commit_episode(
+                        "download_pdf",
+                        f"Download FAILED for {issue['identifier'][:40]}: {status}",
+                        "failure",
+                        {"identifier": issue["identifier"], "status": status},
+                    )
+            except Exception:
+                pass
+
+            return success
 
         # Priority 2: AD Archive downloads (Playwright, batched, needs auth)
         issue = self._find_next_ad_archive_issue()
@@ -306,7 +361,7 @@ class CourierAgent(Agent):
             return await self._download_ad_archive_batch(issue, courier_log)
 
         # Idle — check if there are stuck issues we can't process
-        counts = count_issues_by_status()
+        counts = count_issues_by_status() or {}
         stuck_count = counts.get("error", 0) + counts.get("no_pdf", 0)
         if stuck_count > 0:
             courier_log["consecutive_idle_cycles"] = courier_log.get("consecutive_idle_cycles", 0) + 1
@@ -318,6 +373,14 @@ class CourierAgent(Agent):
                     f"May need: retry strategy, alternative sources, or manual download.",
                     {"idle_cycles": courier_log["consecutive_idle_cycles"], "stuck_issues": stuck_count},
                 )
+                # Post bulletin about stuck downloads
+                try:
+                    self.post_bulletin(
+                        f"Courier idle with {stuck_count} stuck downloads (error/no_pdf). Need alternative sources.",
+                        tags=["download", "stuck", "needs_help"],
+                    )
+                except Exception:
+                    pass
         else:
             courier_log["consecutive_idle_cycles"] = 0
 
@@ -374,9 +437,10 @@ class CourierAgent(Agent):
                 )
                 self.log(f"Problem solve: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
                 if decision.get("strategy") == "escalate" or failure_count >= MAX_ISSUE_FAILURES:
+                    esc_month = f"{issue.get('month'):02d}" if issue.get('month') else "??"
                     self._maybe_escalate(
                         "download_failure",
-                        f"Issue {identifier} ({issue.get('year')}-{issue.get('month', '?'):02d}) "
+                        f"Issue {identifier} ({issue.get('year')}-{esc_month}) "
                         f"failed {failure_count} times. "
                         f"Diagnosis: {decision.get('diagnosis', str(e)[:100])}",
                         {"identifier": identifier, "failures": failure_count, "last_error": str(e)[:200],

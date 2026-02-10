@@ -103,9 +103,14 @@ class ResearcherAgent(Agent):
         self._current_task = f"Investigating {name}..."
         skills = self.load_skills()
 
+        # Task briefing is now on task.briefing (built by base.run())
+        briefing = getattr(task, 'briefing', '')
+        if briefing:
+            self.log(f"Briefing: {briefing[:120]}")
+
         try:
             dossier = await asyncio.to_thread(
-                self._investigate_match, lead, skills
+                self._investigate_match, lead, skills, briefing
             )
             self._save_dossier(name, dossier)
             if lead.get("feature_id"):
@@ -114,6 +119,39 @@ class ResearcherAgent(Agent):
 
             strength = dossier.get("connection_strength", "UNKNOWN")
             triage = dossier.get("triage_result", "investigate")
+
+            # Post learned patterns based on investigation outcome
+            try:
+                self._post_task_learning(
+                    "investigate_lead",
+                    f"Investigated {name}: {strength}. Triage: {triage}. "
+                    f"{'Pattern correlations found.' if dossier.get('pattern_analysis') else 'No pattern correlations.'}"
+                )
+            except Exception:
+                pass
+
+            # Commit investigation result to episodic memory
+            try:
+                self.commit_episode(
+                    "investigate_lead",
+                    f"Investigated {name}: {strength}. "
+                    f"Triage: {triage}. "
+                    f"Findings: {', '.join(dossier.get('key_findings', [])[:2]) or 'none'}",
+                    "success",
+                    {"name": name, "strength": strength, "triage": triage},
+                )
+            except Exception:
+                pass
+
+            # Post bulletin for significant findings
+            if strength in ("HIGH", "MEDIUM"):
+                try:
+                    self.post_bulletin(
+                        f"Investigation complete: {name} — {strength} connection strength",
+                        tags=["investigation", "match", strength.lower()],
+                    )
+                except Exception:
+                    pass
 
             # Extract metadata for Editor's Supabase persistence
             meta = dossier.pop("_meta", {})
@@ -134,6 +172,35 @@ class ResearcherAgent(Agent):
             )
 
         except Exception as e:
+            # Use problem_solve to diagnose investigation failure
+            try:
+                decision = await asyncio.to_thread(
+                    self.problem_solve,
+                    error=str(e)[:200],
+                    context={"name": name, "feature_id": lead.get("feature_id"),
+                             "verdict": lead.get("combined_verdict", "")},
+                    strategies={
+                        "retry_simpler": "Simplify investigation — skip image analysis",
+                        "triage_only": "Just run triage step, skip deep analysis",
+                        "skip_lead": "Lead data may be corrupted — mark for manual review",
+                        "escalate": "Persistent failure — needs Editor attention",
+                    },
+                )
+                self.log(f"Investigation problem: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
+            except Exception:
+                pass
+
+            # Commit failure episode
+            try:
+                self.commit_episode(
+                    "investigate_lead",
+                    f"Investigation FAILED for {name}: {str(e)[:100]}",
+                    "failure",
+                    {"name": name, "error": str(e)[:100]},
+                )
+            except Exception:
+                pass
+
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="failure",
                 result={"name": name}, error=str(e),
@@ -159,6 +226,23 @@ class ResearcherAgent(Agent):
         self._current_task = f"Investigating {name} ({verdict})..."
         self.log(f"Investigating lead: {name} (verdict: {verdict})")
 
+        # Recall past episodes about this name or similar investigations
+        try:
+            past = self.recall_episodes(
+                f"investigation {name} dossier evidence",
+                task_type="investigate_lead", n=3,
+            )
+            if past:
+                self.log(f"Memory: {len(past)} relevant episodes recalled")
+        except Exception:
+            pass
+
+        # Narrate the start of investigation
+        try:
+            self.narrate(f"Starting investigation on {name} — {verdict} verdict, {len(uninvestigated)} leads in queue")
+        except Exception:
+            pass
+
         try:
             dossier = await asyncio.to_thread(
                 self._investigate_match, lead, skills
@@ -172,6 +256,41 @@ class ResearcherAgent(Agent):
             triage = dossier.get("triage_result", "investigate")
             self._current_task = f"Dossier: {name} ({strength})"
             self.log(f"Dossier complete: {name} — {strength} (triage: {triage})")
+
+            # Commit investigation episode to memory
+            try:
+                findings = dossier.get("key_findings", [])
+                self.commit_episode(
+                    "investigate_lead",
+                    f"Dossier complete: {name} — {strength}. "
+                    f"Triage: {triage}. "
+                    f"Findings: {', '.join(findings[:2]) or 'none'}. "
+                    f"Patterns: {bool(dossier.get('pattern_analysis'))}",
+                    "success",
+                    {"name": name, "strength": strength, "triage": triage},
+                )
+            except Exception:
+                pass
+
+            # Post bulletin for significant findings
+            if strength in ("HIGH", "MEDIUM"):
+                try:
+                    self.post_bulletin(
+                        f"Dossier complete: {name} — {strength} connection strength. "
+                        f"Key findings: {', '.join(dossier.get('key_findings', [])[:2]) or 'pending review'}",
+                        tags=["investigation", "dossier", strength.lower()],
+                    )
+                except Exception:
+                    pass
+
+            # Narrate the result
+            try:
+                self.narrate(
+                    f"Finished dossier on {name}: {strength} connection. "
+                    f"Triage was '{triage}'. {self._dossiers_built} total dossiers built."
+                )
+            except Exception:
+                pass
 
             # Extract metadata for Editor's Supabase persistence
             meta = dossier.pop("_meta", {})
@@ -204,6 +323,40 @@ class ResearcherAgent(Agent):
             self.log(f"Investigation failed for {name}: {e}", level="ERROR")
             self._current_task = f"Investigation failed — {name}"
             self._update_run_log(success=False, failed_name=name)
+
+            # Use problem_solve for intelligent recovery
+            try:
+                decision = await asyncio.to_thread(
+                    self.problem_solve,
+                    error=str(e)[:200],
+                    context={
+                        "name": name,
+                        "feature_id": lead.get("feature_id"),
+                        "verdict": verdict,
+                        "dossiers_built": self._dossiers_built,
+                    },
+                    strategies={
+                        "retry_simpler": "Simplify investigation — skip image analysis or pattern context",
+                        "triage_only": "Just run triage, skip deep analysis and synthesis",
+                        "skip_lead": "Lead data may be corrupted — move to next lead",
+                        "escalate": "Persistent failure — needs Editor attention",
+                    },
+                )
+                self.log(f"Problem solve: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
+            except Exception:
+                pass
+
+            # Commit failure episode
+            try:
+                self.commit_episode(
+                    "investigate_lead",
+                    f"Investigation FAILED for {name}: {str(e)[:100]}",
+                    "failure",
+                    {"name": name, "error": str(e)[:100], "verdict": verdict},
+                )
+            except Exception:
+                pass
+
             self._maybe_escalate(
                 "investigation_failed",
                 f"Investigation failed for {name}: {e}",
@@ -482,7 +635,7 @@ class ResearcherAgent(Agent):
     # 3-STEP INVESTIGATION PIPELINE
     # ═══════════════════════════════════════════════════════════
 
-    def _investigate_match(self, match, skills):
+    def _investigate_match(self, match, skills, briefing=""):
         """Build a dossier using 3-step pipeline: triage → deep analysis → synthesis."""
         name = match.get("homeowner_name", "Unknown")
         feature_id = match.get("feature_id")
@@ -490,6 +643,8 @@ class ResearcherAgent(Agent):
 
         # Build shared context used by all steps
         context = self._build_investigation_context(match)
+        if briefing:
+            context["briefing"] = briefing
 
         self.log(f"Step 1: Triage — {name}")
 
@@ -592,6 +747,10 @@ Respond with JSON only:
 Be aggressive about filtering COINCIDENCE — you save expensive Sonnet calls.
 But when in doubt, choose "investigate" — better to spend $0.05 than miss a real lead."""
 
+        briefing_section = ""
+        if context.get("briefing"):
+            briefing_section = f"\n\nCONTEXT FROM PAST EXPERIENCE:\n{context['briefing']}\n"
+
         user_msg = f"""Triage this lead:
 
 Name: {context['name']}
@@ -600,7 +759,7 @@ Black Book status: {context['black_book_status']}
 BB matches: {json.dumps(context.get('black_book_matches', []), default=str)[:500]}
 DOJ status: {context['doj_status']}
 DOJ results summary: {json.dumps(context.get('doj_results', {}), default=str)[:800]}
-AD feature: {json.dumps(context.get('ad_feature', {}), default=str)[:500]}
+AD feature: {json.dumps(context.get('ad_feature', {}), default=str)[:500]}{briefing_section}
 
 Should this lead be fully investigated or dismissed as COINCIDENCE?"""
 

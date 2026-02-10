@@ -304,6 +304,10 @@ class ScoutAgent(Agent):
 
     async def _execute_discover(self, task):
         """Discover missing issues using tiered search strategy."""
+        briefing = getattr(task, 'briefing', '')
+        if briefing:
+            self.log(f"Briefing: {briefing[:120]}")
+
         missing_months = task.params.get("missing_months", [])
         if not missing_months:
             return TaskResult(
@@ -357,7 +361,7 @@ class ScoutAgent(Agent):
                 "description": f"Search for {len(not_found)} missing issues via creative strategies",
                 "batch": not_found,
             }
-            prompt = self._build_prompt(strategy, gap_report, skills)
+            prompt = self._build_prompt(strategy, gap_report, skills, briefing)
             cli_result = await asyncio.to_thread(self._call_claude, prompt)
 
             if cli_result:
@@ -376,6 +380,21 @@ class ScoutAgent(Agent):
                 strategies_tried.append("Claude CLI: call failed")
 
         self._save_scout_log()
+
+        # Post what worked
+        if found_issues:
+            try:
+                year_range = set()
+                for fi in found_issues:
+                    if fi.get("year"):
+                        year_range.add(fi["year"])
+                self._post_task_learning(
+                    "discover_issues",
+                    f"Found {len(found_issues)} issues via {', '.join(strategies_tried[:2])}. "
+                    f"Years: {min(year_range) if year_range else '?'}-{max(year_range) if year_range else '?'}."
+                )
+            except Exception:
+                pass
 
         return TaskResult(
             task_id=task.id,
@@ -684,7 +703,7 @@ class ScoutAgent(Agent):
 
     # ── Prompt Building ────────────────────────────────────────────
 
-    def _build_prompt(self, strategy, gap_report, skills):
+    def _build_prompt(self, strategy, gap_report, skills, briefing=""):
         """Build a focused prompt for Claude Code CLI."""
 
         gap_summary = (
@@ -925,6 +944,10 @@ Report what you find — new sources, new issues, or confirmation that our colle
   "notes": "observations about AD digital availability"
 }"""
 
+        briefing_section = ""
+        if briefing:
+            briefing_section = f"\n\nContext from past experience (memory + bulletin board):\n{briefing}\n"
+
         return f"""You are the Scout agent for the AD-Epstein Index project.
 
 Your mission: Find every issue of Architectural Digest magazine from January 1988 through December 2024. That's {TOTAL_EXPECTED} issues total (12 per year × {MAX_YEAR - MIN_YEAR + 1} years).
@@ -949,7 +972,7 @@ Context from skills file:
 {skills}
 
 Prior knowledge (what's worked and what hasn't):
-{self._get_knowledge_summary()}"""
+{self._get_knowledge_summary()}{briefing_section}"""
 
     # ── Claude CLI ─────────────────────────────────────────────────
 
@@ -1088,6 +1111,26 @@ Prior knowledge (what's worked and what hasn't):
         self._current_task = f"{strategy['type']}: {strategy['description'][:50]}"
         self.log(f"Scout strategy: {strategy['type']} — {strategy['description']}")
 
+        # Recall past episodes about this strategy type
+        try:
+            past = self.recall_episodes(
+                f"discovery {strategy['type']} archive.org missing issues",
+                task_type="discover_issues", n=3,
+            )
+            if past:
+                self.log(f"Memory: {len(past)} past discovery episodes recalled")
+        except Exception:
+            pass
+
+        # Narrate the strategy choice
+        try:
+            self.narrate(
+                f"Strategy: {strategy['type']} — {strategy['description'][:60]}. "
+                f"Coverage: {gap_report['coverage_pct']}%, {len(gap_report['missing_months'])} months missing."
+            )
+        except Exception:
+            pass
+
         prompt = self._build_prompt(strategy, gap_report, skills)
         result = await asyncio.to_thread(self._call_claude, prompt)
 
@@ -1208,6 +1251,40 @@ Prior knowledge (what's worked and what hasn't):
                 f"{updated['total_confirmed']}/{TOTAL_EXPECTED} confirmed "
                 f"({updated['coverage_pct']}%)"
             )
+
+            # Commit discovery episode to memory
+            try:
+                self.commit_episode(
+                    "discover_issues",
+                    f"Discovery cycle: {strategy['type']} — {changes} changes. "
+                    f"Coverage now {updated['coverage_pct']}% ({updated['total_confirmed']}/{TOTAL_EXPECTED}). "
+                    f"Found {len(found_issues)} issues.",
+                    "success" if changes > 0 else "failure",
+                    {"strategy": strategy["type"], "changes": changes,
+                     "coverage_pct": updated["coverage_pct"]},
+                )
+            except Exception:
+                pass
+
+            # Post bulletin for coverage milestones
+            if changes > 0:
+                try:
+                    self.post_bulletin(
+                        f"Discovery: {changes} new issues found via {strategy['type']}. "
+                        f"Coverage: {updated['coverage_pct']}%",
+                        tags=["discovery", "coverage", strategy["type"]],
+                    )
+                except Exception:
+                    pass
+
+            # Narrate the result
+            try:
+                self.narrate(
+                    f"Cycle complete: {changes} changes via {strategy['type']}. "
+                    f"Now at {updated['coverage_pct']}% coverage."
+                )
+            except Exception:
+                pass
         else:
             self._current_task = f"No findings — {strategy['type']}"
             strategy_success = False

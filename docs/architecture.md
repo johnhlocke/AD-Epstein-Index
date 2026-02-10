@@ -152,6 +152,7 @@ class Task:
     params: dict       # Everything the agent needs
     priority: int      # 0=critical, 1=high, 2=normal, 3=low
     id: str            # Short UUID
+    briefing: str      # Pre-execution context from memory + bulletin board (set by run() loop)
 
 @dataclass
 class TaskResult:
@@ -241,10 +242,39 @@ When agents have no work, they use idle time intelligently (each with independen
 **Data flow:**
 ```
 reflect() ──→ reflection episodes ──→ recalled by future problem_solve()
+         └──→ RULE: extraction ──→ bulletin board ("learned") ──→ read by all agents
 curious_explore() ──→ curiosity episodes ──→ cross-agent knowledge
 propose_improvement() ──→ proposal episodes ──→ Editor reads during assessment
 idle_chatter() ──→ speech bubble on dashboard
 ```
+
+### Memory Feedback Loop (Pre-Execution Briefing + Post-Execution Learning)
+
+Closes the read/write gap in the intelligence system. Before this, agents committed episodes but never read them before the next task. Now:
+
+```
+                     ┌─── recall similar episodes (own memory, ~5ms)
+                     │
+task arrives ────────┤
+                     │
+                     └─── read bulletin board (warnings + learned rules)
+                                │
+                                ▼
+                         task.briefing (formatted context string)
+                                │
+                                ▼
+                     agent.execute(task)  ← briefing injected into LLM prompts
+                                │
+                                ▼
+                     _post_task_learning()  → bulletin board ("learned" tag)
+                                │
+                                ▼
+                     other agents read this on their next task
+```
+
+- **`_get_task_briefing(task)`** — queries episodic memory for past episodes matching task type, reads bulletin for warnings + learned rules. No LLM call (~5ms).
+- **`_post_task_learning(task_type, lesson)`** — posts non-trivial lessons to bulletin board tagged "learned". Only fires for meaningful insights (>10 chars).
+- **`reflect()` → rules** — reflection prompt now requests `RULE:` prefixed actionable rules. Extracted rules posted to bulletin as "learned" entries, picked up by all agents at next task start.
 
 ### Memory-Informed Planning (Editor)
 

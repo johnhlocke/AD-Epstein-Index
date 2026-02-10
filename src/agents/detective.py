@@ -75,6 +75,11 @@ class DetectiveAgent(Agent):
         self._current_task = f"Cross-referencing {len(names)} names..."
         checked = []
 
+        # Task briefing is now on task.briefing (built by base.run())
+        briefing = getattr(task, 'briefing', '')
+        if briefing:
+            self.log(f"Briefing: {briefing[:120]}")
+
         from cross_reference import (
             search_black_book, load_black_book, assess_combined_verdict,
             contextual_glance, verdict_to_binary,
@@ -82,7 +87,7 @@ class DetectiveAgent(Agent):
         book_text = await asyncio.to_thread(load_black_book)
 
         # Step 0: Analyze names with LLM — split compounds, flag skips
-        name_analysis = await asyncio.to_thread(self._analyze_names, names)
+        name_analysis = await asyncio.to_thread(self._analyze_names, names, briefing)
 
         for name in names:
             analysis = name_analysis.get(name, {})
@@ -219,6 +224,50 @@ class DetectiveAgent(Agent):
 
             await asyncio.sleep(2)  # Rate limiting between names
 
+        # Commit episodes for significant findings
+        yes_names = [c["name"] for c in checked if c.get("binary_verdict") == "YES"]
+        no_names = [c["name"] for c in checked if c.get("binary_verdict") == "NO"]
+        try:
+            self.commit_episode(
+                "cross_reference",
+                f"Cross-referenced {len(checked)} names: {len(yes_names)} YES, {len(no_names)} NO. "
+                f"YES names: {', '.join(yes_names[:5]) or 'none'}",
+                "success",
+                {"total": len(checked), "yes_count": len(yes_names), "no_count": len(no_names)},
+            )
+        except Exception:
+            pass
+
+        # Post bulletin for YES matches
+        if yes_names:
+            try:
+                self.post_bulletin(
+                    f"Cross-reference results: {len(yes_names)} YES verdict(s) — {', '.join(yes_names[:5])}",
+                    tags=["cross_reference", "match", "yes_verdict"],
+                )
+            except Exception:
+                pass
+
+        # Post learned patterns to bulletin board
+        if checked:
+            try:
+                self._post_task_learning(
+                    "cross_reference",
+                    f"Checked {len(checked)} names: {len(yes_names)} YES, {len(no_names)} NO. "
+                    f"{'DOJ browser active.' if self._doj_client else 'DOJ unavailable — BB only.'}"
+                )
+            except Exception:
+                pass
+
+        # Narrate the batch summary
+        try:
+            self.narrate(
+                f"Finished cross-referencing {len(checked)} names. "
+                f"{len(yes_names)} flagged YES, {len(no_names)} cleared NO."
+            )
+        except Exception:
+            pass
+
         return TaskResult(
             task_id=task.id, task_type=task.type, status="success",
             result={"checked": checked}, agent=self.name,
@@ -226,7 +275,7 @@ class DetectiveAgent(Agent):
 
     # ── Name Analysis (LLM) ──────────────────────────────────────
 
-    def _analyze_names(self, names):
+    def _analyze_names(self, names, briefing=""):
         """Use Haiku to analyze a batch of names — split compounds, flag non-persons.
 
         Returns dict: { original_name: { "search_names": [...], "skip": bool, "reason": str } }
@@ -236,7 +285,11 @@ class DetectiveAgent(Agent):
 
         names_list = "\n".join(f"  {i+1}. {n}" for i, n in enumerate(names))
 
-        prompt = f"""You are a detective's assistant preparing names for a search against the Epstein document library.
+        briefing_section = ""
+        if briefing:
+            briefing_section = f"\n\nCONTEXT FROM PAST EXPERIENCE:\n{briefing}\n"
+
+        prompt = f"""You are a detective's assistant preparing names for a search against the Epstein document library.{briefing_section}
 
 For each name below, tell me:
 1. The individual people to search for (split couples, groups, etc.)

@@ -6,6 +6,61 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-09 (Session 15)
+
+### Added — Memory Feedback Loop: Agents Read Before They Act
+
+The agent intelligence infrastructure (episodic memory, bulletin board, reflection) was write-only — agents committed episodes but never read them before the next task. This session closes the feedback loop across 3 layers:
+
+- **Layer 1: Pre-Execution Briefing** (`base.py` → `_get_task_briefing()`)
+  - Before every task, queries own episodic memory for similar past episodes (~5ms, numpy dot product)
+  - Reads bulletin board for warnings and learned rules from other agents
+  - Returns formatted context string attached to `task.briefing` for agents to inject into LLM prompts
+  - Wired into `run()` loop — every task gets a briefing before `execute()` is called
+
+- **Layer 2: Post-Execution Learning** (`base.py` → `_post_task_learning()`)
+  - After successful tasks, agents post structured lessons tagged `"learned"` to the bulletin board
+  - Detective: cross-reference batch stats (YES/NO counts, DOJ availability)
+  - Reader: extraction recovery strategies and null rates
+  - Researcher: investigation outcomes and pattern correlations
+  - Scout: discovery results with year ranges and successful strategies
+  - Courier: successful download patterns by source
+
+- **Layer 3: Reflection → Behavioral Rules** (enhanced `reflect()`)
+  - Reflection prompt now requests `RULE:` prefixed actionable rules alongside insights
+  - Extracted rules posted to bulletin board as `"learned"` entries
+  - Rules picked up by Layer 1's `_get_task_briefing()` on the next task cycle
+  - Same Haiku call (folded into existing prompt), no extra cost
+
+### Changed — Task Dataclass
+- Added `briefing: str = ""` field to `Task` in `src/agents/tasks.py` — clean, explicit, serialization-safe
+
+### Changed — Detective Agent
+- Removed dead `recall_episodes()` block in `execute()` (recalled but never used)
+- `_analyze_names()` now accepts optional `briefing` parameter, injects past experience into LLM prompt
+- Posts cross-reference batch stats to bulletin board after completing each batch
+
+### Changed — Reader Agent
+- Uses `task.briefing` for strategy pre-selection (e.g., detects "text_extraction + scanned" hints from past experience)
+- Posts extraction stats (recovery strategy, feature count, null rate) after successful extractions
+
+### Changed — Researcher Agent
+- Removed dead `recall_episodes()` block in `execute()` (recalled but never used)
+- `_investigate_match()` accepts `briefing` parameter, injects into investigation context
+- `_step_triage()` includes briefing in triage prompt for evidence-informed decisions
+- Posts investigation outcomes (strength, triage result, pattern correlations) after each dossier
+
+### Changed — Scout Agent
+- `_build_prompt()` accepts optional `briefing` parameter, appends past experience context to CLI prompt
+- `_execute_discover()` logs briefing and passes it through to CLI prompt generation
+- Posts discovery results (issue count, year ranges, strategies tried) after successful batches
+
+### Changed — Courier Agent
+- Logs briefing if present before download attempts
+- Posts successful download patterns (identifier, source, year/month) to bulletin board
+
+---
+
 ## 2026-02-09 (Session 14)
 
 ### Added — Episodic Memory (Gap 1 of Intelligence Roadmap)

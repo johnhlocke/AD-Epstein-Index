@@ -104,6 +104,14 @@ class ReaderAgent(Agent):
         last_error = None
         recovery_context = {}
 
+        # Use briefing for strategy pre-selection
+        briefing = getattr(task, 'briefing', '')
+        if briefing:
+            self.log(f"Briefing: {briefing[:120]}")
+            # Check if past experience suggests a specific strategy
+            if 'text_extraction' in briefing.lower() and 'scanned' in briefing.lower():
+                recovery_context = {"strategy": "text_extraction", "source": "memory"}
+
         for attempt in range(max_attempts):
             try:
                 if task.type == "reextract_features":
@@ -153,8 +161,27 @@ class ReaderAgent(Agent):
                 if recovery_context:
                     result_data["recovery_used"] = recovery_context
                     result_data["summary"] = f"Extracted {len(features)} features from {identifier} (recovered via {recovery_context.get('strategy', 'unknown')})"
+                    # Post what recovery strategy worked
+                    try:
+                        self._post_task_learning(
+                            "extract_features",
+                            f"Recovered {identifier[:30]} via {recovery_context.get('strategy')}. "
+                            f"{len(features)} features extracted."
+                        )
+                    except Exception:
+                        pass
                 else:
                     result_data["summary"] = f"Extracted {len(features)} features from {identifier}"
+                    # Post clean extraction stats
+                    if len(features) > 0:
+                        try:
+                            self._post_task_learning(
+                                "extract_features",
+                                f"Clean extraction of {identifier[:30]}: {len(features)} features, "
+                                f"null rate {quality_metrics.get('null_homeowner_rate', 0):.0%}"
+                            )
+                        except Exception:
+                            pass
 
                 return TaskResult(
                     task_id=task.id, task_type=task.type, status="success",
@@ -653,6 +680,23 @@ class ReaderAgent(Agent):
         self._current_task = f"Extracting: {title}"
         self.log(f"Starting extraction: {identifier}")
 
+        # Recall past extraction episodes for this issue or similar PDFs
+        try:
+            past = self.recall_episodes(
+                f"extraction PDF {identifier} features homeowner",
+                task_type="extract_features", n=3,
+            )
+            if past:
+                self.log(f"Memory: {len(past)} past extraction episodes recalled")
+        except Exception:
+            pass
+
+        # Narrate the start of extraction
+        try:
+            self.narrate(f"Starting extraction on {title[:40]} — {identifier[:30]}")
+        except Exception:
+            pass
+
         # Run extraction in thread (blocking, takes minutes)
         from extract_features import process_issue
         try:
@@ -698,6 +742,29 @@ class ReaderAgent(Agent):
                 if loaded:
                     self._record_issue_success(reader_log, identifier)
                     update_issue(identifier, {"status": "extracted"})
+
+                    # Commit success episode
+                    try:
+                        self.commit_episode(
+                            "extract_features",
+                            f"Extracted {metrics.get('feature_count', 0)} features from {identifier[:30]}. "
+                            f"Null rate: {metrics.get('null_homeowner_rate', 0):.0%}. "
+                            f"Avg fields: {metrics.get('avg_fields_filled', 0):.1f}/6.",
+                            "success",
+                            {"identifier": identifier, "feature_count": metrics.get("feature_count", 0),
+                             "null_rate": metrics.get("null_homeowner_rate", 0)},
+                        )
+                    except Exception:
+                        pass
+
+                    # Narrate the success
+                    try:
+                        self.narrate(
+                            f"Clean extraction: {identifier[:30]} — {metrics.get('feature_count', 0)} features, "
+                            f"{metrics.get('null_homeowner_rate', 0):.0%} null rate. Loaded to database."
+                        )
+                    except Exception:
+                        pass
                 else:
                     # Supabase failed but extraction is good — don't mark as success
                     # Next cycle will retry via _find_issues_needing_load
@@ -719,6 +786,38 @@ class ReaderAgent(Agent):
                     f"{metrics.get('avg_fields_filled', 0):.1f}/6 avg fields.",
                     {"identifier": identifier, "metrics": metrics},
                 )
+
+                # Commit quality-hold episode
+                try:
+                    self.commit_episode(
+                        "extract_features",
+                        f"Extraction HELD for {identifier[:30]}: {esc_type}. "
+                        f"{metrics.get('feature_count', 0)} features, "
+                        f"{metrics.get('null_homeowner_rate', 1.0):.0%} null rate.",
+                        "failure",
+                        {"identifier": identifier, "esc_type": esc_type, "metrics": metrics},
+                    )
+                except Exception:
+                    pass
+
+                # Post bulletin about quality hold
+                try:
+                    self.post_bulletin(
+                        f"Extraction quality hold: {identifier[:30]} — {esc_type}. "
+                        f"{metrics.get('feature_count', 0)} features, {metrics.get('null_homeowner_rate', 1.0):.0%} null rate.",
+                        tags=["extraction", "quality_hold", esc_type],
+                    )
+                except Exception:
+                    pass
+
+                # Narrate the hold
+                try:
+                    self.narrate(
+                        f"Had to hold {identifier[:30]}: {esc_type}. "
+                        f"Only {metrics.get('feature_count', 0)} features with {metrics.get('null_homeowner_rate', 1.0):.0%} null rate."
+                    )
+                except Exception:
+                    pass
 
                 # Reset consecutive failures — this was a quality hold, not a crash
                 reader_log["consecutive_failures"] = 0
