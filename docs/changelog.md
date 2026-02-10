@@ -6,6 +6,59 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-10 (Session 16)
+
+### Database — Cross-References → Supabase
+- Created `cross_references` table in Supabase — full detective work now persisted to DB (BB matches, DOJ results, confidence scores, verdicts, editor overrides)
+- Added 9 new functions to `src/db.py`: `upsert_cross_reference`, `get_cross_reference`, `list_cross_references`, `get_xref_leads`, `update_xref_editor_override`, `get_features_without_xref`, `delete_cross_references`, `reset_xref_doj`, `migrate_disk_xrefs`
+- Migrated 14 existing cross-reference records from local JSON to Supabase (5 skipped due to deleted features)
+- `agent_status.py` reads from Supabase primary with disk fallback
+- Editor, Detective, Researcher, and cross_reference.py all updated to read/write from Supabase
+
+### Added — AD Archive Direct HTTP Scraper
+- Discovered that AD Archive issue pages embed article catalogs in JWT tokens (`tocConfig` JavaScript variable)
+- **Phase A (instant)**: HTTP GET → JWT decode → featured articles with titles, teasers, authors, page ranges
+- **Phase B (~3s)**: Single Anthropic API call (Haiku) batch-extracts structured homeowner/designer/location data from all article teasers at once
+- Total time per issue: ~4 seconds (was 7-15 minutes with Playwright approach)
+- No authentication or browser automation needed — plain HTTP requests + JWT decoding
+- Produces same extraction JSON format as Reader output — feeds directly into `_commit_extraction()` → Supabase
+- Tested across all eras (1988-2024) — ~7 featured articles per issue typically
+
+### Added — AD Archive Issue Discovery
+- Bulk-discovered 297 missing issues via AD Archive URL pattern (`ad-archive-YYYYMM01`)
+- Brought issue coverage from 41% (185/456) to 100% (456/456)
+- 318 AD Archive issues ready for scraping
+
+### Changed — Courier Agent
+- Replaced Claude CLI + Playwright scraping with direct HTTP + JWT approach
+- Added `_fetch_issue_toc()` — HTTP GET + JWT decode (instant, no LLM)
+- Added `_extract_features_from_toc()` — batch extraction via Anthropic API (Haiku)
+- Added `_call_anthropic_api()` — direct SDK call, falls back to Claude CLI if unavailable
+- Added `_parse_result_json_array()` — JSON array parsing from LLM responses
+- Made `_call_claude()` properly handle empty tools list (text-only mode)
+- Unnamed homeowners default to "Anonymous" instead of being filtered out
+
+### Changed — Editor Agent
+- `_commit_cross_reference()` writes full xref data to Supabase `cross_references` table
+- `_override_detective_verdict()` writes directly to Supabase
+- `_retry_doj_search()` resets in Supabase
+- `_remove_from_xref()` deletes from Supabase
+- `_fill_researcher_queue()` enriches leads from Supabase xref data
+- `_build_xref_summary()` reads from Supabase
+- Added `_fill_scrape_queue()` — enqueues `scrape_features` tasks for AD Archive issues
+- `_handle_success()` routes `scrape_features` results through `_commit_extraction()`
+
+### Changed — Detective & Researcher Agents
+- `detective.py` `get_progress()` reads from Supabase cross_references
+- `researcher.py` enriches leads with xref data from Supabase
+- `cross_reference.py` `get_unchecked_features()` uses Supabase
+
+### Changed — Skills Files
+- `courier.md` — replaced Playwright docs with JWT scraping docs
+- `scout.md` — noted AD Archive direct HTTP scraping availability
+
+---
+
 ## 2026-02-09 (Session 15)
 
 ### Added — Memory Feedback Loop: Agents Read Before They Act

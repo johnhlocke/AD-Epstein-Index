@@ -177,10 +177,10 @@ If you're stuck (many exhausted months, no new sources found, same strategy fail
 
 ## Update — 2026-02-09
 
-### AD Archive: Scraping Now Available
-The AD Archive (archive.architecturaldigest.com) cannot provide downloadable PDFs — but the Courier can now **scrape article text directly** from the web viewer. This means:
+### AD Archive: Direct HTTP Scraping Available
+The AD Archive (archive.architecturaldigest.com) cannot provide downloadable PDFs — but the Courier can now **extract article data directly** via HTTP + JWT decoding (no browser needed). This means:
 - AD Archive URLs are useful again for issues not on archive.org
 - archive.org identifiers are still preferred (PDF download → Reader extraction pipeline)
-- AD Archive issues will be processed via `scrape_features` task (Courier navigates, reads articles, extracts data)
+- AD Archive issues will be processed via `scrape_features` task (instant HTTP fetch + JWT decode + batch LLM extraction)
+- ~25 seconds per issue vs. 7-15 minutes with the old Playwright approach
 - When discovering issues, record both archive.org identifiers AND AD Archive URLs when available
-- Issues 1999-08 through 1999-11 with only AD Archive URLs can now be scraped

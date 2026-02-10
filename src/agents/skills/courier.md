@@ -79,25 +79,32 @@ Download PDF copies of every discovered AD issue. Uses two download strategies d
 - Skip issues without a parsed month/year
 
 ## Strategy 2: AD Archive Scraping (Secondary)
-- **Requires authentication** — credentials in `.env` (`AD_ARCHIVE_EMAIL`, `AD_ARCHIVE_PASSWORD`)
 - **No PDF downloads** — AD Archive is a web-only page viewer with no PDF export
-- **Text scraping instead**: Navigate to articles, extract homeowner/designer/location data directly from article text
-- Uses Claude CLI + Playwright to navigate and read article content
+- **No authentication needed** — issue pages and article metadata are publicly accessible
+- **Direct HTTP scraping**: Fetches issue pages via `requests.get()`, extracts JWT-encoded article catalog
 - Produces **same extraction JSON format** as Reader output — bypasses the entire PDF pipeline
 - Task type: `scrape_features` (assigned by Editor)
 
-### AD Archive Scraping Flow
-1. **Phase A (TOC)**: Navigate to issue page, list all home feature articles with URLs
-2. **Phase B (Articles)**: For each feature article, navigate and extract structured data
+### AD Archive Scraping Flow (Direct HTTP + JWT)
+1. **Phase A (instant)**: HTTP GET issue page → extract `tocConfig` JWT → decode payload → get featured articles with titles, teasers, authors, page ranges
+2. **Phase B (~3s)**: Single Anthropic API call (Haiku) to batch-extract structured homeowner/designer/location data from all article teasers at once
 3. Save extraction JSON to `data/extractions/{identifier}.json`
 4. Editor routes result through same `_commit_extraction()` path as Reader output
 
+### How the JWT Works
+- AD Archive issue pages embed a JWT token in a JavaScript variable called `tocConfig`
+- The JWT payload contains structured article metadata: Title, Teaser (HTML), CreatorString, Slug, PageRange, Section, etc.
+- Decoding the base64url payload gives a JSON object with a `featured` array
+- No authentication or JavaScript rendering needed — plain HTTP GET suffices
+
 ### AD Archive Scraping Details
-- Each article scrape is a separate Claude CLI call (~60-120s)
-- Login session checked each call — re-login if prompted
-- Rate limit: 2s delay between article scrapes
-- Timeout: 600s per CLI call (longer than download tasks due to navigation + reading)
-- Sequential page_number assigned (1, 2, 3...) for dedup compat with `load_extraction()`
+- Phase A is instant (single HTTP request, no LLM needed)
+- Phase B uses Anthropic API directly (Haiku model) — ~3 seconds per issue
+- Total time per issue: ~4 seconds (vs. 7-15 minutes with old Playwright approach)
+- Falls back to Claude CLI if Anthropic SDK or API key not available
+- Page numbers come from the JWT `PageRange` field (real magazine page numbers)
+- Articles are filtered: skip resources, ads, commercial spaces
+- `homeowner_name` set to null for non-residential features (hotels, restaurants, etc.)
 
 ## Error Handling
 - If no PDF found for an archive.org issue, mark as "no_pdf" and move on
@@ -131,10 +138,11 @@ or suggest alternative download strategies.
 
 ## Update — 2026-02-09
 
-### AD Archive: Scraping Replaces PDF Downloads
+### AD Archive: Direct HTTP Scraping via JWT
 The AD Archive (archive.architecturaldigest.com) does NOT support PDF downloads — it's a web-only page viewer.
-**Solution**: Instead of downloading PDFs, Casey now scrapes article text directly from the web viewer.
+**Solution**: Direct HTTP requests + JWT decoding extracts article metadata without a browser.
 - `download_pdf` tasks with source `ad_archive` will still fail (no PDF export available)
-- `scrape_features` tasks work via Claude CLI + Playwright — navigates, reads, extracts structured data
+- `scrape_features` tasks use direct HTTP + JWT decoding (Phase A) + single batch LLM call (Phase B)
+- No Playwright or browser automation needed — 25x faster than the old approach
 - This bypasses the entire PDF → image → OCR pipeline
 - The Editor assigns `scrape_features` tasks for AD Archive issues

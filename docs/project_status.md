@@ -46,8 +46,11 @@ This file should be automatically updated when necessary to answer three key que
 | World model (structured pipeline state awareness) | Tooling | Done |
 | Inter-agent communication (bulletin board) | Tooling | Done |
 | Memory feedback loop (briefing + learning + reflection rules) | Tooling | Done |
+| Cross-references → Supabase (full xref data, not just binary) | Tooling | Done |
+| AD Archive direct HTTP scraper (JWT + Anthropic API) | Phase 1 | Done |
+| AD Archive issue discovery (100% coverage: 456/456) | Phase 1 | Done |
 | Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
-| Source additional AD issues (beyond archive.org) | Phase 1 | Not Started |
+| Batch scrape AD Archive issues (318 remaining) | Phase 1 | In Progress |
 | Build cross-reference engine | Phase 2 | Done |
 | Batch cross-reference all extracted names | Phase 2 | In Progress |
 | Build dossiers on Epstein-linked leads | Phase 2 | In Progress |
@@ -199,37 +202,26 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 
 ## 3. What's Next
 
-**Immediate — Editor Planning Decomposition:**
-- Replace Editor's flat priority waterfall (`_plan_scout_tasks()`, `_plan_courier_tasks()`, etc.) with dependency-aware execution plans
-- Step 1: Plan objects with explicit dependencies (`PlannedTask` with `depends_on` field)
-- Step 2: Look-ahead dispatch (event-driven cascading instead of 30s poll)
-- Step 3: Duration tracking + idle minimization (from episodic memory)
-
-**Completed — Agent Intelligence Upgrades (All 7 Gaps Closed):**
-- ~~Implement episodic memory~~ **Done** (ONNX all-MiniLM-L6-v2, 384-dim, JSON-backed)
-- ~~Add reflection loops~~ **Done** (10-min periodic self-assessment via Haiku)
-- ~~Implement self-improvement~~ **Done** (30-min methodology proposals via Haiku)
-- ~~Implement planning/lookahead~~ **Done** (memory-informed priority in Editor)
-- ~~Implement curiosity~~ **Done** (15-min cross-agent pattern exploration)
-- ~~Implement world model~~ **Done** (structured pipeline state + bottleneck detection)
-- ~~Implement inter-agent communication~~ **Done** (bulletin board for peer tips/warnings)
-- ~~Wire memory/bulletin/reflection feedback loop~~ **Done** (briefing + learning + rules)
-- Fix Courier `work()` bug (`'NoneType' object has no attribute 'get'`)
+**Immediate — Batch Scrape AD Archive Issues:**
+- 318 AD Archive issues discovered and ready for scraping (~4s each via direct HTTP + JWT)
+- Run orchestrator to batch-process: Editor assigns `scrape_features` → Courier scrapes → features loaded to Supabase
+- Estimated: ~21 minutes for all 318 issues (automated via pipeline)
 
 **Ongoing — Scale the Pipeline:**
-- Run the multi-agent orchestrator to batch-process remaining archive.org issues
+- Run the multi-agent orchestrator to batch-process remaining archive.org issues (download + extract)
+- AD Archive scraping now covers the 271 issues not available on archive.org
 - Review Researcher dossiers and manually confirm/reject matches
-- Download remaining archive.org PDFs (~35 more post-1988 issues)
+- 20 extraction errors available for retry
 
 **Phase 1 — Complete the AD Database:**
-- Source additional AD issues beyond archive.org (eBay scans, library digitizations, other archives)
+- ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456 issues)
 - Quality review: validate extracted data, fill in missing fields
 - Re-extract older issues to populate `article_author` field
 
 **Phase 2 — Cross-Reference at Scale:**
-- Complete dossier building for all flagged leads
+- ~~Store cross-reference data in Supabase~~ **Done** (`cross_references` table)
+- Complete dossier building for all flagged leads (21 dossiers so far)
 - Manual review of HIGH and MEDIUM connection strength dossiers
-- Store final match results in Supabase
 
 **Phase 3 — Interactive Website:**
 - ~~Design and build public-facing visualization website~~ **Done**

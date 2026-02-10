@@ -694,22 +694,24 @@ If the download FAILED, respond:
     # ── Claude CLI ────────────────────────────────────────────
 
     def _call_claude(self, prompt, timeout=300, tools=None):
-        """Call Claude Code CLI with Playwright + Bash access.
+        """Call Claude Code CLI with optional tool access.
 
         Args:
             prompt: The prompt to send
             timeout: Timeout in seconds (default 300s / 5 min)
-            tools: List of allowed tools (default: AD_ARCHIVE_TOOLS)
+            tools: List of allowed tools. Pass [] for text-only mode.
+                   Default (None) uses AD_ARCHIVE_TOOLS.
         """
-        allowed = tools or AD_ARCHIVE_TOOLS
+        allowed = AD_ARCHIVE_TOOLS if tools is None else tools
         cmd = [
             "claude",
             "-p", prompt,
             "--model", "haiku",
-            "--allowedTools", *allowed,
             "--no-session-persistence",
             "--output-format", "text",
         ]
+        if allowed:
+            cmd.extend(["--allowedTools", *allowed])
 
         try:
             result = subprocess.run(
@@ -824,32 +826,19 @@ If the download FAILED, respond:
         self._current_task = f"Combined: {year}-{month:02d} ({len(batch_files)} batches, {total}pp)"
         return True
 
-    # ── AD Archive Text Scraping ─────────────────────────────
+    # ── AD Archive Direct HTTP Scraping ─────────────────────
 
     async def _scrape_ad_archive(self, task):
-        """Scrape article text directly from AD Archive pages (no PDF needed).
+        """Scrape article data from AD Archive via direct HTTP + JWT decoding.
 
-        Phase A: Read TOC / article listing to find feature article URLs.
-        Phase B: For each feature article, navigate + extract structured data.
+        Phase A (instant): HTTP GET issue page → extract JWT tocConfig → decode featured articles.
+        Phase B (one LLM call): Send all article titles + teasers to Claude CLI for batch extraction.
         Produces same extraction JSON format as Reader output.
         """
-        from dotenv import load_dotenv
-        load_dotenv(os.path.join(BASE_DIR, ".env"))
-
-        email = os.environ.get("AD_ARCHIVE_EMAIL")
-        password = os.environ.get("AD_ARCHIVE_PASSWORD")
         identifier = task.params.get("identifier", "")
         year = task.params.get("year")
         month = task.params.get("month")
         source_url = task.params.get("source_url", "")
-
-        if not email or not password or email == "your-email-here":
-            return TaskResult(
-                task_id=task.id, task_type=task.type, status="failure",
-                result={"identifier": identifier},
-                error="AD Archive credentials not configured in .env",
-                agent=self.name,
-            )
 
         if not source_url:
             source_url = f"https://archive.architecturaldigest.com/issue/{year}{month:02d}01"
@@ -858,68 +847,38 @@ If the download FAILED, respond:
         self._current_task = f"Scraping AD Archive {year}-{month_str}..."
         self.log(f"Scrape start: {identifier} from {source_url}")
 
-        # Phase A: Get TOC / article listing
-        toc_prompt = self._build_scrape_toc_prompt(email, password, source_url, year, month)
-        toc_result = await asyncio.to_thread(self._call_claude, toc_prompt, timeout=600)
-
-        if not toc_result:
+        # Phase A: Fetch TOC via HTTP + JWT (instant, no auth needed)
+        try:
+            toc_articles = await asyncio.to_thread(self._fetch_issue_toc, source_url)
+        except Exception as e:
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="failure",
                 result={"identifier": identifier},
-                error="TOC scrape failed: no response from Claude CLI",
+                error=f"TOC fetch failed: {e}",
                 agent=self.name,
             )
 
-        toc_data = self._parse_result_json(toc_result)
-        if not toc_data or not toc_data.get("articles"):
+        if not toc_articles:
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="failure",
                 result={"identifier": identifier},
-                error=f"TOC scrape returned no articles: {(toc_data or {}).get('notes', 'parse error')}",
+                error="No featured articles found in issue JWT",
                 agent=self.name,
             )
 
-        articles = toc_data["articles"]
-        self.log(f"TOC found {len(articles)} articles in {year}-{month_str}")
+        self.log(f"JWT TOC: {len(toc_articles)} featured articles in {year}-{month_str}")
 
-        # Phase B: Scrape each feature article
-        features = []
-        for idx, article in enumerate(articles):
-            article_url = article.get("url", "")
-            article_title = article.get("title", f"Article {idx+1}")
-
-            if not article_url:
-                self.log(f"Skipping article '{article_title}': no URL", level="WARN")
-                continue
-
-            self._current_task = f"Scraping: {article_title[:40]}..."
-            article_prompt = self._build_scrape_article_prompt(
-                email, password, article_url, year, month
-            )
-            article_result = await asyncio.to_thread(self._call_claude, article_prompt, timeout=600)
-
-            if not article_result:
-                self.log(f"Article scrape failed for '{article_title}'", level="WARN")
-                continue
-
-            article_data = self._parse_result_json(article_result)
-            if article_data and article_data.get("homeowner_name"):
-                # Assign sequential page_number for load_extraction dedup compat
-                article_data["page_number"] = idx + 1
-                article_data["article_title"] = article_title
-                article_data["article_url"] = article_url
-                features.append(article_data)
-                self.log(f"Extracted: {article_data.get('homeowner_name')} from '{article_title[:30]}'")
-            else:
-                self.log(f"No homeowner found in '{article_title[:30]}'", level="DEBUG")
-
-            await asyncio.sleep(2)  # Rate limit between articles
+        # Phase B: Batch extract structured data from all article teasers
+        self._current_task = f"Extracting features from {len(toc_articles)} articles..."
+        features = await asyncio.to_thread(
+            self._extract_features_from_toc, toc_articles, year, month
+        )
 
         if not features:
             return TaskResult(
                 task_id=task.id, task_type=task.type, status="failure",
                 result={"identifier": identifier},
-                error="No features extracted from any articles",
+                error="No features extracted from article teasers",
                 agent=self.name,
             )
 
@@ -943,6 +902,7 @@ If the download FAILED, respond:
             json.dump(extraction, f, indent=2)
 
         self.log(f"Scraped {len(features)} features from {year}-{month_str}")
+        self._current_task = f"Scraped {len(features)} features from {year}-{month_str}"
 
         return TaskResult(
             task_id=task.id, task_type=task.type, status="success",
@@ -954,98 +914,286 @@ If the download FAILED, respond:
             agent=self.name,
         )
 
-    def _build_scrape_toc_prompt(self, email, password, url, year, month):
-        """Build prompt for Claude CLI to scrape the TOC from AD Archive."""
-        return f"""You are the Courier agent scraping article listings from the Architectural Digest Archive.
+    def _fetch_issue_toc(self, issue_url):
+        """Fetch issue page via HTTP and extract featured articles from JWT tocConfig.
 
-TASK: Navigate to the AD Archive issue page and list all HOME FEATURE articles.
+        The AD Archive embeds a JWT token in the page source as a JavaScript variable
+        called `tocConfig`. The JWT payload contains structured article metadata
+        including titles, teasers, authors, page ranges, and slugs.
 
-ISSUE URL: {url}
-ISSUE: {year}-{f"{month:02d}" if isinstance(month, int) else month}
+        No authentication required. Returns list of article dicts.
+        """
+        import base64
+        import re
+        import requests
 
-STEPS:
-1. Navigate to {url}
-2. If prompted to login, use:
-   - Email: {email}
-   - Password: {password}
-3. Take a browser_snapshot to see the page layout
-4. Find the table of contents or article listing
-5. Identify articles that are HOME FEATURES — these typically show a person's home, apartment, estate
-6. Skip articles about: products, trends, travel, restaurant reviews, editor letters, advertisements
-7. For each home feature article, record its title and URL
+        HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 
-HOME FEATURE INDICATORS:
-- Titles mentioning a person's name + "home", "house", "apartment", "estate", "retreat"
-- "Inside [Person]'s [Location] Home"
-- "[Designer] Creates [Something] for [Person]"
-- Articles in sections like "AD Visits", "AD Exclusives", "Before & After"
+        resp = requests.get(issue_url, headers=HEADERS, timeout=30)
+        resp.raise_for_status()
 
-Respond with ONLY a JSON object:
-{{
-  "articles": [
-    {{
-      "title": "Inside Cindy Crawford's Malibu Home",
-      "url": "https://archive.architecturaldigest.com/article/...",
-      "section": "AD Visits"
-    }}
-  ],
-  "total_articles_on_page": 25,
-  "home_features_found": 8,
-  "notes": "any observations"
-}}
+        # Extract JWT from tocConfig JavaScript variable
+        match = re.search(r"tocConfig\s*=\s*'([^']+)'", resp.text)
+        if not match:
+            self.log("No tocConfig JWT found in page source", level="WARN")
+            return []
 
-If you cannot access the page or find no articles:
-{{
-  "articles": [],
-  "notes": "what went wrong"
-}}"""
+        jwt_token = match.group(1)
+        parts = jwt_token.split(".")
+        if len(parts) < 2:
+            self.log("Invalid JWT format in tocConfig", level="WARN")
+            return []
 
-    def _build_scrape_article_prompt(self, email, password, article_url, year, month):
-        """Build prompt for Claude CLI to extract feature data from one article page."""
-        return f"""You are the Courier agent extracting data from an Architectural Digest article.
+        # Decode JWT payload (base64url → JSON)
+        payload_b64 = parts[1]
+        payload_b64 += "=" * (4 - len(payload_b64) % 4)  # Add padding
+        decoded = base64.urlsafe_b64decode(payload_b64).decode("utf-8")
 
-TASK: Navigate to this article and extract structured home feature data.
+        data = json.loads(decoded)
+        # Payload may be double-encoded as string
+        if isinstance(data, str):
+            data = json.loads(data)
 
-ARTICLE URL: {article_url}
-ISSUE: {year}-{f"{month:02d}" if isinstance(month, int) else month}
+        featured = data.get("featured", [])
+        if not featured:
+            self.log("JWT decoded but no 'featured' array found", level="WARN")
+            return []
 
-STEPS:
-1. Navigate to {article_url}
-2. If prompted to login, use:
-   - Email: {email}
-   - Password: {password}
-3. Take a browser_snapshot to read the article
-4. Extract the following information from the article text:
+        # Filter to home feature articles (skip resources, ads, editor letters)
+        SKIP_SECTIONS = {"resources", "ad trade", "shopping", "classified", "promotion"}
+        SKIP_GENRES = {"resources"}
+        articles = []
+        for art in featured:
+            section = (art.get("Section") or "").strip().lower()
+            genre = (art.get("Genre") or "").strip().lower()
+            title = (art.get("Title") or "").strip()
 
-EXTRACT:
-- **homeowner_name**: The person whose home is featured (e.g., "Cindy Crawford and Rande Gerber")
-- **designer_name**: The interior designer or architect (e.g., "Michael S. Smith")
-- **location_city**: City (e.g., "Malibu")
-- **location_state**: State (e.g., "California")
-- **location_country**: Country (e.g., "United States")
-- **design_style**: Architectural/design style (e.g., "Mid-Century Modern", "Contemporary")
-- **year_built**: Year built or renovated, if mentioned
-- **square_footage**: Square footage, if mentioned
-- **cost**: Cost of home or renovation, if mentioned
+            if section in SKIP_SECTIONS or genre in SKIP_GENRES:
+                continue
+            if not title or title.lower() in ("resources", "ad trade", "classified"):
+                continue
+
+            # Strip HTML from teaser
+            teaser = art.get("Teaser") or ""
+            teaser = re.sub(r"<[^>]+>", "", teaser).strip()
+
+            # Extract starting page number from PageRange
+            page_range = art.get("PageRange") or ""
+            start_page = None
+            if page_range:
+                first = page_range.split(",")[0].strip()
+                try:
+                    start_page = int(first)
+                except ValueError:
+                    pass
+
+            articles.append({
+                "title": title,
+                "teaser": teaser,
+                "author": (art.get("CreatorString") or "").strip(),
+                "slug": art.get("Slug") or "",
+                "article_key": art.get("ArticleKey") or "",
+                "section": (art.get("Section") or "").strip(),
+                "start_page": start_page,
+                "page_range": page_range,
+                "wordcount": art.get("Wordcount"),
+            })
+
+        return articles
+
+    def _extract_features_from_toc(self, articles, year, month):
+        """Extract structured home feature data from article titles + teasers.
+
+        Uses the Anthropic API directly (Haiku) for fast batch extraction.
+        Returns list of feature dicts compatible with load_extraction().
+        """
+        if not articles:
+            return []
+
+        # Build article summaries for the prompt
+        article_lines = []
+        for idx, art in enumerate(articles):
+            line = f"[{idx+1}] Title: {art['title']}"
+            if art.get("teaser"):
+                line += f"\n    Teaser: {art['teaser'][:300]}"
+            if art.get("author"):
+                line += f"\n    Author: {art['author']}"
+            if art.get("section"):
+                line += f"\n    Section: {art['section']}"
+            article_lines.append(line)
+
+        articles_text = "\n\n".join(article_lines)
+        month_str = f"{month:02d}" if isinstance(month, int) else str(month)
+
+        prompt = f"""You are extracting structured data from Architectural Digest article listings.
+
+ISSUE: AD {year}-{month_str}
+
+Below are {len(articles)} featured articles from this issue. For each article that is about a PRIVATE HOME
+(someone's house, apartment, estate, retreat, penthouse, loft), extract the homeowner and design details.
+
+SKIP articles about: hotels, restaurants, product roundups, designer profiles without a specific home,
+travel destinations, editor's letters, art collections without a home context, or commercial spaces.
+
+ARTICLES:
+{articles_text}
+
+For each home feature, extract:
+- homeowner_name: The person(s) whose home is featured (NOT the writer/photographer/editor)
+- designer_name: Interior designer or architect who designed/renovated the space
+- location_city: City where the home is located
+- location_state: State or region
+- location_country: Country
+- design_style: Architectural or design style
+- article_title: The article title (as given above)
+- article_number: The [N] number from the listing above
 
 RULES:
-- Only extract what's explicitly stated in the article
-- For homeowner_name, use the featured person(s), not the writer or photographer
-- If the article is NOT about a private residence (it's a hotel, restaurant, etc.), set homeowner_name to null
-- Use null for any field not mentioned in the article
+- Only extract what's explicitly stated or strongly implied in the title/teaser
+- Use null for any field not mentioned
+- If the teaser mentions a possessive name ("X's home"), that's the homeowner
+- If someone "designed for" or "creates for" a person, that person is the homeowner
+- The CreatorString/Author is the WRITER, not the homeowner
+- "Anonymous" if the home is featured but homeowner not named
 
-Respond with ONLY a JSON object:
-{{
-  "homeowner_name": "Cindy Crawford and Rande Gerber",
-  "designer_name": "Michael S. Smith",
-  "location_city": "Malibu",
-  "location_state": "California",
-  "location_country": "United States",
-  "design_style": "Contemporary Beach House",
-  "year_built": null,
-  "square_footage": null,
-  "cost": null
-}}"""
+Respond with ONLY a JSON array:
+[
+  {{
+    "article_number": 1,
+    "article_title": "THE GREAT ESCAPE",
+    "homeowner_name": "Barry and Sheryl Schwartz",
+    "designer_name": "Thierry Despont",
+    "location_city": "Palm Beach",
+    "location_state": "Florida",
+    "location_country": "United States",
+    "design_style": "Beachfront Contemporary"
+  }}
+]
+
+Return an empty array [] if no home features are found."""
+
+        # Call Anthropic API directly (faster than CLI)
+        result = self._call_anthropic_api(prompt)
+
+        if not result:
+            self.log("Feature extraction API call returned no result", level="WARN")
+            return []
+
+        # Parse the JSON array from the response
+        parsed = self._parse_result_json_array(result)
+        if not parsed:
+            self.log("Could not parse features from API response", level="WARN")
+            return []
+
+        # Map back to extraction format with page numbers
+        features = []
+        for feat in parsed:
+            # Default unnamed homeowners to "Anonymous" (matches Reader behavior)
+            if not feat.get("homeowner_name"):
+                feat["homeowner_name"] = "Anonymous"
+
+            art_num = feat.get("article_number", 0)
+            art_idx = art_num - 1 if art_num > 0 else -1
+
+            # Get page number from the original TOC data
+            page_number = None
+            if 0 <= art_idx < len(articles):
+                page_number = articles[art_idx].get("start_page")
+            # Fallback: sequential page number for dedup
+            if not page_number:
+                page_number = len(features) + 1
+
+            feature = {
+                "article_title": feat.get("article_title", ""),
+                "article_author": articles[art_idx]["author"] if 0 <= art_idx < len(articles) else "",
+                "homeowner_name": feat.get("homeowner_name"),
+                "designer_name": feat.get("designer_name"),
+                "architecture_firm": feat.get("architecture_firm"),
+                "year_built": feat.get("year_built"),
+                "square_footage": feat.get("square_footage"),
+                "cost": feat.get("cost"),
+                "location_city": feat.get("location_city"),
+                "location_state": feat.get("location_state"),
+                "location_country": feat.get("location_country"),
+                "design_style": feat.get("design_style"),
+                "page_number": page_number,
+                "notes": f"Extracted from AD Archive teaser (source: ad_archive_scrape)",
+            }
+
+            # Clean up null-string values from LLM
+            for key, val in list(feature.items()):
+                if isinstance(val, str) and val.lower() in ("null", "none", "n/a", "unknown"):
+                    feature[key] = None
+
+            features.append(feature)
+
+        return features
+
+    def _call_anthropic_api(self, prompt):
+        """Call Anthropic API directly using the SDK. Returns text response or None."""
+        try:
+            import anthropic
+        except ImportError:
+            self.log("anthropic SDK not installed, falling back to CLI", level="WARN")
+            return self._call_claude(prompt, timeout=180, tools=[])
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            # Try loading from .env
+            from dotenv import load_dotenv
+            load_dotenv(os.path.join(BASE_DIR, ".env"))
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        if not api_key:
+            self.log("No ANTHROPIC_API_KEY found, falling back to CLI", level="WARN")
+            return self._call_claude(prompt, timeout=180, tools=[])
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            message = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=4096,
+                messages=[{
+                    "role": "user",
+                    "content": [{"type": "text", "text": prompt}],
+                }],
+            )
+            return message.content[0].text
+        except Exception as e:
+            self.log(f"Anthropic API error: {e}", level="ERROR")
+            return None
+
+    def _parse_result_json_array(self, result):
+        """Extract a JSON array from Claude's response."""
+        if not result:
+            return None
+
+        text = result.strip()
+        if text.startswith("```"):
+            text = text.split("\n", 1)[1]
+            if text.endswith("```"):
+                text = text[:-3]
+
+        # Try to find a JSON array
+        start = text.find("[")
+        end = text.rfind("]") + 1
+        if start >= 0 and end > start:
+            try:
+                return json.loads(text[start:end])
+            except json.JSONDecodeError:
+                pass
+
+        # Fallback: try parsing as a JSON object with an array inside
+        obj = self._parse_result_json(result)
+        if obj and isinstance(obj, list):
+            return obj
+        if obj and isinstance(obj, dict):
+            # Check common wrapper keys
+            for key in ("features", "articles", "results", "data"):
+                if isinstance(obj.get(key), list):
+                    return obj[key]
+
+        return None
 
     # ── Progress ──────────────────────────────────────────────
 

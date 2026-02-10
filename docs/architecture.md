@@ -43,9 +43,9 @@ High-level system architecture, data flow, and component relationships.
 │  Supabase (PostgreSQL)          Disk (data/)                        │
 │  ├── issues (source of truth)  ├── issues/*.pdf                    │
 │  ├── features                   ├── extractions/*.json              │
-│  └── (phase 2 tables)          ├── cross_references/results.json   │
-│                                 ├── dossiers/*.json                 │
-│                                 └── detective_verdicts.json         │
+│  ├── cross_references           ├── cross_references/results.json   │
+│  ├── dossiers                   ├── dossiers/*.json                 │
+│  └── dossier_images            └── detective_verdicts.json         │
 └─────────────────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -83,7 +83,7 @@ The system runs as 7 autonomous agents coordinated by the Editor via asyncio.Que
 | Agent | Interval | AI Model | Key Behavior |
 |-------|----------|----------|-------------|
 | Scout | 60s | None (API calls) | Built-in archive.org HTTP search + Claude CLI for creative strategies |
-| Courier | 5s | None (downloads) | Downloads PDFs with rate limiting, priority sorting |
+| Courier | 5s | Haiku (scraping) | Downloads PDFs + scrapes AD Archive via HTTP/JWT + Anthropic API |
 | Reader | 30s | Claude Sonnet | Extracts homeowner data via Vision API, TOC + article pages |
 | Detective | 180s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright (batched) |
 | Researcher | 120s | Claude Haiku | Builds dossiers with pattern analysis + home analysis |
@@ -328,6 +328,7 @@ Scout posts: "archive.org rate limiting — slow down" (tag: warning)
 - Issue CRUD: `get_issue_by_identifier()`, `upsert_issue()`, `update_issue()`, `list_issues()`, `count_issues_by_status()`
 - Feature CRUD: `feature_exists()`, `insert_feature()`, `delete_features_for_issue()`
 - Dossier CRUD: `upsert_dossier()`, `get_dossier()`, `list_dossiers(strength, editor_verdict)`, `update_editor_verdict()`
+- Cross-reference CRUD: `upsert_cross_reference()`, `get_cross_reference()`, `list_cross_references()`, `get_xref_leads()`, `update_xref_editor_override()`, `get_features_without_xref()`, `delete_cross_references()`, `reset_xref_doj()`
 - Replaces the local `archive_manifest.json` — Supabase `issues` table is the single source of truth
 
 ### Agent Status (`src/agent_status.py`)
@@ -403,13 +404,22 @@ Editor._commit_investigation()
 
 ## Data Flow
 
+### Path A: archive.org (PDF pipeline)
 1. **Discover** — Query archive.org API for AD magazine text items, parse month/year, upsert to Supabase issues table
 2. **Download** — Fetch PDFs from archive.org with rate limiting and resume support
 3. **Extract** — Convert PDF pages to PNG (pdftoppm at 150 DPI), send to Claude Sonnet for structured data extraction
 4. **Load** — Insert issues and features into Supabase with duplicate detection
+
+### Path B: AD Archive (direct HTTP scraper)
+1. **Discover** — Bulk-insert issues using AD Archive URL pattern (`ad-archive-YYYYMM01`)
+2. **Scrape** — HTTP GET issue page → decode JWT `tocConfig` → extract featured articles (instant)
+3. **Extract** — Single Anthropic API call (Haiku) batch-extracts homeowner/designer/location from article teasers (~3s)
+4. **Load** — Same `_commit_extraction()` → `load_extraction()` path as PDF pipeline
+
+### Shared (both paths)
 5. **Cross-reference** — Match AD homeowner names against DOJ Epstein Library (Playwright) and Little Black Book (text search)
 6. **Investigate** — Build dossiers on flagged leads with pattern analysis and home-as-evidence analysis
-7. **Serve** — Agent Office dashboard shows real-time status; Phase 3 website will serve public visualizations
+7. **Serve** — Agent Office dashboard shows real-time status; Phase 3 website serves public visualizations
 
 ## Components
 
@@ -448,6 +458,7 @@ See [schema.sql](schema.sql) for full SQL definitions.
 | `features` | 1 | One row per featured home (homeowner, designer, location, article_author, etc.) |
 | `epstein_persons` | 2 | Unique individuals from Epstein files |
 | `epstein_references` | 2 | Each mention of a person (document, context, URL) |
+| `cross_references` | 2 | One row per feature — full detective work (BB matches, DOJ results, combined verdict, editor overrides) |
 | `dossiers` | 2 | One row per investigated lead — Researcher's analysis + Editor's final verdict (CONFIRMED/REJECTED/PENDING_REVIEW) |
 | `dossier_images` | 2 | Article page images linked to dossiers (stored in Supabase Storage) |
 | `matches` | 2 | Links AD features to Epstein persons with confidence scoring |
@@ -497,6 +508,6 @@ Next.js App (web/)
 **Data flow:** Supabase → Next.js server → HTML (static/ISR) or JSON (API routes) → Browser
 
 ### Pending
-- Additional PDF sources beyond archive.org
-- Phase 2 Supabase tables (currently using disk-based JSON for cross-reference results and dossiers)
+- ~~Additional PDF sources beyond archive.org~~ **Done** (AD Archive covers all 456 issues via JWT scraping)
+- ~~Phase 2 Supabase tables~~ **Done** (`cross_references` table added; dossiers already in Supabase)
 - Vercel production deployment
