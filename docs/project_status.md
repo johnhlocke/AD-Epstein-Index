@@ -49,8 +49,10 @@ This file should be automatically updated when necessary to answer three key que
 | Cross-references → Supabase (full xref data, not just binary) | Tooling | Done |
 | AD Archive direct HTTP scraper (JWT + Anthropic API) | Phase 1 | Done |
 | AD Archive issue discovery (100% coverage: 456/456) | Phase 1 | Done |
-| Batch process all archive.org issues (~50 PDFs) | Phase 1 | In Progress |
-| Batch scrape AD Archive issues (318 remaining) | Phase 1 | In Progress |
+| Batch process all archive.org issues (~57 PDFs extracted) | Phase 1 | In Progress |
+| Batch scrape AD Archive issues (106 done, ~211 remaining) | Phase 1 | In Progress |
+| Investigation policy: BB=confirmed, no fame dismissal | Phase 2 | Done |
+| Fix Detective BB match verdict bug | Tooling | Done |
 | Build cross-reference engine | Phase 2 | Done |
 | Batch cross-reference all extracted names | Phase 2 | In Progress |
 | Build dossiers on Epstein-linked leads | Phase 2 | In Progress |

@@ -53,9 +53,26 @@ Format: entries are grouped by date, with the most recent at the top.
 - `researcher.py` enriches leads with xref data from Supabase
 - `cross_reference.py` `get_unchecked_features()` uses Supabase
 
+### Fixed — Detective BB Match Verdict Bug
+- When DOJ browser was unavailable, Detective set `combined_verdict` to raw BB status string `"match"` — not a valid verdict tier. `verdict_to_binary()` didn't recognize it, fell through to `"NO"`, silently dropping Black Book hits
+- Fixed all three DOJ fallback paths: BB match + DOJ unavailable → `needs_review` → binary `YES`
+- Patched Leo Seigal/Maxwell Anderson record directly in Supabase
+
+### Changed — Investigation Policy: BB = Confirmed, Fame ≠ Dismissal
+- **Black Book matches are direct evidence**: `last_first`/`full_name` → `confirmed_match` (was `likely_match`). `last_name_only` → `likely_match` (was `possible_match`)
+- **Fame is never a dismissal factor**: Added explicit anti-fame-bias instructions to Researcher triage prompt, synthesis prompt, and Editor dossier review prompt
+- Updated all agent skills files (detective.md, researcher.md, editor.md) with new policy
+- Fixed Henri Samuel xref — cleared stale editor_override that contradicted CONFIRMED dossier
+
+### Changed — Editor Source Filtering
+- Added `source != "ad_archive"` filter to `_fill_courier_queue()` — prevents AD Archive issues from getting `download_pdf` tasks (they go through `_fill_scrape_queue` instead)
+
 ### Changed — Skills Files
 - `courier.md` — replaced Playwright docs with JWT scraping docs
 - `scout.md` — noted AD Archive direct HTTP scraping availability
+- `detective.md` — updated verdict table (BB matches → confirmed_match), added BB policy note
+- `researcher.md` — added anti-fame-bias rules, updated connection strength guide for BB matches
+- `editor.md` — added dossier review policy (BB = confirm, fame irrelevant)
 
 ---
 
