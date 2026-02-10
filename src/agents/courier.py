@@ -961,7 +961,7 @@ If the download FAILED, respond:
 TASK: Navigate to the AD Archive issue page and list all HOME FEATURE articles.
 
 ISSUE URL: {url}
-ISSUE: {year}-{month:02d if isinstance(month, int) else month}
+ISSUE: {year}-{f"{month:02d}" if isinstance(month, int) else month}
 
 STEPS:
 1. Navigate to {url}
@@ -1007,7 +1007,7 @@ If you cannot access the page or find no articles:
 TASK: Navigate to this article and extract structured home feature data.
 
 ARTICLE URL: {article_url}
-ISSUE: {year}-{month:02d if isinstance(month, int) else month}
+ISSUE: {year}-{f"{month:02d}" if isinstance(month, int) else month}
 
 STEPS:
 1. Navigate to {article_url}
