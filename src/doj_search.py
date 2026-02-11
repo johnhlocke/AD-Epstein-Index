@@ -376,47 +376,58 @@ class DOJSearchClient:
         return results
 
     def _assess_confidence(self, name: str, total_results: int, top_results: list) -> tuple:
-        """Assess confidence of DOJ search results. Returns (confidence, rationale)."""
+        """Assess confidence of DOJ search results. Returns (confidence, rationale).
+
+        The DOJ Epstein Library contains all documents from the investigation —
+        invoices, flight logs, contact lists, correspondence, legal filings, etc.
+        A name appearing in these docs could mean:
+          - Direct connection (contact list, flight log, message) → high
+          - Ambiguous context (name appears but no clear signal) → medium
+          - Incidental mention (contractor invoice, cultural reference) → low
+        Elena (Researcher) does the deep contextual analysis — this is a first pass.
+        """
         if total_results == 0:
             return "none", f"No results found for '{name}'"
 
-        # Check snippets for high-signal keywords
         all_snippets = " ".join(r.get("snippet", "") for r in top_results).lower()
         name_lower = name.lower()
         name_parts = name_lower.split()
 
-        # Check if full name appears in snippets
         full_name_in_snippets = name_lower in all_snippets
-
-        # Check for high-signal keywords
         found_keywords = [kw for kw in HIGH_SIGNAL_KEYWORDS if kw in all_snippets]
-
-        # Check for low-relevance context (contractor, invoice, equipment, etc.)
         found_low_relevance = [kw for kw in LOW_RELEVANCE_CONTEXT if kw in all_snippets]
 
-        # If snippets are dominated by contractor/vendor language, downgrade confidence
-        if found_low_relevance and not found_keywords:
-            low_context = ', '.join(found_low_relevance[:3])
-            if full_name_in_snippets:
-                return "low", f"Full name found but context suggests service/contractor role ({low_context}), not a personal connection"
-            return "low", f"Results reference {low_context} — likely a contractor/vendor, not a personal Epstein connection"
-
-        if full_name_in_snippets and found_keywords:
-            # Even with high-signal keywords, downgrade if also contractor-context
-            if found_low_relevance:
-                return "medium", f"Full name with keywords ({', '.join(found_keywords[:3])}) but also contractor context ({', '.join(found_low_relevance[:2])})"
-            return "high", f"Full name found with high-signal keywords: {', '.join(found_keywords[:3])}"
-
         if full_name_in_snippets:
-            return "medium", f"Full name found in {total_results} results but no high-signal context"
+            # Personal-connection context → high (flight log, contact list, message, etc.)
+            if found_keywords and not found_low_relevance:
+                return "high", f"Full name in {total_results} docs with personal-connection signals: {', '.join(found_keywords[:3])}"
 
-        # Check if last name appears (partial match)
+            # Mixed signals — both personal and contractor context
+            if found_keywords and found_low_relevance:
+                return "medium", (
+                    f"Full name in {total_results} docs with mixed context — "
+                    f"personal ({', '.join(found_keywords[:2])}) and "
+                    f"vendor ({', '.join(found_low_relevance[:2])})"
+                )
+
+            # Only contractor/vendor context → low (probably a plumber, not a guest)
+            if found_low_relevance and not found_keywords:
+                return "low", (
+                    f"Full name in {total_results} docs but context is "
+                    f"contractor/vendor ({', '.join(found_low_relevance[:3])})"
+                )
+
+            # Name found but no keyword context either way — ambiguous.
+            # Could be the person, could be incidental. Elena will dig deeper.
+            return "medium", f"Full name in {total_results} docs — context ambiguous, needs investigation"
+
+        # Last name only — low (could be anyone with that surname)
         if len(name_parts) >= 2:
             last_name = name_parts[-1]
-            if last_name in all_snippets and found_keywords:
-                return "medium", f"Last name '{last_name}' found with keywords: {', '.join(found_keywords[:3])}"
             if last_name in all_snippets:
-                return "low", f"Only last name '{last_name}' found in {total_results} results"
+                if found_keywords:
+                    return "medium", f"Last name '{last_name}' in {total_results} docs with signals: {', '.join(found_keywords[:3])}"
+                return "low", f"Only last name '{last_name}' in {total_results} docs — could be a different person"
 
         return "low", f"{total_results} results but name not clearly matched in snippets"
 
