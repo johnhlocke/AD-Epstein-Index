@@ -411,8 +411,8 @@ async def run_daemon(agents):
     # Start periodic graph sync (Neo4j → graph.json every 60s)
     graph_task = asyncio.create_task(graph_sync_loop(interval=60))
 
-    # Start watercooler conversations (agent-to-agent chatter every 5 min)
-    watercooler_task = asyncio.create_task(watercooler_loop(interval=300))
+    # Start watercooler conversations (agent-to-agent chatter every 2 min)
+    watercooler_task = asyncio.create_task(watercooler_loop(interval=120))
 
     # Set up signal handlers for graceful shutdown
     loop = asyncio.get_event_loop()

@@ -451,6 +451,33 @@ class Agent(ABC):
         self._personality = section
         return section
 
+    def _get_emotional_context(self):
+        """Build emotional context from recent work history for personality-driven speech."""
+        parts = []
+        # Cycles and errors
+        if self._cycles > 0:
+            parts.append(f"Completed {self._cycles} work cycles")
+        if self._errors > 0:
+            parts.append(f"{self._errors} errors so far")
+            if self._last_error:
+                parts.append(f"Last error: {self._last_error[:60]}")
+        # Time since last task
+        if self._last_work_time:
+            idle_secs = _time.time() - self._last_work_time.timestamp() if hasattr(self._last_work_time, 'timestamp') else 0
+            if idle_secs > 300:
+                parts.append(f"Been waiting {int(idle_secs / 60)} minutes for work")
+            elif idle_secs < 10:
+                parts.append("Just finished a task")
+        # Recent memory episodes (emotional texture)
+        try:
+            recent = self.memory.recent(n=3) if self.memory else []
+            for ep in recent:
+                if ep.get("outcome"):
+                    parts.append(f"Recent: {ep['outcome'][:50]}")
+        except Exception:
+            pass
+        return "; ".join(parts) if parts else "Quiet day so far"
+
     def narrate(self, facts):
         """Generate a speech bubble message in this agent's personality voice.
 
@@ -462,6 +489,7 @@ class Agent(ABC):
             self._speech = facts
             self._speech_time = _time.time()
             return facts
+        emotional_ctx = self._get_emotional_context()
         try:
             import anthropic
             client = anthropic.Anthropic()
@@ -473,9 +501,10 @@ class Agent(ABC):
                     f"You are the {self.name.title()} agent in a newsroom-style research pipeline. "
                     f"Your personality:\n{personality}\n\n"
                     "Write a short status update (1-2 sentences max) in YOUR voice about what just happened. "
-                    "Stay in character. No emoji. Be brief."
+                    "React emotionally — if things are going well, show it. If frustrated, show that too. "
+                    "Stay in character. No emoji. Be brief and natural."
                 ),
-                messages=[{"role": "user", "content": f"What just happened: {facts}"}],
+                messages=[{"role": "user", "content": f"What just happened: {facts}\nYour state: {emotional_ctx}"}],
             )
             self._track_api_cost(response, model_id)
             text = response.content[0].text.strip()
@@ -526,6 +555,7 @@ class Agent(ABC):
 
         agent_name = self._load_agent_name()
         self._last_idle_chatter = now
+        emotional_ctx = self._get_emotional_context()
 
         try:
             import anthropic
@@ -539,11 +569,12 @@ class Agent(ABC):
                     f"Your personality:\n{personality}\n\n"
                     "You're between tasks right now — no assignments from the Editor. "
                     "Write a short idle thought (1 sentence max) in YOUR voice. "
-                    "You might be bored, restless, thinking about work, fidgeting, "
-                    "making an observation about the office, or reflecting on recent work. "
+                    "React to your emotional state — if you've had errors, be frustrated. "
+                    "If you've been waiting forever, be restless or impatient. "
+                    "If work just went well, let that energy carry. "
                     "Be natural and varied — never repeat yourself. No emoji. Stay in character."
                 ),
-                messages=[{"role": "user", "content": "What are you thinking right now while you wait?"}],
+                messages=[{"role": "user", "content": f"Your state right now: {emotional_ctx}\nWhat are you thinking?"}],
             )
             self._track_api_cost(response, model_id)
             text = response.content[0].text.strip()

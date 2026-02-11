@@ -2213,13 +2213,19 @@ function updateAgent(agentData) {
         case 'assessing':
           editorSetSprite('studying');
           break;
+        case 'frustrated':
+          editorSetSprite('failure');
+          break;
+        case 'barking':
+          editorSetSprite('tap');
+          break;
         case 'monitoring':
-          // Stay in current idle pose
+          editorSetSprite('watch');
           break;
       }
     }
 
-    updateSpeechBubble('editor', mirandaCurrentSpeech);
+    updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
     return;
   }
 
@@ -2360,7 +2366,7 @@ function updateSpeechBubble(agentId, text, bgColor) {
 
   // Apply agent-colored background or reset to default
   if (bgColor) {
-    const tint = hexToRgba(bgColor, 0.18);
+    const tint = hexToRgba(bgColor, 0.35);
     bubble.style.background = tint;
     bubble.style.setProperty('--bubble-bg', tint);
   } else {
@@ -2551,11 +2557,11 @@ async function doCollabMeeting(agentId, label, type) {
   if (type === 'assign') {
     // ── ASSIGN: Miranda grabs clipboard, walks to agent ──
     editorSetSprite('clipboard');
-    updateSpeechBubble('editor', mirandaCurrentSpeech);
+    updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
     await sleep(600);
     await walkEditorTo(50, target.homeY, { carrySprite: 'clipboard' });
     editorSetSprite('front');
-    updateSpeechBubble('editor', mirandaCurrentSpeech);
+    updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
     await sleep(2500);
 
     // Cleanup
@@ -2572,7 +2578,7 @@ async function doCollabMeeting(agentId, label, type) {
     await sleep(1500);
     // Miranda reacts in character
     editorSetSprite('happy');
-    updateSpeechBubble('editor', mirandaCurrentSpeech);
+    updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
     await sleep(2000);
 
     // Clear glow, agent returns while Miranda heads to completed board
@@ -2581,7 +2587,7 @@ async function doCollabMeeting(agentId, label, type) {
     moveAgentHome(agentId);
     await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
     editorSetSprite('clipboard');
-    updateSpeechBubble('editor', mirandaCurrentSpeech);
+    updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
     await sleep(1500);
     await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
 
@@ -2593,7 +2599,7 @@ async function doCollabMeeting(agentId, label, type) {
     if (goingUp) editorSetSprite('back');
     await sleep(1800);
     editorSetSprite('front');
-    updateSpeechBubble('editor', mirandaCurrentSpeech);
+    updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
     await sleep(2500);
 
     // Cleanup
@@ -2899,7 +2905,7 @@ function renderWatercooler(convo) {
   // Build HTML for chatter panel
   const linesHtml = convo.lines.map(ln => {
     const color = AGENT_COLORS[ln.speaker_id] || 'var(--text)';
-    const bgTint = AGENT_COLORS[ln.speaker_id] ? hexToRgba(AGENT_COLORS[ln.speaker_id], 0.12) : 'transparent';
+    const bgTint = AGENT_COLORS[ln.speaker_id] ? hexToRgba(AGENT_COLORS[ln.speaker_id], 0.25) : 'transparent';
     return `<div class="watercooler-line" style="background:${bgTint};border-radius:3px;padding:2px 4px;margin:1px 0">
       <span class="wc-speaker" style="color:${color}">${escHtml(ln.speaker)}:</span>
       <span class="chatter-text">${escHtml(ln.text)}</span>
@@ -4120,7 +4126,7 @@ async function editorCheckWatch() {
   if (editorBusy) return;
   editorBusy = true;
   editorSetSprite('watch');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(2500);
   editorSetSprite('front');
   editorBusy = false;
@@ -4151,19 +4157,19 @@ async function editorStudyBoards() {
   const cfg = AGENT_CONFIG.editor;
 
   // Walk to Discovery Map (left wall) via aisle
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await walkEditorTo(DISCOVERY_MAP_POS.x, DISCOVERY_MAP_POS.y);
 
   // Study the map
   editorSetSprite('studying');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(3000);
 
   // Walk to Completed/Failed board (right chalkboard) — same row, horizontal
   await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y);
 
   editorSetSprite('studying');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(2500);
 
   // Walk back home via aisle
@@ -4198,7 +4204,7 @@ async function editorVisitAgent(agentId) {
 
   // Turn to face the agent and interact
   editorSetSprite('front');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(2000);
 
   // Clear engagement glow
@@ -4227,7 +4233,7 @@ async function editorGatherReports() {
   const cfg = AGENT_CONFIG.editor;
   const editorChar = agentCharElements['editor'];
 
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(1000);
 
   for (const agentId of workers) {
@@ -4254,7 +4260,7 @@ async function editorGatherReports() {
 
     // Interact
     editorSetSprite('front');
-    updateSpeechBubble('editor', mirandaCurrentSpeech);
+    updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
     await sleep(1500);
 
     // Clear engagement glow, agent returns to desk
@@ -4269,7 +4275,7 @@ async function editorGatherReports() {
   editorSetSprite('front');
   await sleep(1500);
 
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   editorBusy = false;
 }
 
@@ -4364,7 +4370,7 @@ async function editorAssignTask(agentId, label) {
 
   // Step 1: Editor picks up clipboard at desk
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(800);
 
   // Step 2: Yellow glow on both — agent steps to aisle
@@ -4380,7 +4386,7 @@ async function editorAssignTask(agentId, label) {
 
   // Step 4: Face agent, deliver task
   editorSetSprite('front');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(2500);
 
   // Step 5: Clear engagement, agent returns
@@ -4421,7 +4427,7 @@ async function editorCollectResult(agentId, label) {
 
   // Collect and show happy face
   editorSetSprite('happy');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(2000);
 
   // Clear engagement
@@ -4433,7 +4439,7 @@ async function editorCollectResult(agentId, label) {
   await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(1800);
 
   // Walk home via aisle
@@ -4471,7 +4477,7 @@ async function editorHandleFailure(agentId, label) {
 
   // Show failure/concerned face
   editorSetSprite('failure');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(2500);
 
   // Clear glow
@@ -4483,7 +4489,7 @@ async function editorHandleFailure(agentId, label) {
   await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', mirandaCurrentSpeech);
+  updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
   await sleep(1800);
 
   // Walk home via aisle

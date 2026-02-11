@@ -159,7 +159,7 @@ AGENT_PROFILES = {
     },
 }
 
-MGMT_NOTE_COOLDOWN = 120  # seconds — anti-spam per agent
+MGMT_NOTE_COOLDOWN = 60  # seconds — anti-spam per agent
 
 
 class EditorAgent(Agent):
@@ -183,6 +183,8 @@ class EditorAgent(Agent):
         self._last_assessment = None
         self._editor_state = "idle"
         self._happy_until = 0
+        self._frustrated_until = 0
+        self._barking_until = 0
         self._last_health = None
 
         # Cost tracking
@@ -407,10 +409,15 @@ class EditorAgent(Agent):
                     self._cycles += 1
                     self._last_work_time = datetime.now()
 
-                # Update idle display
-                if _time.time() < self._happy_until:
+                # Update idle display — check timed sprite states
+                now_t = _time.time()
+                if now_t < self._happy_until:
                     self._editor_state = "happy"
                     self._current_task = "Instructions acknowledged!"
+                elif now_t < self._frustrated_until:
+                    self._editor_state = "frustrated"
+                elif now_t < self._barking_until:
+                    self._editor_state = "barking"
                 else:
                     self._editor_state = "idle"
                     self._current_task = f"Coordinating — {len(self._tasks_completed)} tasks done, {len(self._tasks_in_flight)} in flight"
@@ -2801,6 +2808,17 @@ If the event doesn't warrant a note, respond with just "—" and nothing else.""
                 self._speech = f"[to {profile['name']}] {note}"
                 self._speech_time = _time.time()
 
+                # Set sprite state based on event type
+                if event == "success":
+                    self._editor_state = "happy"
+                    self._happy_until = _time.time() + 15
+                elif event == "failure":
+                    self._editor_state = "frustrated"
+                    self._frustrated_until = _time.time() + 15
+                elif event == "assign":
+                    self._editor_state = "barking"
+                    self._barking_until = _time.time() + 10
+
                 # Addressed agent also "receives" the note (content only, no prefix)
                 agent = self.workers.get(agent_name)
                 if agent:
@@ -2896,8 +2914,13 @@ If the event doesn't warrant a note, respond with just "—" and nothing else.""
 
     def get_dashboard_status(self):
         base = super().get_dashboard_status()
-        if _time.time() < self._happy_until:
+        now_t = _time.time()
+        if now_t < self._happy_until:
             base["editor_state"] = "happy"
+        elif now_t < self._frustrated_until:
+            base["editor_state"] = "frustrated"
+        elif now_t < self._barking_until:
+            base["editor_state"] = "barking"
         else:
             base["editor_state"] = self._editor_state
         base["cost"] = {

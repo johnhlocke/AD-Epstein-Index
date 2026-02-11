@@ -63,18 +63,40 @@ def _load_personality(agent_id):
 
 
 def _get_pipeline_context():
-    """Get brief pipeline context for conversation grounding."""
+    """Get rich pipeline context for grounding conversations in what's actually happening."""
+    parts = []
+
+    # What are the two agents actually doing right now?
+    try:
+        status_path = os.path.join(os.path.dirname(__file__), "..", "..", "tools", "agent-office", "status.json")
+        if os.path.exists(status_path):
+            with open(status_path) as f:
+                import json as _json
+                status = _json.load(f)
+            for agent_data in status.get("agents", []):
+                aid = agent_data.get("id", "")
+                task = agent_data.get("liveTask") or agent_data.get("message", "")
+                st = agent_data.get("status", "idle")
+                if task and st == "working":
+                    parts.append(f"{aid} is currently: {task[:80]}")
+                elif st == "idle":
+                    parts.append(f"{aid} is idle, waiting for work")
+    except Exception:
+        pass
+
+    # Recent bulletin board activity
     try:
         from agents.bulletin import get_bulletin
         board = get_bulletin()
-        recent = board.read(n=3)
+        recent = board.read(n=5)
         if recent:
-            return "Recent activity: " + "; ".join(
-                f"{n['agent']}: {n['text'][:60]}" for n in recent
-            )
+            parts.append("Recent newsroom chatter: " + "; ".join(
+                f"{n['agent']}: {n['text'][:50]}" for n in recent
+            ))
     except Exception:
         pass
-    return "The pipeline is running. Agents are at their desks."
+
+    return "\n".join(parts) if parts else "The pipeline is running. Agents are at their desks."
 
 
 def generate_conversation(agent_a=None, agent_b=None):
@@ -105,8 +127,10 @@ def generate_conversation(agent_a=None, agent_b=None):
             max_tokens=300,
             system=(
                 "You write short, naturalistic watercooler conversations between AI agents in a newsroom-style research office. "
-                "Each agent has a distinct personality. The conversations should feel real — casual, in-character, "
-                "sometimes tense, sometimes funny, always brief. Like overhearing two colleagues at the coffee machine.\n\n"
+                "Each agent has a distinct personality. The conversations should feel REAL and EMOTIONAL — "
+                "react to what's actually happening in the pipeline. If someone just got a hit, they're buzzing. "
+                "If they've been waiting, they're restless. If there are errors, there's tension. "
+                "Like overhearing two colleagues at the coffee machine who care about the work.\n\n"
                 f"AGENT 1: {info_a['name']} (the {info_a['role']})\n"
                 f"Personality: {info_a['vibe']}\n"
                 f"Details: {personality_a[:300]}\n\n"
@@ -117,11 +141,11 @@ def generate_conversation(agent_a=None, agent_b=None):
                 "- Write exactly 3-4 lines of dialogue (alternating speakers, Agent 1 starts)\n"
                 "- Each line is 1 sentence max. Short. Natural.\n"
                 "- No emoji. No stage directions. Just dialogue.\n"
-                "- They might discuss work, complain, joke, needle each other, share a quiet moment\n"
+                "- Ground the conversation in what's ACTUALLY happening — reference real tasks, real frustrations, real wins\n"
                 "- Stay in character. Their relationship dynamics matter.\n"
                 "- Return ONLY a JSON array: [{\"speaker\": \"name\", \"text\": \"line\"}]\n"
             ),
-            messages=[{"role": "user", "content": f"Pipeline context: {context}\n\nWrite their conversation."}],
+            messages=[{"role": "user", "content": f"What's happening right now:\n{context}\n\nWrite their conversation."}],
         )
 
         raw = response.content[0].text.strip()
@@ -146,7 +170,7 @@ def generate_conversation(agent_a=None, agent_b=None):
                 for ln in lines[:4]
             ],
             "timestamp": now,
-            "display_until": now + 45,  # Show for 45 seconds
+            "display_until": now + 60,  # Show for 60 seconds
         }
 
         # Save to disk

@@ -8,6 +8,13 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ## 2026-02-11 (Session 20)
 
+### Changed — Emotionally Reactive Agent Speech
+- **`src/agents/base.py`** — New `_get_emotional_context()` method builds real emotional state (cycles, errors, wait time, recent memories). Both `narrate()` and `idle_chatter()` now include emotional context in Haiku prompts, producing speech that reacts to what's actually happening.
+- **`src/agents/editor.py`** — Miranda now cycles through 6 sprite states: `happy` (agent success, 15s), `frustrated` (agent failure, 15s), `barking` (assigning tasks, 10s), `listening` (human messages), `assessing` (strategic), `monitoring` (watching). Management note cooldown reduced 120s → 60s.
+- **Dashboard** — New sprite mappings: `frustrated` → failure sprite, `barking` → tap sprite, `monitoring` → watch sprite. Miranda's speech bubble always yellow-tinted at 35% opacity.
+- **Watercooler** — Interval reduced 5min → 2min. Conversations grounded in real-time agent status from `status.json` + bulletin board. Prompts emphasize emotional reactions to actual pipeline events.
+- **Speech bubble opacity** — Agent-colored bubbles increased 18% → 35%. Watercooler panel line tints increased 12% → 25%.
+
 ### Added — Watercooler Conversations (Agent-to-Agent Dialogue)
 - **`src/agents/watercooler.py`** — New system generates in-character 3-4 line conversations between agent pairs via single Haiku call (~$0.001 each). 10 curated pairings with built-in relationship dynamics (e.g., Silas & Elena adversarial respect, Elias & Miranda student/mentor). Loads personality snippets from skills files. Stored at `data/watercooler.json` with 20-conversation history.
 - **`src/orchestrator.py`** — Added `watercooler_loop()` running every 5 minutes. Conversations animate sequentially on agent sprites (6s per line).
