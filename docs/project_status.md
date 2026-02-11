@@ -61,6 +61,12 @@ This file should be automatically updated when necessary to answer three key que
 | Batch cross-reference all extracted names | Phase 2 | In Progress |
 | Build dossiers on Epstein-linked leads | Phase 2 | In Progress |
 | Build interactive website | Phase 3 | Done |
+| Neo4j knowledge graph (graph_db + sync_graph) | Phase 3.5 | Done |
+| Connection Explorer web page (force-graph viz) | Phase 3.5 | Done |
+| Graph analytics (NetworkX: communities, centrality) | Phase 3.5 | Done |
+| Researcher graph integration (Elena uses analytics) | Phase 3.5 | Done |
+| Agent Office embedded knowledge graph | Tooling | Done |
+| Courier deep scraping (Azure Blob page images) | Phase 1 | Done |
 | Deploy website publicly | Phase 3 | Ready to Deploy |
 | Designer agent → spec generator | Tooling | Done |
 
@@ -188,6 +194,17 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 - Specs written to `web/design-specs/*.json`, TaskResult pushed to Editor
 - Auto-regeneration of stale specs (>24h old)
 
+### Phase 3.5: Knowledge Graph & Analytics
+
+Built a Neo4j knowledge graph with hybrid NetworkX analytics:
+
+- **Neo4j Aura Free** — graph database mapping people, designers, locations, styles, issues, authors, and Epstein connections
+- **`src/graph_db.py`** — Python singleton driver, **`src/sync_graph.py`** — Supabase → Neo4j sync with `--export` for agent office
+- **`src/graph_analytics.py`** — NetworkX-powered: Louvain community detection, PageRank, betweenness centrality, Jaccard similarity, Epstein proximity. Writes results back to Neo4j node properties.
+- **Connection Explorer** — Interactive force-directed graph page at `/explorer` with 7 query presets (ego network, shortest path, shared designers, hubs, Epstein subgraph, full graph, search)
+- **Elena integration** — Researcher calls `get_person_analytics()` during investigations, adding community membership, centrality metrics, and Epstein proximity to dossiers
+- **Agent Office graph** — Embedded force-graph (vanilla JS CDN) polls `graph.json` every 6s, collapsible panel under CURRENT LEADS
+
 ### Tooling: Agent Office Dashboard
 - Built pixel-art Agent Office visualization (`tools/agent-office/agent-office.html`) showing all 7 pipeline agents working at their desks
 - Redesigned to 3-column horizontal layout: left panel (pipeline funnel, queues, now processing), center (pixel-art office scene), right panel (activity log, notable finds, data quality)
@@ -234,5 +251,7 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 - ~~Design and build public-facing visualization website~~ **Done**
 - ~~Searchable index, interactive timelines, trend analysis~~ **Done**
 - ~~Dossier viewer for Epstein-linked leads~~ **Done**
+- ~~Knowledge graph + Connection Explorer~~ **Done** (Neo4j + react-force-graph-2d)
+- ~~Graph analytics (community detection, centrality)~~ **Done** (NetworkX hybrid)
 - Deploy to Vercel (`cd web && vercel --prod`)
 - Get service role key from Supabase dashboard and set in Vercel env vars

@@ -1484,7 +1484,58 @@ body {
   .top-stat-value { font-size: 9px; }
   .speech-bubble { font-size: 4px; max-width: 180px; }
 }
+/* ══════════════════════════════════════
+   KNOWLEDGE GRAPH PANEL
+   ══════════════════════════════════════ */
+.graph-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  cursor: pointer;
+  user-select: none;
+}
+.graph-panel-header h3 {
+  margin-bottom: 0;
+  padding-bottom: 6px;
+}
+.graph-toggle-icon {
+  font-size: 7px;
+  color: var(--text-dim);
+  transition: transform 0.2s;
+}
+.graph-panel-header.collapsed .graph-toggle-icon {
+  transform: rotate(-90deg);
+}
+#graph-container {
+  width: 100%;
+  height: 220px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-panel);
+  position: relative;
+  overflow: hidden;
+}
+#graph-container canvas {
+  image-rendering: auto;
+}
+.graph-stats-bar {
+  display: flex;
+  justify-content: space-between;
+  font-size: 5px;
+  color: var(--text-dim);
+  padding: 4px 0 0;
+  letter-spacing: 0.5px;
+}
+.graph-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  font-size: 6px;
+  color: var(--text-dim);
+  letter-spacing: 1px;
+}
 </style>
+<script src="https://unpkg.com/force-graph@1.49.5/dist/force-graph.min.js"></script>
 </head>
 <body>
 
@@ -1595,6 +1646,20 @@ body {
     <div class="panel-section" id="finds-section">
       <h3>CURRENT LEADS</h3>
       <div id="finds-content"></div>
+    </div>
+    <div class="panel-section" id="graph-section">
+      <div class="graph-panel-header" id="graph-panel-toggle">
+        <h3>KNOWLEDGE GRAPH</h3>
+        <span class="graph-toggle-icon">&#9660;</span>
+      </div>
+      <div id="graph-panel-body">
+        <div id="graph-container"><div class="graph-empty">Waiting for graph data...</div></div>
+        <div class="graph-stats-bar">
+          <span id="graph-stat-nodes">0 nodes</span>
+          <span id="graph-stat-edges">0 edges</span>
+          <span id="graph-stat-communities">0 communities</span>
+        </div>
+      </div>
     </div>
     <div class="panel-section" id="throughput-section">
       <h3>THROUGHPUT</h3>
@@ -1755,6 +1820,11 @@ let dataSource = 'demo'; // 'live', 'demo', 'offline'
 let lastDataTimestamp = null;
 let pendingHumanMessages = []; // Optimistic messages not yet in server data
 
+// ── Knowledge Graph State ──
+let graphInstance = null;      // force-graph instance
+let lastGraphJSON = null;      // Change detection for graph data
+let graphCollapsed = false;    // Collapsible panel state
+
 // ── Image Asset Paths ──
 const ASSETS = {
   bg: 'bg-office-clear-new.png?v=3',
@@ -1783,8 +1853,10 @@ function init() {
   initEditorBehavior();
   initSkillsModal();
   initAgentControlsPopup();
+  initKnowledgeGraph();
   fetchStatus();
   setInterval(fetchStatus, POLL_MS);
+  setInterval(fetchGraphData, POLL_MS * 3); // Poll graph less often (6s)
   document.getElementById('sound-toggle').addEventListener('click', toggleSound);
   document.getElementById('inbox-send').addEventListener('click', sendInboxMessage);
   document.getElementById('inbox-input').addEventListener('keydown', (e) => {
@@ -2544,13 +2616,20 @@ function showStatPopup(event, details, popupType) {
   popup.id = 'stat-popup';
   popup.style.cssText = `
     position: fixed; z-index: 9999;
-    left: ${event.clientX + 4}px; top: ${event.clientY + 4}px;
+    left: ${event.clientX + 4}px;
     background: #1a0e2e; border: 2px solid var(--gold);
     padding: 12px 16px; min-width: 240px; max-width: 420px;
     max-height: 400px; overflow-y: auto;
     font-family: 'Press Start 2P', monospace;
     box-shadow: 0 4px 20px rgba(0,0,0,0.6);
   `;
+  // Position above cursor if near bottom of viewport
+  const spaceBelow = window.innerHeight - event.clientY;
+  if (spaceBelow < 300) {
+    popup.style.bottom = (window.innerHeight - event.clientY + 4) + 'px';
+  } else {
+    popup.style.top = (event.clientY + 4) + 'px';
+  }
 
   let html = '';
   if (popupType === 'memories') {
@@ -3271,9 +3350,16 @@ function showAgentControlsPopup(agentId, clientX, clientY) {
   const popup = document.getElementById('agent-controls-popup');
   activeControlAgent = agentId;
 
-  // Position at cursor
+  // Position at cursor — show above if near bottom of viewport
   popup.style.left = clientX + 'px';
-  popup.style.top = clientY + 'px';
+  popup.style.top = '';
+  popup.style.bottom = '';
+  const spaceBelow = window.innerHeight - clientY;
+  if (spaceBelow < 200) {
+    popup.style.bottom = (window.innerHeight - clientY + 4) + 'px';
+  } else {
+    popup.style.top = clientY + 'px';
+  }
 
   // Set button colors to match the agent
   const cfg = AGENT_CONFIG[agentId];
@@ -3509,6 +3595,170 @@ function renderAll(data) {
   if (sectionChanged('editor_ledger', data))    safe(() => renderChalkboards(data.task_board, data.editor_ledger), 'chalkboards');
   if (sectionChanged('coverage_map', data))     safe(() => renderCoverageMap(data.coverage_map), 'coverageMap');
   previousState = data;
+}
+
+// ══════════════════════════════════════
+// KNOWLEDGE GRAPH
+// ══════════════════════════════════════
+
+const GRAPH_NODE_COLORS = {
+  person: '#5B8DB8', designer: '#7EB5D6', location: '#D4A04A',
+  style: '#C27C4E', issue: '#E8C47A', author: '#A89070',
+  epstein_source: '#E05A47',
+};
+const GRAPH_LINK_COLORS = {
+  FEATURED_IN: '#C27C4E', HIRED: '#5B8DB8', LIVES_IN: '#D4A04A',
+  HAS_STYLE: '#C27C4E', PROFILED_BY: '#A89070', APPEARS_IN: '#E05A47',
+};
+const GRAPH_EPSTEIN_COLOR = '#E05A47';
+
+function initKnowledgeGraph() {
+  // Collapsible toggle
+  const toggle = document.getElementById('graph-panel-toggle');
+  const body = document.getElementById('graph-panel-body');
+  toggle.addEventListener('click', () => {
+    graphCollapsed = !graphCollapsed;
+    toggle.classList.toggle('collapsed', graphCollapsed);
+    body.style.display = graphCollapsed ? 'none' : '';
+    // Re-fit graph when expanding
+    if (!graphCollapsed && graphInstance) {
+      setTimeout(() => {
+        const container = document.getElementById('graph-container');
+        graphInstance.width(container.clientWidth).height(container.clientHeight);
+      }, 50);
+    }
+  });
+
+  // Initial fetch
+  fetchGraphData();
+}
+
+function createGraphInstance() {
+  const container = document.getElementById('graph-container');
+  container.innerHTML = ''; // Remove placeholder
+
+  graphInstance = ForceGraph()(container)
+    .width(container.clientWidth)
+    .height(container.clientHeight)
+    .backgroundColor('#1a0e2e')
+    .nodeCanvasObject((node, ctx, globalScale) => {
+      const x = node.x || 0, y = node.y || 0;
+      const color = node.color || GRAPH_NODE_COLORS[node.nodeType] || '#888';
+      const isEpstein = node.detectiveVerdict === 'YES';
+      const degree = node._degree || 0;
+      const pr = node.pagerank || 0;
+      // Size: pagerank if available, else degree
+      const size = pr > 0
+        ? Math.max(2, Math.min(10, 2 + pr * 500))
+        : Math.max(2, Math.min(8, 1.5 + degree * 0.5));
+
+      ctx.save();
+      ctx.shadowColor = color;
+      ctx.shadowBlur = isEpstein ? 12 : 5;
+
+      // Epstein ring
+      if (isEpstein) {
+        ctx.shadowColor = GRAPH_EPSTEIN_COLOR;
+        ctx.shadowBlur = 14;
+        ctx.beginPath();
+        ctx.arc(x, y, size + 2, 0, 2 * Math.PI);
+        ctx.strokeStyle = GRAPH_EPSTEIN_COLOR;
+        ctx.lineWidth = 1.2 / globalScale;
+        ctx.stroke();
+      }
+
+      // Outer ring
+      ctx.beginPath();
+      ctx.arc(x, y, size, 0, 2 * Math.PI);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1 / globalScale;
+      ctx.stroke();
+
+      // Inner fill
+      ctx.beginPath();
+      ctx.arc(x, y, size * 0.5, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.globalAlpha = 0.7;
+      ctx.fill();
+      ctx.globalAlpha = 1;
+      ctx.restore();
+
+      // Label on zoom
+      if (globalScale > 3 && degree > 1 && node.nodeType !== 'issue') {
+        const fontSize = Math.max(7 / globalScale, 1.2);
+        ctx.font = `${fontSize}px "Press Start 2P", monospace`;
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'top';
+        ctx.fillText(node.label, x, y + size + 2);
+      }
+    })
+    .nodePointerAreaPaint((node, color, ctx) => {
+      const size = (node.pagerank || 0) > 0
+        ? Math.max(2, Math.min(10, 2 + (node.pagerank || 0) * 500))
+        : Math.max(2, Math.min(8, 1.5 + (node._degree || 0) * 0.5));
+      ctx.beginPath();
+      ctx.arc(node.x || 0, node.y || 0, size + 4, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
+    })
+    .linkColor(link => {
+      const base = GRAPH_LINK_COLORS[link.relType] || '#444';
+      return base + '55'; // Low opacity
+    })
+    .linkWidth(0.5)
+    .linkCurvature(0.25)
+    .d3AlphaDecay(0.03)
+    .d3VelocityDecay(0.35)
+    .cooldownTime(2000)
+    .onNodeClick((node) => {
+      showToast(`${node.label} (${node.nodeType})`, 'info', 2000);
+    });
+}
+
+async function fetchGraphData() {
+  if (graphCollapsed) return;
+  try {
+    const resp = await fetch('graph.json?t=' + Date.now());
+    if (!resp.ok) return;
+    const text = await resp.text();
+    // Change detection — skip re-render if data unchanged
+    if (text === lastGraphJSON) return;
+    lastGraphJSON = text;
+    const data = JSON.parse(text);
+    renderGraph(data);
+  } catch (e) {
+    // Silently ignore — graph.json may not exist yet
+  }
+}
+
+function renderGraph(data) {
+  if (!data || !data.nodes || data.nodes.length === 0) return;
+
+  // Compute degree per node
+  const degreeMap = {};
+  (data.links || []).forEach(l => {
+    const src = typeof l.source === 'object' ? l.source.id : l.source;
+    const tgt = typeof l.target === 'object' ? l.target.id : l.target;
+    degreeMap[src] = (degreeMap[src] || 0) + 1;
+    degreeMap[tgt] = (degreeMap[tgt] || 0) + 1;
+  });
+  data.nodes.forEach(n => { n._degree = degreeMap[n.id] || 0; });
+
+  // Count communities
+  const communities = new Set(data.nodes.map(n => n.communityId).filter(c => c != null));
+
+  // Update stats bar
+  document.getElementById('graph-stat-nodes').textContent = `${data.nodes.length} nodes`;
+  document.getElementById('graph-stat-edges').textContent = `${data.links.length} edges`;
+  document.getElementById('graph-stat-communities').textContent = `${communities.size} communities`;
+
+  // Create instance if first render
+  if (!graphInstance) {
+    createGraphInstance();
+  }
+
+  graphInstance.graphData(data);
 }
 
 // ══════════════════════════════════════

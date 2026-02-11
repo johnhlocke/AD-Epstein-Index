@@ -639,6 +639,30 @@ class ResearcherAgent(Agent):
         patterns["correlations_for_current"] = correlations
         return patterns
 
+    def _get_graph_analytics(self, name):
+        """Fetch graph analytics context for a person from the knowledge graph.
+
+        Returns structural intelligence: community membership, centrality,
+        similar people, Epstein proximity. Returns None if graph unavailable.
+        """
+        try:
+            from graph_analytics import get_person_analytics
+            context = get_person_analytics(name)
+            if context and not context.get("error"):
+                self.log(f"Graph analytics: community={context.get('community_id')}, "
+                         f"PR={context.get('pagerank', 0):.4f}, "
+                         f"BW={context.get('betweenness', 0):.4f}")
+                return context
+            else:
+                self.log(f"Graph: {context.get('error', 'no data')}", level="WARN")
+                return None
+        except ImportError:
+            self.log("Graph analytics not available (networkx/neo4j not installed)", level="WARN")
+            return None
+        except Exception as e:
+            self.log(f"Graph analytics error: {e}", level="WARN")
+            return None
+
     # ═══════════════════════════════════════════════════════════
     # 3-STEP INVESTIGATION PIPELINE
     # ═══════════════════════════════════════════════════════════
@@ -682,7 +706,8 @@ class ResearcherAgent(Agent):
         time.sleep(SONNET_PAUSE_SECONDS)
 
         pattern_context = self._build_pattern_context(name)
-        dossier = self._step_synthesis(context, step2_result, pattern_context, triage, skills)
+        graph_context = self._get_graph_analytics(name)
+        dossier = self._step_synthesis(context, step2_result, pattern_context, triage, skills, graph_context)
 
         # Ensure required fields
         dossier["investigated_at"] = datetime.now().isoformat()
@@ -888,7 +913,7 @@ Analyze the home, the person, and all available evidence.""",
 
     # ── Step 3: Synthesis ──────────────────────────────────────
 
-    def _step_synthesis(self, context, step2_result, pattern_context, triage, skills):
+    def _step_synthesis(self, context, step2_result, pattern_context, triage, skills, graph_context=None):
         """Cross-lead patterns, final strength, complete dossier. Uses Sonnet (~$0.02)."""
         client = self._get_client()
 
@@ -908,6 +933,46 @@ Issue years: {json.dumps(pattern_context['issue_years'])}
 
 Correlations for {context['name']}: {json.dumps(pattern_context['correlations_for_current'])}"""
 
+        # Build graph analytics section
+        graph_prompt = ""
+        if graph_context:
+            graph_lines = ["\n## Network Graph Analysis"]
+            graph_lines.append(f"PageRank: {graph_context.get('pagerank', 0):.4f} (top {graph_context.get('pagerank_percentile', 0)}% of persons)")
+            graph_lines.append(f"Betweenness centrality: {graph_context.get('betweenness', 0):.4f} (top {graph_context.get('betweenness_percentile', 0)}%)")
+            graph_lines.append(f"Community: #{graph_context.get('community_id', '?')} ({graph_context.get('community_size', 0)} members, {graph_context.get('flagged_in_community', 0)} flagged)")
+
+            members = graph_context.get("community_members", [])
+            if members:
+                flagged_members = [m for m in members if m.get("detective_verdict") == "YES"]
+                if flagged_members:
+                    graph_lines.append(f"Flagged community members: {', '.join(m['name'] for m in flagged_members[:5])}")
+
+            similar = graph_context.get("similar_persons", [])
+            if similar:
+                sim_strs = []
+                for s in similar[:3]:
+                    flag = " [FLAGGED]" if s.get("detective_verdict") == "YES" else ""
+                    shared = ", ".join(s.get("shared_connections", [])[:3])
+                    sim_strs.append(f"{s['name']}{flag} (Jaccard={s['jaccard_score']:.2f}, shared: {shared})")
+                graph_lines.append(f"Most similar persons: {'; '.join(sim_strs)}")
+
+            prox = graph_context.get("epstein_proximity")
+            if prox:
+                graph_lines.append(f"Nearest Epstein-linked person: {prox['target']} ({prox['hops']} hops via {' → '.join(prox['path'])})")
+
+            designers = graph_context.get("designers", [])
+            if designers:
+                graph_lines.append(f"Designers in graph: {', '.join(d['name'] for d in designers)}")
+
+            graph_prompt = "\n".join(graph_lines)
+            graph_prompt += """
+
+Graph evidence interpretation:
+- Same community as flagged person + shared designer/location = strong structural signal
+- High betweenness = bridge between communities (potential social connector)
+- High Jaccard similarity to flagged person = similar connection pattern
+- Short path to Epstein-linked person through shared nodes = proximity signal"""
+
         # Summarize existing dossiers for cross-lead context
         dossier_summaries = self._get_dossier_summaries()
 
@@ -917,6 +982,7 @@ You have the deep analysis results from Step 2 and cross-lead pattern data.
 Your job: determine final connection_strength, write key findings, and produce
 the complete dossier.
 {pattern_prompt}
+{graph_prompt}
 
 Connection strength guide:
 - HIGH: Multiple sources confirm (BB + DOJ), OR pattern correlations reinforce, OR direct evidence
@@ -961,7 +1027,13 @@ Respond with the COMPLETE dossier JSON:
     "shared_locations": [],
     "shared_styles": [],
     "temporal_clustering": "observation",
-    "notable_correlations": []
+    "notable_correlations": [],
+    "graph_community_id": null,
+    "graph_flagged_in_community": 0,
+    "graph_epstein_proximity": null,
+    "graph_similar_persons": [],
+    "graph_pagerank_percentile": 0,
+    "graph_betweenness_percentile": 0
   }},
   "connection_strength": "HIGH | MEDIUM | LOW | COINCIDENCE",
   "strength_rationale": "2-3 sentences with pattern evidence",

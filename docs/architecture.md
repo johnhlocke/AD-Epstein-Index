@@ -46,6 +46,12 @@ High-level system architecture, data flow, and component relationships.
 │  ├── cross_references           ├── cross_references/results.json   │
 │  ├── dossiers                   ├── dossiers/*.json                 │
 │  └── dossier_images            └── detective_verdicts.json         │
+├─────────────────────────────────────────────────────────────────────┤
+│  Neo4j Aura (Graph DB)          NetworkX (Analytics)                │
+│  ├── Person, Designer, Location ├── Louvain communities             │
+│  ├── Style, Issue, Author       ├── PageRank, betweenness           │
+│  ├── EpsteinSource              ├── Jaccard similarity              │
+│  └── 6 relationship types       └── Epstein proximity (paths)       │
 └─────────────────────────────────────────────────────────────────────┘
                           │
                           ▼
@@ -435,7 +441,7 @@ Editor._commit_investigation()
 | Agent Base | Shared agent behavior (work loop, pause, progress) | Python (`src/agents/base.py`) |
 | Shared DB | Singleton Supabase client, issue/feature CRUD | Python (`src/db.py`) |
 | Scout Agent | Discover AD issues (AD Archive + archive.org + CLI) | Python, requests (`src/agents/scout.py`) |
-| Courier Agent | Download PDFs | Python, requests (`src/agents/courier.py`) |
+| Courier Agent | Download PDFs + deep scrape AD Archive | Python, requests, Claude Vision (`src/agents/courier.py`) |
 | Reader Agent | Extract homeowner data from PDFs | Python, Claude Sonnet, pdftoppm (`src/agents/reader.py`) |
 | Detective Agent | Cross-reference names against Epstein records | Python, Playwright (`src/agents/detective.py`) |
 | Researcher Agent | Build dossiers on flagged leads | Python, Claude Haiku (`src/agents/researcher.py`) |
@@ -452,7 +458,10 @@ Editor._commit_investigation()
 | Agent Skills | Per-agent behavior docs | Markdown (`src/agents/skills/*.md`) |
 | Database | Structured home/person data | Supabase (PostgreSQL) |
 | Image Storage | Article images for matched homeowners | Supabase Storage (bucket: feature-images) |
-| Website | Public-facing visualizations | Next.js, Tailwind, Shadcn UI (Phase 3) |
+| Graph DB Client | Neo4j singleton driver + constraints | Python (`src/graph_db.py`) |
+| Graph Sync | Supabase → Neo4j sync + JSON export | Python (`src/sync_graph.py`) |
+| Graph Analytics | Community, centrality, similarity, proximity | Python, NetworkX (`src/graph_analytics.py`) |
+| Website | Public-facing visualizations + Connection Explorer | Next.js, Tailwind, Shadcn UI, react-force-graph-2d (Phase 3) |
 
 ## Database Schema
 
@@ -512,6 +521,35 @@ Next.js App (web/)
 - `web/src/components/landing/` — SearchableIndex (client), Hero/KeyFindings/Methodology (server)
 
 **Data flow:** Supabase → Next.js server → HTML (static/ISR) or JSON (API routes) → Browser
+
+### Phase 3.5: Knowledge Graph
+
+```
+Supabase (source of truth)
+    ↓
+sync_graph.py (--full / --incremental)
+    ↓                    ↓
+Neo4j Aura           graph.json (export)
+    ↓                    ↓
+graph_analytics.py   agent-office.html (force-graph CDN, polls 6s)
+    ↓
+Neo4j node properties (community_id, pagerank, betweenness)
+    ↓
+web/src/lib/neo4j.ts → graph-queries.ts → /api/graph → ConnectionExplorer
+    ↓
+researcher.py → get_person_analytics() → dossier synthesis
+```
+
+**Graph schema:** 7 node types (Person, Designer, Location, Style, Issue, Author, EpsteinSource) + 6 relationship types (FEATURED_IN, HIRED, LIVES_IN, HAS_STYLE, PROFILED_BY, APPEARS_IN)
+
+**Hybrid analytics:** Neo4j Aura Free lacks GDS/APOC libraries, so analytics run via NetworkX in Python:
+- Louvain community detection, PageRank, betweenness centrality, Jaccard similarity
+- Results written back to Neo4j node properties for web frontend consumption
+- Elena (Researcher) queries analytics during investigations for structural evidence
+
+**Connection Explorer** (`/explorer`): react-force-graph-2d with 7 query presets, custom ring-style nodes with glow, dark celestial palette
+
+**Agent Office graph**: force-graph vanilla JS from CDN, collapsible panel, polls `graph.json` every 6s for real-time pipeline visualization
 
 ### Pending
 - ~~Additional PDF sources beyond archive.org~~ **Done** (AD Archive covers all 456 issues via JWT scraping)

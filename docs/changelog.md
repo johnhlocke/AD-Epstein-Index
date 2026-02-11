@@ -6,6 +6,48 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-11 (Session 18)
+
+### Added — Neo4j Knowledge Graph (Phase 3.5)
+- **`src/graph_db.py`** — Python Neo4j singleton client matching `db.py` pattern. SSL cert fix for Python 3.14 via certifi.
+- **`src/sync_graph.py`** — CLI to sync Supabase → Neo4j (`--full`, `--incremental`, `--stats`, `--export`). Batch UNWIND Cypher queries. Anonymous homeowners get unique node keys. Auto-exports `graph.json` after sync.
+- **`src/graph_analytics.py`** — Hybrid Aura + NetworkX analytics engine: Louvain community detection, PageRank, betweenness centrality, degree centrality, clustering coefficient, Jaccard similarity, Epstein proximity (shortest path to flagged person). 1-hour cache. Writes analytics back to Neo4j node properties.
+- **Graph schema**: Person, Designer, Location, Style, Issue, Author, EpsteinSource nodes with FEATURED_IN, HIRED, LIVES_IN, HAS_STYLE, PROFILED_BY, APPEARS_IN relationships
+
+### Added — Connection Explorer (Web Frontend)
+- **`web/src/lib/neo4j.ts`** — TypeScript Neo4j singleton driver (server-side only)
+- **`web/src/lib/graph-types.ts`** — GraphNode, GraphLink, GraphData interfaces with dark celestial color palette
+- **`web/src/lib/graph-queries.ts`** — 7 Cypher query functions: ego network, shortest path, shared designers, hubs, Epstein subgraph, full graph, person search
+- **`web/src/app/api/graph/route.ts`** — API route (`runtime = "nodejs"`) with preset-based dispatch
+- **`web/src/app/explorer/page.tsx`** — Connection Explorer page
+- **`web/src/components/graph/ConnectionExplorer.tsx`** — Three-panel layout: controls sidebar, force-directed canvas graph (react-force-graph-2d), node details sidebar. Custom ring-style nodes with glow, curved links, Epstein red ring, PageRank-based sizing.
+- **`web/src/components/graph/GraphControls.tsx`** — Preset buttons, person search with autocomplete, ego network depth slider, shortest path finder
+- **`web/src/components/graph/NodeDetails.tsx`** — Properties panel showing verdict badges, analytics (community, PageRank, betweenness), explore action
+- Added `neo4j-driver` and `react-force-graph-2d` to web dependencies
+- Added "Explorer" nav link to Header
+
+### Added — Agent Office Knowledge Graph Panel
+- Embedded force-graph (vanilla JS via CDN) in agent-office.html as collapsible panel under CURRENT LEADS
+- Polls `tools/agent-office/graph.json` every 6 seconds for real-time updates
+- Custom canvas node rendering matching dark pixel-art aesthetic (ring nodes, glow, Epstein highlights)
+- Stats bar: node count, edge count, community count
+
+### Changed — Courier Deep Scraping
+- Enhanced AD Archive scraping flow: JWT TOC → Azure Blob Storage page images → Claude Vision extraction → rich features
+- Added `_fetch_article_pages()`: downloads page thumbnails from public Azure CDN (max 3 pages per article)
+- Added `_extract_features_with_images()` and `_extract_single_article_from_images()`: Claude Vision for richer extraction
+- Fallback to teaser-only extraction if page images unavailable
+
+### Changed — Researcher Graph Integration
+- Elena now calls `get_person_analytics(name)` from `graph_analytics.py` before synthesis step
+- Synthesis prompt includes: PageRank percentile, betweenness, community membership, flagged community members, similar persons, Epstein proximity
+- Dossier output schema extended with graph fields: `graph_community_id`, `graph_pagerank_percentile`, `graph_betweenness_percentile`, `graph_similar_persons`, `graph_epstein_proximity`
+
+### Fixed — Dashboard Popup Positioning
+- Stat detail popups and agent control popups now appear above the cursor when near bottom of viewport (previously clipped off-screen)
+
+---
+
 ## 2026-02-10 (Session 17)
 
 ### Changed — Editor: Sonnet/Opus Model Split

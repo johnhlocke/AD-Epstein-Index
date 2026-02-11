@@ -32,6 +32,8 @@ DOWNLOAD_URL = "https://archive.org/download/{identifier}/{filename}"
 DELAY_SECONDS = 2
 
 AD_ARCHIVE_BATCH_SIZE = 20
+AD_ARCHIVE_BLOB_BASE = "https://architecturaldigest.blob.core.windows.net/architecturaldigest{date}thumbnails/Pages/0x600/{page}.jpg"
+AD_ARCHIVE_MAX_PAGES_PER_ARTICLE = 3  # First 3 pages capture article opening
 
 # Failure tracking & escalation
 COURIER_LOG_PATH = os.path.join(DATA_DIR, "courier_log.json")
@@ -868,11 +870,25 @@ If the download FAILED, respond:
 
         self.log(f"JWT TOC: {len(toc_articles)} featured articles in {year}-{month_str}")
 
-        # Phase B: Batch extract structured data from all article teasers
-        self._current_task = f"Extracting features from {len(toc_articles)} articles..."
-        features = await asyncio.to_thread(
-            self._extract_features_from_toc, toc_articles, year, month
+        # Phase B: Try deep scraping with page images from Azure Blob Storage
+        date_str = f"{year}{month:02d}01"
+        self._current_task = f"Fetching page images for {len(toc_articles)} articles..."
+        article_pages = await asyncio.to_thread(
+            self._fetch_article_pages, date_str, toc_articles
         )
+
+        if article_pages:
+            self.log(f"Fetched page images for {len(article_pages)}/{len(toc_articles)} articles")
+            self._current_task = f"Extracting features from page images..."
+            features = await asyncio.to_thread(
+                self._extract_features_with_images, toc_articles, article_pages, year, month
+            )
+        else:
+            self.log(f"No page images available — falling back to teaser-only extraction")
+            self._current_task = f"Extracting features from {len(toc_articles)} articles..."
+            features = await asyncio.to_thread(
+                self._extract_features_from_toc, toc_articles, year, month
+            )
 
         if not features:
             return TaskResult(
@@ -913,6 +929,226 @@ If the download FAILED, respond:
             },
             agent=self.name,
         )
+
+    def _fetch_article_pages(self, date_str, articles):
+        """Download page images from Azure Blob Storage for article openings.
+
+        Args:
+            date_str: Issue date string like "20200101" for URL construction
+            articles: List of article dicts from _fetch_issue_toc() (must have page_range)
+
+        Returns:
+            Dict mapping article index to list of (page_num, image_bytes) tuples
+        """
+        import requests
+
+        HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+        article_pages = {}
+
+        for idx, art in enumerate(articles):
+            page_range = art.get("page_range", "")
+            if not page_range:
+                continue
+
+            # Parse page numbers from "188,189,190,191,192,193,194,195"
+            try:
+                pages = [int(p.strip()) for p in page_range.split(",") if p.strip().isdigit()]
+            except (ValueError, AttributeError):
+                continue
+
+            if not pages:
+                continue
+
+            # Take only first N pages (article opening has homeowner + designer info)
+            pages = pages[:AD_ARCHIVE_MAX_PAGES_PER_ARTICLE]
+            fetched = []
+
+            for page_num in pages:
+                url = AD_ARCHIVE_BLOB_BASE.format(date=date_str, page=page_num)
+                try:
+                    resp = requests.get(url, headers=HEADERS, timeout=15)
+                    if resp.status_code == 200 and len(resp.content) > 1000:
+                        fetched.append((page_num, resp.content))
+                    else:
+                        self.log(f"Page {page_num} returned {resp.status_code} ({len(resp.content)}b)", level="WARN")
+                except Exception as e:
+                    self.log(f"Failed to fetch page {page_num}: {e}", level="WARN")
+
+            if fetched:
+                article_pages[idx] = fetched
+
+        return article_pages
+
+    def _extract_features_with_images(self, articles, article_pages, year, month):
+        """Extract rich features using page images + article metadata via Claude Vision.
+
+        Sends first 2-3 pages of each article to Claude Vision for extraction,
+        falling back to teaser-only extraction for articles without page images.
+        """
+        if not articles:
+            return []
+
+        # Split: articles with images vs teaser-only
+        image_articles = []
+        teaser_only_articles = []
+
+        for idx, art in enumerate(articles):
+            if idx in article_pages and article_pages[idx]:
+                image_articles.append((idx, art, article_pages[idx]))
+            else:
+                teaser_only_articles.append(art)
+
+        features = []
+
+        # Batch 1: Image-based extraction (one article at a time — images are large)
+        for idx, art, pages in image_articles:
+            try:
+                feat = self._extract_single_article_from_images(art, pages, year, month)
+                if feat:
+                    features.append(feat)
+            except Exception as e:
+                self.log(f"Image extraction failed for '{art.get('title', '?')}': {e}", level="WARN")
+                # Fall back to teaser-only
+                teaser_only_articles.append(art)
+
+        # Batch 2: Teaser-only extraction (batch all remaining)
+        if teaser_only_articles:
+            teaser_features = self._extract_features_from_toc(teaser_only_articles, year, month)
+            if teaser_features:
+                features.extend(teaser_features)
+
+        return features
+
+    def _extract_single_article_from_images(self, article, pages, year, month):
+        """Extract features from one article's page images using Claude Vision.
+
+        Args:
+            article: Article dict from TOC (title, teaser, author, etc.)
+            pages: List of (page_num, image_bytes) tuples
+            year, month: Issue date
+
+        Returns:
+            Feature dict or None
+        """
+        import base64
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            from dotenv import load_dotenv
+            load_dotenv(os.path.join(BASE_DIR, ".env"))
+            api_key = os.environ.get("ANTHROPIC_API_KEY")
+
+        if not api_key:
+            return None
+
+        try:
+            import anthropic
+        except ImportError:
+            return None
+
+        month_str = f"{month:02d}" if isinstance(month, int) else str(month)
+
+        # Build content blocks: images + text prompt
+        content = []
+        for page_num, img_bytes in pages:
+            b64 = base64.b64encode(img_bytes).decode("utf-8")
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": "image/jpeg",
+                    "data": b64,
+                },
+            })
+
+        prompt = f"""You are reading pages from an Architectural Digest magazine article.
+
+ISSUE: AD {year}-{month_str}
+ARTICLE TITLE: {article.get('title', 'Unknown')}
+ARTICLE SECTION: {article.get('section', '')}
+AUTHOR/PHOTOGRAPHER: {article.get('author', '')}
+TEASER: {article.get('teaser', '')}
+
+Extract the following from these magazine page images:
+- homeowner_name: The person(s) whose home is featured (NOT the writer/photographer/designer)
+- designer_name: Interior designer or architect who designed/renovated the space
+- architecture_firm: Architecture firm (if separate from designer)
+- location_city: City where the home is located
+- location_state: State or region
+- location_country: Country
+- design_style: Architectural or interior design style
+- year_built: Year the home was built or renovated
+- square_footage: Size of the home
+- cost: Cost mentioned
+
+RULES:
+- Extract ONLY what is stated or strongly implied in the text/images
+- Use null for any field not found
+- The homeowner is whose HOME it is — look for possessives, "home of", "residence of"
+- The designer/architect is who designed the space — look for "designed by", "architect", "interior designer"
+- If the article is NOT about a private home/apartment/estate, return null
+
+Respond with ONLY a JSON object (not array):
+{{
+  "homeowner_name": "Name or null",
+  "designer_name": "Name or null",
+  "architecture_firm": "Firm or null",
+  "location_city": "City or null",
+  "location_state": "State or null",
+  "location_country": "Country or null",
+  "design_style": "Style or null",
+  "year_built": null,
+  "square_footage": null,
+  "cost": null
+}}"""
+
+        content.append({"type": "text", "text": prompt})
+
+        try:
+            client = anthropic.Anthropic(api_key=api_key)
+            message = client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1024,
+                messages=[{"role": "user", "content": content}],
+            )
+            result_text = message.content[0].text
+        except Exception as e:
+            self.log(f"Vision API error: {e}", level="ERROR")
+            return None
+
+        # Parse response
+        parsed = self._parse_result_json(result_text)
+        if not parsed:
+            return None
+
+        # Build feature dict
+        page_number = pages[0][0] if pages else None
+        if not page_number:
+            page_number = article.get("start_page")
+
+        feature = {
+            "article_title": article.get("title", ""),
+            "article_author": article.get("author", ""),
+            "homeowner_name": parsed.get("homeowner_name") or "Anonymous",
+            "designer_name": parsed.get("designer_name"),
+            "architecture_firm": parsed.get("architecture_firm"),
+            "year_built": parsed.get("year_built"),
+            "square_footage": parsed.get("square_footage"),
+            "cost": parsed.get("cost"),
+            "location_city": parsed.get("location_city"),
+            "location_state": parsed.get("location_state"),
+            "location_country": parsed.get("location_country"),
+            "design_style": parsed.get("design_style"),
+            "page_number": page_number,
+            "notes": "Extracted from AD Archive page images (source: ad_archive_deep_scrape)",
+        }
+
+        # Clean null-string values
+        for key, val in list(feature.items()):
+            if isinstance(val, str) and val.lower() in ("null", "none", "n/a", "unknown"):
+                feature[key] = None
+
+        return feature
 
     def _fetch_issue_toc(self, issue_url):
         """Fetch issue page via HTTP and extract featured articles from JWT tocConfig.
