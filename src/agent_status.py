@@ -20,8 +20,8 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from db import get_supabase
 
-# Total expected AD issues: 12/year from 1988 to 2025 = 38 years × 12 = 456
-TOTAL_EXPECTED_ISSUES = 456
+# Total expected AD issues: 12/year from 1988 to 2026 = 39 years × 12 = 468
+TOTAL_EXPECTED_ISSUES = 468
 
 # Paths
 BASE_DIR = os.path.join(os.path.dirname(__file__), "..")

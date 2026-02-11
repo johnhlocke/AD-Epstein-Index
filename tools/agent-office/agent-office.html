@@ -3589,17 +3589,20 @@ function createGraphInstance() {
 
       ctx.restore();
 
-      // Labels — show for hovered or high-degree nodes
-      const showLabel = isHovered || degree >= GRAPH_LABEL_DEGREE_THRESHOLD;
+      // Labels — hide when zoomed out, show progressively as user zooms in
+      const zoomedEnough = globalScale > 1.2;
+      const zoomedClose  = globalScale > 2.5;
+      const showLabel = isHovered || (zoomedClose && degree >= GRAPH_LABEL_DEGREE_THRESHOLD) || (zoomedEnough && degree >= GRAPH_LABEL_DEGREE_THRESHOLD * 2);
       if (showLabel && node.nodeType !== 'issue') {
+        const labelAlpha = isHovered ? 1 : Math.min((globalScale - 1.2) / 1.5, 1);
         const fontSize = Math.max(10 / globalScale, 1.8);
         ctx.font = `${fontSize}px Inter, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
         // Text shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillStyle = `rgba(0,0,0,${0.85 * labelAlpha})`;
         ctx.fillText(node.label, x + 0.5, y + size + 3 + 0.5);
-        ctx.fillStyle = isHovered ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.6)';
+        ctx.fillStyle = isHovered ? 'rgba(255,255,255,0.95)' : `rgba(255,255,255,${0.6 * labelAlpha})`;
         ctx.fillText(node.label, x, y + size + 3);
       }
     })

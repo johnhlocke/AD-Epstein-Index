@@ -41,8 +41,8 @@ ESCALATION_COOLDOWN_HOURS = 1
 EXHAUSTED_ESCALATION_THRESHOLD = 20
 
 MIN_YEAR = 1988
-MAX_YEAR = 2025
-TOTAL_EXPECTED = (MAX_YEAR - MIN_YEAR + 1) * 12  # 456
+MAX_YEAR = 2026
+TOTAL_EXPECTED = (MAX_YEAR - MIN_YEAR + 1) * 12  # 468
 
 # Tools the Scout is allowed to use via Claude Code
 ALLOWED_TOOLS = [
@@ -1003,7 +1003,7 @@ Report what you find — new sources, new issues, or confirmation that our colle
 
         return f"""You are the Scout agent for the AD-Epstein Index project.
 
-Your mission: Find every issue of Architectural Digest magazine from January 1988 through December 2024. That's {TOTAL_EXPECTED} issues total (12 per year × {MAX_YEAR - MIN_YEAR + 1} years).
+Your mission: Find every issue of Architectural Digest magazine from January 1988 through December {MAX_YEAR}. That's {TOTAL_EXPECTED} issues total (12 per year × {MAX_YEAR - MIN_YEAR + 1} years).
 
 Current progress:
 {gap_summary}
