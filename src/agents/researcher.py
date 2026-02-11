@@ -663,6 +663,137 @@ class ResearcherAgent(Agent):
             self.log(f"Graph analytics error: {e}", level="WARN")
             return None
 
+    def _investigate_graph(self, name, context):
+        """Run live ad-hoc graph queries tailored to this investigation.
+
+        Unlike _get_graph_analytics() which returns pre-computed cached metrics,
+        this runs real-time Cypher queries to pull threads as they emerge.
+        Returns a dict of query results, or None if graph unavailable.
+        """
+        try:
+            from graph_queries import (
+                shared_designers, shared_locations, shared_issues,
+                flagged_neighbors, designers_client_list,
+                temporal_connections, person_timeline,
+            )
+        except ImportError:
+            self.log("Graph queries not available (neo4j not installed)", level="WARN")
+            return None
+
+        results = {}
+        try:
+            # Core structural queries
+            results["shared_designers"] = shared_designers(name)
+            results["shared_locations"] = shared_locations(name)
+            results["shared_issues"] = shared_issues(name)
+            results["flagged_neighbors"] = flagged_neighbors(name, depth=3)
+            results["timeline"] = person_timeline(name)
+
+            # If we know their designer, get the full client list
+            ad = context.get("ad_feature", {})
+            designer = ad.get("designer_name")
+            if designer:
+                results["designer_clients"] = designers_client_list(designer)
+                self.log(f"  Graph: {designer}'s client list → {len(results['designer_clients'])} clients")
+
+            # Temporal query: ±5 years around their issue year
+            issue_year = ad.get("issue_year")
+            if issue_year and isinstance(issue_year, (int, float)):
+                y = int(issue_year)
+                results["era_connections"] = temporal_connections(name, y - 5, y + 5)
+                era = results["era_connections"]
+                flagged_era = era.get("flagged_in_era", [])
+                if flagged_era:
+                    self.log(f"  Graph: {len(flagged_era)} flagged persons in {y-5}-{y+5} era")
+
+            # Count hits
+            n_shared = len(results.get("shared_designers", []))
+            n_flagged = len(results.get("flagged_neighbors", []))
+            self.log(f"Graph queries: {n_shared} shared-designer links, {n_flagged} flagged neighbors")
+
+        except Exception as e:
+            self.log(f"Graph query error: {e}", level="WARN")
+
+        return results if results else None
+
+    def _format_graph_investigation(self, graph_inv):
+        """Format live graph query results into a prompt section for synthesis."""
+        if not graph_inv:
+            return ""
+
+        lines = ["\n## Live Graph Investigation Results"]
+
+        # Shared designers
+        sd = graph_inv.get("shared_designers", [])
+        if sd:
+            flagged_sd = [r for r in sd if r.get("verdict") in ("YES", "confirmed_match", "likely_match")]
+            lines.append(f"\nShared designers: {len(sd)} persons hired the same designer(s)")
+            if flagged_sd:
+                lines.append(f"  ⚠ FLAGGED shared-designer connections:")
+                for r in flagged_sd[:5]:
+                    lines.append(f"    - {r['person']} (via {r['designer']}, verdict={r['verdict']})")
+            elif sd:
+                for r in sd[:5]:
+                    lines.append(f"    - {r['person']} (via {r['designer']})")
+                if len(sd) > 5:
+                    lines.append(f"    ... and {len(sd) - 5} more")
+
+        # Flagged neighbors
+        fn = graph_inv.get("flagged_neighbors", [])
+        if fn:
+            lines.append(f"\nFlagged persons within 3 hops: {len(fn)}")
+            for r in fn[:5]:
+                path = " → ".join(r.get("path_names", []))
+                lines.append(f"    - {r['person']} ({r['hops']} hops: {path})")
+
+        # Designer's full client list
+        dc = graph_inv.get("designer_clients", [])
+        if dc:
+            flagged_dc = [r for r in dc if r.get("verdict") in ("YES", "confirmed_match", "likely_match")]
+            lines.append(f"\nDesigner's complete client list: {len(dc)} clients")
+            if flagged_dc:
+                lines.append(f"  ⚠ Flagged clients of the same designer:")
+                for r in flagged_dc[:5]:
+                    lines.append(f"    - {r['person']} (verdict={r['verdict']}, years={r.get('years', [])})")
+
+        # Shared locations
+        sl = graph_inv.get("shared_locations", [])
+        if sl:
+            flagged_sl = [r for r in sl if r.get("verdict") in ("YES", "confirmed_match", "likely_match")]
+            if flagged_sl:
+                lines.append(f"\n⚠ Flagged persons in same location:")
+                for r in flagged_sl[:5]:
+                    lines.append(f"    - {r['person']} at {r['location']} (verdict={r['verdict']})")
+
+        # Era connections (temporal)
+        era = graph_inv.get("era_connections")
+        if era:
+            era_label = era.get("era", "?")
+            flagged_era = era.get("flagged_in_era", [])
+            era_designers = era.get("shared_designers", [])
+            if flagged_era:
+                lines.append(f"\nTemporal analysis ({era_label}):")
+                lines.append(f"  {len(flagged_era)} flagged persons active in this era")
+                for r in flagged_era[:5]:
+                    lines.append(f"    - {r['person']} (years={r.get('years', [])})")
+            if era_designers:
+                flagged_ed = [r for r in era_designers if r.get("verdict") in ("YES", "confirmed_match", "likely_match")]
+                if flagged_ed:
+                    lines.append(f"  ⚠ Shared designers in this era:")
+                    for r in flagged_ed[:3]:
+                        lines.append(f"    - {r['person']} via {r['designer']} (years={r.get('years', [])})")
+
+        # Shared issues (co-features)
+        si = graph_inv.get("shared_issues", [])
+        if si:
+            flagged_si = [r for r in si if r.get("verdict") in ("YES", "confirmed_match", "likely_match")]
+            if flagged_si:
+                lines.append(f"\n⚠ Featured in same issue as flagged persons:")
+                for r in flagged_si[:5]:
+                    lines.append(f"    - {r['person']} in issue {r.get('year', '?')}/{r.get('month', '?')}")
+
+        return "\n".join(lines) if len(lines) > 1 else ""
+
     # ═══════════════════════════════════════════════════════════
     # 3-STEP INVESTIGATION PIPELINE
     # ═══════════════════════════════════════════════════════════
@@ -701,13 +832,17 @@ class ResearcherAgent(Agent):
 
         step2_result = self._step_deep_analysis(context, image_info, skills)
 
+        # ── GRAPH INVESTIGATION (live queries, not cached) ─────
+        self.log(f"Graph investigation — {name}")
+        graph_investigation = self._investigate_graph(name, context)
+
         # ── STEP 3: SYNTHESIS (Sonnet — patterns + final) ─────
         self.log(f"Step 3: Synthesis — {name}")
         time.sleep(SONNET_PAUSE_SECONDS)
 
         pattern_context = self._build_pattern_context(name)
         graph_context = self._get_graph_analytics(name)
-        dossier = self._step_synthesis(context, step2_result, pattern_context, triage, skills, graph_context)
+        dossier = self._step_synthesis(context, step2_result, pattern_context, triage, skills, graph_context, graph_investigation)
 
         # Ensure required fields
         dossier["investigated_at"] = datetime.now().isoformat()
@@ -809,6 +944,7 @@ Should this lead be fully investigated or dismissed as COINCIDENCE?"""
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
         )
+        self._track_api_cost(response, HAIKU_MODEL)
 
         return self._parse_json_response(response.content[0].text)
 
@@ -908,12 +1044,13 @@ Analyze the home, the person, and all available evidence.""",
             system=system_prompt,
             messages=[{"role": "user", "content": content}],
         )
+        self._track_api_cost(response, SONNET_MODEL)
 
         return self._parse_json_response(response.content[0].text)
 
     # ── Step 3: Synthesis ──────────────────────────────────────
 
-    def _step_synthesis(self, context, step2_result, pattern_context, triage, skills, graph_context=None):
+    def _step_synthesis(self, context, step2_result, pattern_context, triage, skills, graph_context=None, graph_investigation=None):
         """Cross-lead patterns, final strength, complete dossier. Uses Sonnet (~$0.02)."""
         client = self._get_client()
 
@@ -972,6 +1109,11 @@ Graph evidence interpretation:
 - High betweenness = bridge between communities (potential social connector)
 - High Jaccard similarity to flagged person = similar connection pattern
 - Short path to Epstein-linked person through shared nodes = proximity signal"""
+
+        # Live graph investigation results (ad-hoc queries, not cached)
+        graph_inv_prompt = self._format_graph_investigation(graph_investigation)
+        if graph_inv_prompt:
+            graph_prompt += graph_inv_prompt
 
         # Summarize existing dossiers for cross-lead context
         dossier_summaries = self._get_dossier_summaries()
@@ -1033,7 +1175,10 @@ Respond with the COMPLETE dossier JSON:
     "graph_epstein_proximity": null,
     "graph_similar_persons": [],
     "graph_pagerank_percentile": 0,
-    "graph_betweenness_percentile": 0
+    "graph_betweenness_percentile": 0,
+    "graph_flagged_shared_designers": [],
+    "graph_flagged_neighbors_within_3_hops": [],
+    "graph_era_analysis": null
   }},
   "connection_strength": "HIGH | MEDIUM | LOW | COINCIDENCE",
   "strength_rationale": "2-3 sentences with pattern evidence",
@@ -1065,6 +1210,7 @@ Produce the complete dossier with final connection_strength."""
             system=system_prompt,
             messages=[{"role": "user", "content": user_msg}],
         )
+        self._track_api_cost(response, SONNET_MODEL)
 
         return self._parse_json_response(response.content[0].text)
 

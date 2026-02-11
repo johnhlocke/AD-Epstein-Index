@@ -67,6 +67,7 @@ This file should be automatically updated when necessary to answer three key que
 | Researcher graph integration (Elena uses analytics) | Phase 3.5 | Done |
 | Agent Office embedded knowledge graph | Tooling | Done |
 | Courier deep scraping (Azure Blob page images) | Phase 1 | Done |
+| Miranda speech system overhaul (LLM-driven sprite speech) | Tooling | Done |
 | Deploy website publicly | Phase 3 | Ready to Deploy |
 | Designer agent → spec generator | Tooling | Done |
 

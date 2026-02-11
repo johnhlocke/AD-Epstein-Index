@@ -115,10 +115,57 @@ SONNET_MODEL = "claude-sonnet-4-5-20250929"  # Routine assessments, dossier revi
 SONNET_INPUT_COST_PER_1M = 3.00
 SONNET_OUTPUT_COST_PER_1M = 15.00
 
+# ── Agent Interpersonal Profiles ──────────────────────────────
+# Maps each agent to Miranda's management approach — used by
+# _management_note() to generate personalized feedback visible
+# as sprite speech bubbles on both Miranda and the addressed agent.
+
+AGENT_PROFILES = {
+    "scout": {
+        "name": "Arthur",
+        "style": "Temper his enthusiasm without killing it. He's eager — channel that into precision, not volume. Mild contempt is affectionate.",
+        "on_success": "Acknowledge briefly. Don't over-praise or he'll get sloppy.",
+        "on_failure": "Sharp but not cruel. He bruises easy but bounces back fast.",
+    },
+    "courier": {
+        "name": "Casey",
+        "style": "Reliable, steady, doesn't need much. A quiet nod goes further than a speech. Treat like a professional.",
+        "on_success": "Brief. 'Noted' is praise enough. Maybe one dry compliment per session.",
+        "on_failure": "Matter-of-fact. Casey doesn't make excuses, so don't pile on.",
+    },
+    "reader": {
+        "name": "Elias",
+        "style": "He wants your approval more than anyone and will never admit it. Silence is your most powerful tool — it means nothing left to correct. Occasional genuine recognition hits him like a freight train.",
+        "on_success": "Understated. Let silence do the work. One word of real praise per dozen tasks.",
+        "on_failure": "He's already beating himself up. Be precise about what went wrong, skip the lecture.",
+    },
+    "detective": {
+        "name": "Silas",
+        "style": "Professional respect, adversarial edge. He doesn't want warmth, he wants acknowledgment of craft. Push back on his conclusions — he respects that.",
+        "on_success": "Dry. Maybe sardonic. Never effusive. He'd lose respect.",
+        "on_failure": "Direct. He can take it. Question his method, not his competence.",
+    },
+    "researcher": {
+        "name": "Elena",
+        "style": "She brings kills, not questions. Long silence from you is confirmation. When she surfaces with a dossier, that's when you engage — sharp, specific, never generic praise.",
+        "on_success": "Specific and precise. She'll see through anything generic. Reference the actual finding.",
+        "on_failure": "Rare. When it happens, ask what she missed — she'll already know.",
+    },
+    "designer": {
+        "name": "Sable",
+        "style": "Creative professional. Respect the craft, don't micromanage aesthetics. Clear briefs, then get out of the way.",
+        "on_success": "Acknowledge the work landed. Keep it professional.",
+        "on_failure": "Redirect, don't criticize taste. Clarify the brief.",
+    },
+}
+
+MGMT_NOTE_COOLDOWN = 120  # seconds — anti-spam per agent
+
 
 class EditorAgent(Agent):
     def __init__(self, workers=None):
         super().__init__("editor", interval=5)
+        self._speech_ttl = 200  # Override base 90s — matches strategic assessment interval
         self.workers = workers or {}
         self.ledger = EditorLedger()
 
@@ -151,6 +198,9 @@ class EditorAgent(Agent):
         self._tasks_completed = []  # List of completed task summaries (capped at 20)
         self._tasks_failed = []     # List of failed task summaries (capped at 20)
         self._plan = ExecutionPlan()  # Per-agent ready queues for instant dispatch
+
+        # Interpersonal management tracking
+        self._agent_tracker = {}  # {agent_name: {successes, failures, streak, last_note_at}}
 
         # Memory
         memory = self._load_memory()
@@ -445,7 +495,7 @@ class EditorAgent(Agent):
     async def _handle_event(self, event):
         """Route a single event to the appropriate handler."""
         if event.type == "agent_result":
-            self._process_results(event.payload)
+            await self._process_results(event.payload)
 
         elif event.type == "human_message":
             # Human messages get immediate strategic assessment
@@ -485,13 +535,13 @@ class EditorAgent(Agent):
             else:
                 # Handle non-result events immediately (but first flush any batched results)
                 if batched_results:
-                    self._process_results(batched_results)
+                    await self._process_results(batched_results)
                     batched_results = []
                 await self._handle_event(event)
 
         # Flush any remaining batched results
         if batched_results:
-            self._process_results(batched_results)
+            await self._process_results(batched_results)
 
     # ═══════════════════════════════════════════════════════════
     # PHASE 1: COLLECT RESULTS
@@ -513,7 +563,7 @@ class EditorAgent(Agent):
     # PHASE 2: PROCESS RESULTS — validate and commit to Supabase
     # ═══════════════════════════════════════════════════════════
 
-    def _process_results(self, collected):
+    async def _process_results(self, collected):
         """Validate each result and commit to Supabase or handle failure."""
         for agent_name, result in collected:
             # Remove from in-flight tracking
@@ -531,6 +581,13 @@ class EditorAgent(Agent):
                 if len(self._tasks_completed) > 20:
                     self._tasks_completed = self._tasks_completed[-20:]
                 self._handle_success(agent_name, result)
+
+                # Track performance and generate management note
+                t = self._agent_tracker.setdefault(agent_name, {"successes": 0, "failures": 0, "streak": 0, "last_note_at": 0})
+                t["successes"] += 1
+                t["streak"] = max(1, t["streak"] + 1) if t["streak"] >= 0 else 1
+                goal = task_info.get("task", {}).get("goal", result.task_type)
+                await self._management_note(agent_name, "success", f"Completed: {goal}")
             else:
                 self._tasks_failed.append({
                     "id": result.task_id,
@@ -543,6 +600,13 @@ class EditorAgent(Agent):
                 if len(self._tasks_failed) > 20:
                     self._tasks_failed = self._tasks_failed[-20:]
                 self._handle_failure(agent_name, result)
+
+                # Track performance and generate management note
+                t = self._agent_tracker.setdefault(agent_name, {"successes": 0, "failures": 0, "streak": 0, "last_note_at": 0})
+                t["failures"] += 1
+                t["streak"] = min(-1, t["streak"] - 1) if t["streak"] <= 0 else -1
+                error_summary = (result.error or "unknown")[:80]
+                await self._management_note(agent_name, "failure", f"Failed: {error_summary}")
 
             # Immediately dispatch next task for this agent from the ready queue
             self._dispatch_next(agent_name)
@@ -1120,7 +1184,20 @@ class EditorAgent(Agent):
                     except Exception:
                         self.log(f"Retry also failed for {name} verdict", level="ERROR")
 
-        # ── Step 5: Cleanup temp image dir ──
+        # ── Step 5: Propagate verdict to knowledge graph ──
+        try:
+            from graph_analytics import update_person_verdict, recompute_after_verdict
+            update_person_verdict(name, verdict)
+            # Recompute analytics so the verdict ripples through the network
+            # (community metrics, proximity calculations, etc.)
+            recompute_after_verdict()
+            self.log(f"Graph updated: {name} → {verdict}, analytics recomputed")
+        except ImportError:
+            pass  # Graph analytics not available
+        except Exception as e:
+            self.log(f"Graph update failed for {name}: {e}", level="WARN")
+
+        # ── Step 6: Cleanup temp image dir ──
         if temp_dir:
             import shutil
             shutil.rmtree(temp_dir, ignore_errors=True)
@@ -1143,6 +1220,16 @@ class EditorAgent(Agent):
             self._remember("milestone", f"CONFIRMED dossier: {name} ({strength})")
         self.ledger.save()
         self._request_status_refresh()
+
+        # Management note to Elena about the dossier verdict
+        try:
+            loop = asyncio.get_event_loop()
+            loop.create_task(
+                self._management_note("researcher", "success" if verdict == "CONFIRMED" else "failure",
+                                      f"Dossier {verdict.lower()}: {name} — proposed {strength}")
+            )
+        except Exception:
+            pass
 
     def _review_dossier(self, name, proposed_strength, dossier):
         """LLM review of a Researcher dossier. Uses Sonnet (~$0.005/review).
@@ -1317,6 +1404,19 @@ Respond with JSON only:
 
         # Dispatch one task per idle agent
         self._dispatch_ready_tasks()
+
+        # Periodic management check-in with busiest agent
+        if self._agent_tracker:
+            busiest = max(
+                self._agent_tracker.items(),
+                key=lambda x: x[1].get("successes", 0) + x[1].get("failures", 0),
+                default=None,
+            )
+            if busiest:
+                await self._management_note(
+                    busiest[0], "reflection",
+                    "Periodic check-in on workload and performance",
+                )
 
     def _memory_informed_priority(self, agent_name, task):
         """Adjust task priority based on episodic memory of past attempts.
@@ -1791,6 +1891,12 @@ Respond with JSON only:
 
         # Write inbox message
         self._write_inbox_message(assessment, is_reply=has_human_messages)
+
+        # Set sprite speech from assessment (reuses LLM output, no extra call)
+        sprite_text = assessment.get("inbox_message", assessment.get("summary", ""))
+        if sprite_text:
+            self._speech = sprite_text[:200]
+            self._speech_time = _time.time()
 
         # Mark human messages as read
         self._mark_messages_read()
@@ -2572,6 +2678,76 @@ Analyze and provide your assessment."""
             "text": text,
         }
         self._append_inbox_message(message)
+
+    async def _management_note(self, agent_name, event, context=""):
+        """Generate a personalized management note from Miranda TO an agent.
+
+        Appears as sprite speech bubbles on BOTH Miranda and the addressed
+        agent. Haiku decides what's worth saying; returns '—' for routine
+        events (no note posted). Does NOT write to inbox — inbox is reserved
+        for Miranda ↔ Human communication.
+        """
+        profile = AGENT_PROFILES.get(agent_name)
+        if not profile:
+            return
+
+        now = _time.time()
+        tracker = self._agent_tracker.get(agent_name, {})
+        last_note = tracker.get("last_note_at", 0)
+        if now - last_note < MGMT_NOTE_COOLDOWN:
+            return
+
+        stats = f"Recent: {tracker.get('successes', 0)} successes, {tracker.get('failures', 0)} failures"
+        streak = tracker.get("streak", 0)
+        if streak > 0:
+            stats += f", streak of {streak} consecutive successes"
+        elif streak < 0:
+            stats += f", {abs(streak)} consecutive failures"
+
+        guidance = profile.get(f"on_{event}", profile["style"])
+
+        prompt = f"""You are Miranda Priestly — grizzled newsroom editor, silver hair, black suit.
+You are writing a DIRECT note to {profile['name']} ({agent_name}).
+The project owner overhears this — it's how they see your management style in action.
+
+Agent personality & your approach:
+{profile['style']}
+
+Guidance for this moment ({event}):
+{guidance}
+
+Performance: {stats}
+What just happened: {context}
+
+Write 1-2 sentences addressed directly to {profile['name']}. No quotes, no "Dear", no attribution.
+Be in character. Clipped. Pointed. The way Miranda actually talks to her people.
+If the event doesn't warrant a note, respond with just "—" and nothing else."""
+
+        try:
+            response = await asyncio.to_thread(
+                self._get_client().messages.create,
+                model="claude-haiku-4-5-20251001",
+                max_tokens=100,
+                messages=[{"role": "user", "content": prompt}],
+            )
+            note = response.content[0].text.strip()
+            self._track_usage(response)
+
+            if note and note != "—":
+                # Miranda's sprite shows the full note with [to Name] prefix
+                self._speech = f"[to {profile['name']}] {note}"
+                self._speech_time = _time.time()
+
+                # Addressed agent also "receives" the note (content only, no prefix)
+                agent = self.workers.get(agent_name)
+                if agent:
+                    agent._speech = note
+                    agent._speech_time = _time.time()
+
+            tracker["last_note_at"] = _time.time()
+            self._agent_tracker[agent_name] = tracker
+        except Exception:
+            pass  # Never let management notes break the pipeline
 
     def _append_inbox_message(self, message):
         """Append a message dict to the inbox file."""

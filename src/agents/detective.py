@@ -329,11 +329,13 @@ Respond with JSON only. Format:
 
         try:
             client = anthropic.Anthropic()
+            model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=2048,
                 messages=[{"role": "user", "content": prompt}],
             )
+            self._track_api_cost(response, model_id)
             text = response.content[0].text.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1].rsplit("```", 1)[0].strip()

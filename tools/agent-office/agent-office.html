@@ -136,7 +136,7 @@ body {
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  background: var(--bg-darker) url('bg-office-clear-new.png?v=3') top center / cover no-repeat;
+  background: var(--bg-darker);
   image-rendering: pixelated;
 }
 
@@ -335,17 +335,17 @@ body {
 }
 .network-line {
   stroke: rgba(255,255,255,0.06);
-  stroke-width: 0.75;
+  stroke-width: 0.4;
   fill: none;
   transition: stroke 0.4s, stroke-width 0.4s;
 }
 .network-line.active {
-  stroke-width: 0.75;
-  stroke-dasharray: 4 2.5;
+  stroke-width: 0.4;
+  stroke-dasharray: 2 1.5;
   animation: dash-flow 1.2s linear infinite;
 }
 @keyframes dash-flow {
-  to { stroke-dashoffset: -13; }
+  to { stroke-dashoffset: -7; }
 }
 .network-node {
   position: absolute;
@@ -353,24 +353,21 @@ body {
   width: 110px;
   transform: translateX(-50%);
   z-index: 1;
-  transition: opacity 0.3s;
+  transition: opacity 0.3s, filter 0.3s, border-color 0.3s;
   padding: 5px 8px;
   border: 1px solid rgba(255,255,255,0.1);
-  background: rgba(0,0,0,0.3);
+  background: rgba(0,0,0,0.75);
 }
 .network-node.idle { opacity: 0.45; }
 .network-node.active {
   opacity: 1;
-  border-color: rgba(255,255,255,0.2);
-  background: rgba(0,0,0,0.45);
+  border-color: var(--agent-glow, rgba(255,255,255,0.2));
+  background: rgba(0,0,0,0.85);
+  filter: drop-shadow(0 0 6px var(--agent-glow, rgba(255,255,255,0.15)));
 }
 .network-node.network-editor .network-role {
   font-size: 11px;
   letter-spacing: 1.5px;
-}
-.network-node.network-editor.active {
-  filter: drop-shadow(0 0 6px rgba(245,200,66,0.25));
-  border-color: rgba(245,200,66,0.3);
 }
 .network-role {
   font-size: 9px;
@@ -612,7 +609,7 @@ body {
 .office-scene {
   position: relative;
   width: 100%;
-  aspect-ratio: 1888 / 2497;
+  aspect-ratio: 1888 / 2489;
   background: var(--bg-darker);
   overflow: hidden;
 }
@@ -690,6 +687,25 @@ body {
   top: 7.5%;
   width: 30.5%;
   height: 13.8%;
+}
+.cost-panel-overlay {
+  position: absolute;
+  left: 39.2%;
+  top: 7.4%;
+  width: 21.5%;
+  height: 3.2%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  z-index: 1;
+}
+.cost-panel-value {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  color: #e04040;
+  text-shadow: 0 0 6px rgba(224,64,64,0.5);
+  letter-spacing: 1px;
 }
 .chalk-title {
   font-size: 5px;
@@ -1055,13 +1071,13 @@ body {
 /* ── Collaboration Glow — traces sprite silhouette in initiator's color ── */
 .agent-char.collab-glow {
   filter:
-    drop-shadow(0 0 3px var(--glow-color, #f5c842))
-    drop-shadow(0 0 7px var(--glow-color, #f5c842))
-    drop-shadow(0 0 14px var(--glow-color, #f5c842));
+    drop-shadow(0 0 1.5px var(--glow-color, #f5c842))
+    drop-shadow(0 0 4px var(--glow-color, #f5c842))
+    drop-shadow(0 0 7px var(--glow-color, #f5c842));
   animation: collab-glow-pulse 1.2s ease-in-out infinite;
 }
 @keyframes collab-glow-pulse {
-  0%, 100% { opacity: 0.8; }
+  0%, 100% { opacity: 0.9; }
   50% { opacity: 1; }
 }
 
@@ -1572,7 +1588,7 @@ body {
     <div class="office-scene-wrapper">
       <div class="office-scene" id="office-scene">
         <!-- Layer 0: Room background -->
-        <img class="layer-bg" id="room-bg" src="bg-office-clear-new.png?v=3"
+        <img class="layer-bg" id="room-bg" src="bg-office-clear-new.png?v=6"
              onerror="this.style.display='none'">
         <!-- CSS fallback floor (hidden when bg loads) -->
         <div class="office-floor" id="fallback-floor">
@@ -1586,6 +1602,9 @@ body {
         <div class="chalkboard chalkboard-left" id="chalkboard-left">
           <div class="chalk-title">EDITOR'S BOARD</div>
           <div class="chalk-list" id="chalk-editor-board"></div>
+        </div>
+        <div class="cost-panel-overlay">
+          <span class="cost-panel-value" id="cost-panel-value">$0.00</span>
         </div>
         <div class="chalkboard chalkboard-right" id="chalkboard-right">
           <div class="chalk-title">COMPLETED / FAILED</div>
@@ -1660,14 +1679,6 @@ body {
           <span id="graph-stat-communities">0 communities</span>
         </div>
       </div>
-    </div>
-    <div class="panel-section" id="throughput-section">
-      <h3>THROUGHPUT</h3>
-      <div id="throughput-content"></div>
-    </div>
-    <div class="panel-section" id="cost-section">
-      <h3>EDITOR COST</h3>
-      <div id="cost-content"></div>
     </div>
     <div class="panel-section" id="quality-section">
       <h3>DATA QUALITY</h3>
@@ -1815,6 +1826,7 @@ let activeLogFilter = 'All';
 let agentWaitCycles = {};     // Per-agent counter of consecutive waiting poll cycles
 let agentBoredThreshold = {}; // Per-agent randomized threshold before going bored
 let editorBusy = false;
+let mirandaCurrentSpeech = '...';
 let editorBehaviorTimer = null;
 let dataSource = 'demo'; // 'live', 'demo', 'offline'
 let lastDataTimestamp = null;
@@ -1827,7 +1839,7 @@ let graphCollapsed = false;    // Collapsible panel state
 
 // ── Image Asset Paths ──
 const ASSETS = {
-  bg: 'bg-office-clear-new.png?v=3',
+  bg: 'bg-office-clear-new.png?v=6',
   chars: {
     editor:    { front: 'editor_front_trans.png', back: 'editor_back_trans.png',
                   blink: 'editor_front_blink_trans.png', tap: 'editor_front_tap_trans.png',
@@ -2058,24 +2070,21 @@ function updateAgent(agentData) {
     const tag = document.getElementById('tag-editor');
     if (tag) tag.textContent = 'MIRANDA';
 
+    // Track Miranda's current LLM-generated speech for animations to use
+    mirandaCurrentSpeech = agentData.speech || agentData.liveTask || agentData.message || '...';
+
     // 1:1 editor state → sprite mapping
     const editorState = agentData.editor_state || 'idle';
     if (!editorBusy) {
       switch (editorState) {
         case 'listening':
           editorSetSprite('listen');
-          updateSpeechBubble('editor', mirandaSays('human-read'));
           break;
         case 'happy':
           editorSetSprite('happy');
-          updateSpeechBubble('editor', mirandaSays('human-ack'));
           break;
         case 'assessing':
-          // Editor studies at desk — behavior loop handles the full studying animation
-          if (!editorBusy) {
-            editorSetSprite('studying');
-            updateSpeechBubble('editor', mirandaSays('strategy'));
-          }
+          editorSetSprite('studying');
           break;
         case 'monitoring':
           // Stay in current idle pose
@@ -2083,7 +2092,7 @@ function updateAgent(agentData) {
       }
     }
 
-    updateSpeechBubble('editor', agentData.speech || agentData.liveTask || agentData.message || '...');
+    updateSpeechBubble('editor', mirandaCurrentSpeech);
     return;
   }
 
@@ -2308,130 +2317,6 @@ function moveAgentHome(agentId) {
   if (cfg) moveAgentTo(agentId, cfg.homeX, cfg.homeY, false);
 }
 
-// ── Miranda's Voice (personality-driven speech for all editor interactions) ──
-// Inspired by Miranda Priestly: clipped, deadpan, newspaper metaphors, earned warmth
-function mirandaSays(context, label) {
-  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
-  const agentName = label ? label.split(' ').pop() : '';
-
-  switch (context) {
-    case 'assign':
-      return pick([
-        `${label}. That's all.`,
-        `${label}. I need this yesterday.`,
-        `${label}. By all means, move at a glacial pace.`,
-        `${label}. Don't disappoint me.`,
-        `${label}. Make it count.`,
-        `${label}. Questions? Good.`,
-      ]);
-    case 'pickup':
-      return pick([
-        'Something just came across my desk.',
-        'New copy for the bullpen.',
-        'Fresh assignment.',
-        'This just moved to the top of the pile.',
-      ]);
-    case 'react':
-      return pick([
-        'Groundbreaking.',
-        'Hmm. Acceptable.',
-        'Finally.',
-        'Not terrible.',
-        'Is that all?',
-        'Adequate. Barely.',
-        'Good. Don\'t let it go to your head.',
-      ]);
-    case 'log':
-      return pick([
-        'For the record.',
-        'Noted.',
-        'Filed. Next.',
-        'On the board.',
-        'That\'s one for the morning edition.',
-      ]);
-    case 'failure':
-      return pick([
-        'Details of your incompetence do not interest me.',
-        'That\'s unfortunate. Try again.',
-        'Unacceptable. Find another way.',
-        'I\'m not angry. I\'m disappointed. Actually, I\'m angry.',
-        'We don\'t print excuses.',
-        'Fix it. I don\'t care how.',
-      ]);
-    case 'failure-log':
-      return pick([
-        'Logging the damage.',
-        'For the post-mortem.',
-        'Strike one.',
-        'On the board. In red.',
-      ]);
-    case 'brief':
-      return pick([
-        `${label}. Keep me posted.`,
-        `${label}. That's all.`,
-        `${label}. Make it happen.`,
-        `${label}. Don't waste my time.`,
-      ]);
-    case 'human-read':
-      return pick([
-        'I\'m reading. Don\'t hover.',
-        'Message received.',
-        'Let me see what the owner wants.',
-        'New directive from upstairs.',
-      ]);
-    case 'human-ack':
-      return pick([
-        'I\'ll take it under advisement.',
-        'Noted. We\'ll adjust.',
-        'Consider it done.',
-        'Understood. Moving on.',
-      ]);
-    case 'strategy':
-      return pick([
-        'Let me think about this.',
-        'Running the numbers.',
-        'Analyzing the pipeline.',
-        'Something doesn\'t add up.',
-      ]);
-    case 'check-watch':
-      return pick([
-        'We\'re behind schedule.',
-        'Tick tock.',
-        'Time waits for no one.',
-        'Where does the day go.',
-      ]);
-    case 'study-board':
-      return pick([
-        'Let\'s see what we\'re working with.',
-        'Reviewing the board.',
-        'Status check.',
-        'Where do we stand.',
-      ]);
-    case 'study-results':
-      return pick([
-        'And the results are...',
-        'Let\'s see what came back.',
-        'Show me what you\'ve got.',
-      ]);
-    case 'gather-start':
-      return pick([
-        'Status. All of you. Now.',
-        'Reports. On my desk.',
-        'Everyone. Briefing. Now.',
-        'Drop what you\'re doing. Status report.',
-      ]);
-    case 'gather-done':
-      return pick([
-        'That\'s all.',
-        'Carry on.',
-        'Back to work. All of you.',
-        'Dismissed.',
-      ]);
-    default:
-      return label || 'That\'s all.';
-  }
-}
-
 // ── Collaboration System (Hub-and-Spoke: Editor mediates all exchanges) ──
 // Queue ensures meetings execute sequentially without being dropped by editorBusy
 const meetingQueue = [];
@@ -2494,11 +2379,11 @@ async function doCollabMeeting(agentId, label, type) {
     // ── ASSIGN: Miranda grabs clipboard from board, walks to agent ──
     await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
     editorSetSprite('clipboard');
-    updateSpeechBubble('editor', mirandaSays('pickup'));
+    updateSpeechBubble('editor', mirandaCurrentSpeech);
     await sleep(800);
     await walkEditorTo(50, target.homeY, { carrySprite: 'clipboard' });
     editorSetSprite('front');
-    updateSpeechBubble('editor', mirandaSays('assign', label));
+    updateSpeechBubble('editor', mirandaCurrentSpeech);
     await sleep(2500);
 
     // Cleanup
@@ -2515,7 +2400,7 @@ async function doCollabMeeting(agentId, label, type) {
     await sleep(1500);
     // Miranda reacts in character
     editorSetSprite('happy');
-    updateSpeechBubble('editor', mirandaSays('react'));
+    updateSpeechBubble('editor', mirandaCurrentSpeech);
     await sleep(2000);
 
     // Clear glow, agent returns while Miranda heads to completed board
@@ -2524,7 +2409,7 @@ async function doCollabMeeting(agentId, label, type) {
     moveAgentHome(agentId);
     await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
     editorSetSprite('clipboard');
-    updateSpeechBubble('editor', mirandaSays('log'));
+    updateSpeechBubble('editor', mirandaCurrentSpeech);
     await sleep(1500);
     await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
 
@@ -2536,7 +2421,7 @@ async function doCollabMeeting(agentId, label, type) {
     if (goingUp) editorSetSprite('back');
     await sleep(1800);
     editorSetSprite('front');
-    updateSpeechBubble('editor', mirandaSays('brief', label));
+    updateSpeechBubble('editor', mirandaCurrentSpeech);
     await sleep(2500);
 
     // Cleanup
@@ -2837,6 +2722,28 @@ async function sendInboxMessage() {
   }
 }
 
+function summarizeTask(task, agentId, isActive) {
+  if (!task) return '';
+  const t = task.toLowerCase();
+  if (!isActive) {
+    if (t.includes('waiting')) return 'Waiting';
+    if (t.includes('offline')) return 'Offline';
+    if (t.includes('all ')) return 'Done';
+    if (t.includes('ready')) return 'Ready';
+    return 'Idle';
+  }
+  if (t.includes('discover') || t.includes('found') || t.includes('index')) return 'Scouting';
+  if (t.includes('download')) return 'Downloading';
+  if (t.includes('extract') || t.includes('reading')) return 'Extracting';
+  if (t.includes('check') || t.includes('cross-ref')) return 'Checking';
+  if (t.includes('investigat') || t.includes('dossier')) return 'Investigating';
+  if (t.includes('supervis') || t.includes('pipeline')) return 'Supervising';
+  if (t.includes('train') || t.includes('study') || t.includes('pattern')) return 'Training';
+  if (t.includes('scrape') || t.includes('scraping')) return 'Scraping';
+  if (t.includes('lead')) return 'Investigating';
+  return 'Working';
+}
+
 function renderNowProcessing(now) {
   const container = document.getElementById('now-content');
   if (!now || Object.keys(now).length === 0) {
@@ -2893,11 +2800,12 @@ function renderNowProcessing(now) {
     const cls = `network-node ${isActive ? 'active' : 'idle'}${isEditor ? ' network-editor' : ''}`;
     const roleColor = isActive ? color : 'var(--text-dim)';
 
-    nodes += `<div class="${cls}" style="left:${pos.x}%;top:${pos.y}%">
+    const taskWord = summarizeTask(info.task, id, isActive);
+    nodes += `<div class="${cls}" style="left:${pos.x}%;top:${pos.y}%;--agent-glow:${color}40">
       <div class="network-role" style="color:${roleColor}">${roles[id]}</div>
       <div class="network-name">${AGENT_NAMES[id] || id}</div>
       <div class="network-dot${isActive ? ' active' : ''}" style="background:${color}"></div>
-      <div class="network-task">${escHtml(info.task)}</div>
+      <div class="network-task">${escHtml(taskWord)}</div>
     </div>`;
   }
 
@@ -3110,65 +3018,13 @@ function updateLiveBadge(timestamp) {
 }
 
 // ══════════════════════════════════════
-// RENDERING — Throughput & Cost
+// RENDERING — Cost Panel (above door)
 // ══════════════════════════════════════
-function renderThroughput(throughput) {
-  const container = document.getElementById('throughput-content');
-  if (!throughput) {
-    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No data</div>';
-    return;
-  }
-
-  let etaText = 'N/A';
-  if (throughput.eta_hours !== null && throughput.eta_hours !== undefined) {
-    if (throughput.eta_hours < 1) {
-      etaText = `${Math.round(throughput.eta_hours * 60)}m`;
-    } else {
-      etaText = `${throughput.eta_hours}h`;
-    }
-  }
-
-  container.innerHTML = `
-    <div class="metric-row">
-      <span class="metric-label">Downloads</span>
-      <span class="metric-value">${throughput.downloads_per_hour || 0}/hr</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Extractions</span>
-      <span class="metric-value">${throughput.extractions_per_hour || 0}/hr</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">ETA</span>
-      <span class="metric-value gold">${etaText}</span>
-    </div>
-  `;
-}
-
-function renderCost(cost) {
-  const container = document.getElementById('cost-content');
-  if (!cost || !cost.api_calls) {
-    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No API calls yet</div>';
-    return;
-  }
-
-  const totalCost = (cost.total_cost || 0).toFixed(4);
-  const inputK = Math.round((cost.input_tokens || 0) / 1000);
-  const outputK = Math.round((cost.output_tokens || 0) / 1000);
-
-  container.innerHTML = `
-    <div class="metric-row">
-      <span class="metric-label">API Calls</span>
-      <span class="metric-value">${cost.api_calls}</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Tokens (in/out)</span>
-      <span class="metric-value">${inputK}K / ${outputK}K</span>
-    </div>
-    <div class="metric-row">
-      <span class="metric-label">Total Cost</span>
-      <span class="metric-value gold">$${totalCost}</span>
-    </div>
-  `;
+function renderCostTracker(cost) {
+  const el = document.getElementById('cost-panel-value');
+  if (!el) return;
+  const rawTotal = (cost && cost.total_cost) || 0;
+  el.textContent = '$' + rawTotal.toFixed(2);
 }
 
 // ══════════════════════════════════════
@@ -3588,8 +3444,7 @@ function renderAll(data) {
   if (sectionChanged('editor_inbox', data))    safe(() => renderInbox(data.editor_inbox), 'inbox');
   if (sectionChanged('log', data))             safe(() => renderLogWithFilters(data.log), 'log');
   if (sectionChanged('notable_finds', data))   safe(() => renderNotableFinds(data.notable_finds), 'notableFinds');
-  if (sectionChanged('throughput', data))       safe(() => renderThroughput(data.throughput), 'throughput');
-  if (sectionChanged('cost', data))             safe(() => renderCost(data.cost), 'cost');
+  if (sectionChanged('cost', data))             safe(() => renderCostTracker(data.cost), 'costTracker');
   if (sectionChanged('quality', data))          safe(() => renderQuality(data.quality), 'quality');
   if (sectionChanged('collaborations', data))   safe(() => renderCollaborations(data.collaborations), 'collaborations');
   if (sectionChanged('editor_ledger', data))    safe(() => renderChalkboards(data.task_board, data.editor_ledger), 'chalkboards');
@@ -3983,7 +3838,7 @@ async function editorCheckWatch() {
   if (editorBusy) return;
   editorBusy = true;
   editorSetSprite('watch');
-  updateSpeechBubble('editor', mirandaSays('check-watch'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(2500);
   editorSetSprite('front');
   editorBusy = false;
@@ -4014,19 +3869,19 @@ async function editorStudyBoards() {
   const cfg = AGENT_CONFIG.editor;
 
   // Walk to Editor's Board (left chalkboard) via aisle
-  updateSpeechBubble('editor', mirandaSays('study-board'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
 
   // Study the board
   editorSetSprite('studying');
-  updateSpeechBubble('editor', mirandaSays('study-board'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(3000);
 
   // Walk to Completed/Failed board (right chalkboard) — same row, horizontal
   await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y);
 
   editorSetSprite('studying');
-  updateSpeechBubble('editor', mirandaSays('study-results'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(2500);
 
   // Walk back home via aisle
@@ -4061,7 +3916,7 @@ async function editorVisitAgent(agentId) {
 
   // Turn to face the agent and interact
   editorSetSprite('front');
-  updateSpeechBubble('editor', mirandaSays('brief', `Status update from ${agentId}`));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(2000);
 
   // Clear engagement glow
@@ -4090,7 +3945,7 @@ async function editorGatherReports() {
   const cfg = AGENT_CONFIG.editor;
   const editorChar = agentCharElements['editor'];
 
-  updateSpeechBubble('editor', mirandaSays('gather-start'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(1000);
 
   for (const agentId of workers) {
@@ -4117,7 +3972,7 @@ async function editorGatherReports() {
 
     // Interact
     editorSetSprite('front');
-    updateSpeechBubble('editor', mirandaSays('gather-start'));
+    updateSpeechBubble('editor', mirandaCurrentSpeech);
     await sleep(1500);
 
     // Clear engagement glow, agent returns to desk
@@ -4132,7 +3987,7 @@ async function editorGatherReports() {
   editorSetSprite('front');
   await sleep(1500);
 
-  updateSpeechBubble('editor', mirandaSays('gather-done'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   editorBusy = false;
 }
 
@@ -4229,7 +4084,7 @@ async function editorAssignTask(agentId, label) {
   await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', mirandaSays('pickup'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(1500);
 
   // Step 2: Yellow glow on both — agent steps to aisle
@@ -4245,7 +4100,7 @@ async function editorAssignTask(agentId, label) {
 
   // Step 4: Face agent, deliver task
   editorSetSprite('front');
-  updateSpeechBubble('editor', mirandaSays('assign', label));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(2500);
 
   // Step 5: Clear engagement, agent returns
@@ -4286,7 +4141,7 @@ async function editorCollectResult(agentId, label) {
 
   // Collect and show happy face
   editorSetSprite('happy');
-  updateSpeechBubble('editor', mirandaSays('react'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(2000);
 
   // Clear engagement
@@ -4298,7 +4153,7 @@ async function editorCollectResult(agentId, label) {
   await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', mirandaSays('log'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(1800);
 
   // Walk home via aisle
@@ -4336,7 +4191,7 @@ async function editorHandleFailure(agentId, label) {
 
   // Show failure/concerned face
   editorSetSprite('failure');
-  updateSpeechBubble('editor', mirandaSays('failure'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(2500);
 
   // Clear glow
@@ -4348,7 +4203,7 @@ async function editorHandleFailure(agentId, label) {
   await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y, { carrySprite: 'clipboard' });
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', mirandaSays('failure-log'));
+  updateSpeechBubble('editor', mirandaCurrentSpeech);
   await sleep(1800);
 
   // Walk home via aisle

@@ -1106,11 +1106,13 @@ Respond with ONLY a JSON object (not array):
 
         try:
             client = anthropic.Anthropic(api_key=api_key)
+            model_id = "claude-haiku-4-5-20251001"
             message = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=1024,
                 messages=[{"role": "user", "content": content}],
             )
+            self._track_api_cost(message, model_id)
             result_text = message.content[0].text
         except Exception as e:
             self.log(f"Vision API error: {e}", level="ERROR")
@@ -1386,14 +1388,16 @@ Return an empty array [] if no home features are found."""
 
         try:
             client = anthropic.Anthropic(api_key=api_key)
+            model_id = "claude-haiku-4-5-20251001"
             message = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=4096,
                 messages=[{
                     "role": "user",
                     "content": [{"type": "text", "text": prompt}],
                 }],
             )
+            self._track_api_cost(message, model_id)
             return message.content[0].text
         except Exception as e:
             self.log(f"Anthropic API error: {e}", level="ERROR")

@@ -448,6 +448,134 @@ def read_editor_cost():
         return {"api_calls": 0, "total_cost": 0.0, "input_tokens": 0, "output_tokens": 0}
 
 
+AGENT_COSTS_DIR = os.path.join(DATA_DIR, "costs")
+
+# Agent display names for cost tracker
+AGENT_NAMES = {
+    "scout": "Arthur", "courier": "Casey", "reader": "Elias",
+    "detective": "Silas", "researcher": "Elena", "editor": "Miranda",
+    "designer": "Sable",
+}
+
+# Agent colors for cost tracker bars
+AGENT_COLORS = {
+    "scout": "#e74c3c", "courier": "#3498db", "reader": "#2ecc71",
+    "detective": "#9b59b6", "researcher": "#e67e22", "editor": "#f5c842",
+    "designer": "#e91e63",
+}
+
+
+def read_all_costs():
+    """Read cost data from all agents and aggregate into a single summary.
+
+    Reads per-agent cost files from data/costs/*.json plus the Editor's
+    dedicated cost file at data/editor_cost.json.
+
+    Returns:
+        Dict with total_cost, total_calls, total_input_tokens, total_output_tokens,
+        by_agent (list of per-agent dicts), by_model (aggregated model breakdown).
+    """
+    def _compute():
+        by_agent = []
+        by_model = {}  # tier -> {calls, input_tokens, output_tokens, cost}
+        total_cost = 0.0
+        total_calls = 0
+        total_input = 0
+        total_output = 0
+
+        # 1. Read Editor's dedicated cost file
+        editor_cost = read_editor_cost()
+        if editor_cost.get("api_calls", 0) > 0:
+            ec = editor_cost
+            by_agent.append({
+                "agent": "editor",
+                "name": AGENT_NAMES.get("editor", "Editor"),
+                "color": AGENT_COLORS.get("editor", "#f5c842"),
+                "api_calls": ec.get("api_calls", 0),
+                "input_tokens": ec.get("input_tokens", 0),
+                "output_tokens": ec.get("output_tokens", 0),
+                "total_cost": round(ec.get("total_cost", 0.0), 4),
+            })
+            total_cost += ec.get("total_cost", 0.0)
+            total_calls += ec.get("api_calls", 0)
+            total_input += ec.get("input_tokens", 0)
+            total_output += ec.get("output_tokens", 0)
+
+        # 2. Read per-agent cost files from data/costs/
+        if os.path.exists(AGENT_COSTS_DIR):
+            for fname in os.listdir(AGENT_COSTS_DIR):
+                if not fname.endswith(".json"):
+                    continue
+                agent_id = fname.replace(".json", "")
+                # Skip editor if already counted above (avoid double-counting)
+                if agent_id == "editor":
+                    # Merge into the existing editor entry's by_model data
+                    fpath = os.path.join(AGENT_COSTS_DIR, fname)
+                    try:
+                        with open(fpath) as f:
+                            data = json.load(f)
+                        # Add this file's by_model data to aggregated by_model
+                        for tier, m in data.get("by_model", {}).items():
+                            if tier not in by_model:
+                                by_model[tier] = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0}
+                            by_model[tier]["calls"] += m.get("calls", 0)
+                            by_model[tier]["input_tokens"] += m.get("input_tokens", 0)
+                            by_model[tier]["output_tokens"] += m.get("output_tokens", 0)
+                            by_model[tier]["cost"] = round(by_model[tier]["cost"] + m.get("cost", 0.0), 6)
+                    except Exception:
+                        pass
+                    continue
+
+                fpath = os.path.join(AGENT_COSTS_DIR, fname)
+                try:
+                    with open(fpath) as f:
+                        data = json.load(f)
+                except Exception:
+                    continue
+
+                calls = data.get("api_calls", 0)
+                if calls == 0:
+                    continue
+
+                agent_cost = round(data.get("total_cost", 0.0), 4)
+                by_agent.append({
+                    "agent": agent_id,
+                    "name": AGENT_NAMES.get(agent_id, agent_id.title()),
+                    "color": AGENT_COLORS.get(agent_id, "#888888"),
+                    "api_calls": calls,
+                    "input_tokens": data.get("input_tokens", 0),
+                    "output_tokens": data.get("output_tokens", 0),
+                    "total_cost": agent_cost,
+                })
+                total_cost += data.get("total_cost", 0.0)
+                total_calls += calls
+                total_input += data.get("input_tokens", 0)
+                total_output += data.get("output_tokens", 0)
+
+                # Merge per-model breakdown
+                for tier, m in data.get("by_model", {}).items():
+                    if tier not in by_model:
+                        by_model[tier] = {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0}
+                    by_model[tier]["calls"] += m.get("calls", 0)
+                    by_model[tier]["input_tokens"] += m.get("input_tokens", 0)
+                    by_model[tier]["output_tokens"] += m.get("output_tokens", 0)
+                    by_model[tier]["cost"] = round(by_model[tier]["cost"] + m.get("cost", 0.0), 6)
+
+        # Sort by_agent by cost descending
+        by_agent.sort(key=lambda a: -a["total_cost"])
+
+        return {
+            "total_cost": round(total_cost, 4),
+            "total_calls": total_calls,
+            "total_input_tokens": total_input,
+            "total_output_tokens": total_output,
+            "by_agent": by_agent,
+            "by_model": by_model,
+        }
+
+    return _cached("all_costs", 5, _compute)
+
+
 def read_designer_training():
     """Read the Designer's training log and mode. Cached 60s."""
     def _compute():
@@ -1147,7 +1275,7 @@ def generate_status():
         designer_status = "idle"
         designer_msg = "Training mode \u2014 studying design patterns"
 
-    cost_data = read_editor_cost()
+    cost_data = read_all_costs()
     throughput = build_throughput_from_lines(log_lines, manifest_stats, extraction_stats)
 
     status = {
@@ -1245,7 +1373,6 @@ def generate_status():
         "editor_inbox": read_combined_inbox(),
         "notable_finds": build_notable_finds(extraction_stats, xref_stats, dossier_stats),
         "quality": build_quality(extraction_stats),
-        "throughput": throughput,
         "cost": cost_data,
         "coverage_map": build_coverage_map(),
         "editor_ledger": read_editor_ledger(),

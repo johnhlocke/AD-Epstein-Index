@@ -18,6 +18,7 @@ import json
 import os
 import re
 import sys
+from datetime import datetime
 from dotenv import load_dotenv
 from supabase import create_client
 
@@ -26,6 +27,13 @@ load_dotenv()
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 BLACK_BOOK_PATH = os.path.join(DATA_DIR, "black_book.txt")
 XREF_DIR = os.path.join(DATA_DIR, "cross_references")
+COSTS_DIR = os.path.join(DATA_DIR, "costs")
+
+MODEL_PRICING = {
+    "opus": (15.00, 75.00),
+    "sonnet": (3.00, 15.00),
+    "haiku": (1.00, 5.00),
+}
 
 url = os.getenv("SUPABASE_URL")
 key = os.getenv("SUPABASE_ANON_KEY")
@@ -662,6 +670,40 @@ def verdict_to_binary(combined_verdict, confidence_score, glance_override=None):
     return "NO"
 
 
+def _track_xref_cost(response, model=None):
+    """Track API cost from cross-reference LLM calls. Writes to detective's cost file."""
+    try:
+        from agents.base import update_json_locked
+        usage = response.usage
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
+        model_str = (model or '').lower()
+        tier = 'opus' if 'opus' in model_str else ('sonnet' if 'sonnet' in model_str else 'haiku')
+        inp, outp = MODEL_PRICING[tier]
+        cost = input_tokens / 1_000_000 * inp + output_tokens / 1_000_000 * outp
+        os.makedirs(COSTS_DIR, exist_ok=True)
+        cost_path = os.path.join(COSTS_DIR, "detective.json")
+
+        def _update(data):
+            data["api_calls"] = data.get("api_calls", 0) + 1
+            data["input_tokens"] = data.get("input_tokens", 0) + input_tokens
+            data["output_tokens"] = data.get("output_tokens", 0) + output_tokens
+            data["total_cost"] = round(data.get("total_cost", 0.0) + cost, 6)
+            by_model = data.get("by_model", {})
+            m = by_model.get(tier, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0})
+            m["calls"] = m.get("calls", 0) + 1
+            m["input_tokens"] = m.get("input_tokens", 0) + input_tokens
+            m["output_tokens"] = m.get("output_tokens", 0) + output_tokens
+            m["cost"] = round(m.get("cost", 0.0) + cost, 6)
+            by_model[tier] = m
+            data["by_model"] = by_model
+            data["last_updated"] = datetime.now().isoformat()
+
+        update_json_locked(cost_path, _update, default=dict)
+    except Exception:
+        pass
+
+
 def contextual_glance(name, bb_matches, doj_result):
     """LLM glance for ambiguous cases — returns YES/NO or None (skip LLM).
 
@@ -725,11 +767,13 @@ DOJ search snippets:
 Answer YES if this is likely the same person, NO if this is clearly a different person or coincidence.
 Respond with only YES or NO."""
 
+        model_id = "claude-haiku-4-5-20251001"
         response = client.messages.create(
-            model="claude-haiku-4-5-20251001",
+            model=model_id,
             max_tokens=10,
             messages=[{"role": "user", "content": prompt}],
         )
+        _track_xref_cost(response, model_id)
 
         answer = response.content[0].text.strip().upper()
         if answer.startswith("YES"):

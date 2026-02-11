@@ -356,6 +356,25 @@ async def run_single_pass(agents):
     print("\n=== Single pass complete ===\n")
 
 
+async def graph_sync_loop(interval=60):
+    """Periodically sync Supabase → Neo4j and export graph.json.
+
+    Runs incremental sync + export every `interval` seconds.
+    Silently skips if Neo4j is not configured or unavailable.
+    """
+    # Wait a bit before first sync to let agents start up
+    await asyncio.sleep(15)
+    while True:
+        try:
+            from sync_graph import incremental_sync, export_graph_json
+            incremental_sync()
+            export_graph_json()
+        except Exception as e:
+            # Neo4j not configured or unavailable — skip silently
+            print(f"  [GRAPH SYNC] Skipped: {e}")
+        await asyncio.sleep(interval)
+
+
 async def run_daemon(agents):
     """Run agents continuously until interrupted."""
     print("\n=== AD-Epstein Pipeline — Daemon Mode ===\n")
@@ -369,6 +388,9 @@ async def run_daemon(agents):
 
     # Start status update loop
     status_task = asyncio.create_task(status_loop(agents, interval=2))
+
+    # Start periodic graph sync (Neo4j → graph.json every 60s)
+    graph_task = asyncio.create_task(graph_sync_loop(interval=60))
 
     # Set up signal handlers for graceful shutdown
     loop = asyncio.get_event_loop()
@@ -386,8 +408,9 @@ async def run_daemon(agents):
     # Wait for shutdown signal
     await shutdown_event.wait()
 
-    # Cancel status loop
+    # Cancel background loops
     status_task.cancel()
+    graph_task.cancel()
 
     # Wait for all agents to finish current work
     await asyncio.gather(*tasks.values(), return_exceptions=True)

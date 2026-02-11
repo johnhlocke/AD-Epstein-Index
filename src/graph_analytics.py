@@ -435,6 +435,12 @@ def save_cache(communities, centrality, similarity):
     print(f"  Cached analytics to {ANALYTICS_CACHE_PATH}")
 
 
+def invalidate_cache():
+    """Delete the analytics cache, forcing a fresh recompute on next access."""
+    if os.path.exists(ANALYTICS_CACHE_PATH):
+        os.remove(ANALYTICS_CACHE_PATH)
+
+
 def load_cache():
     """Load cached analytics. Returns (communities, centrality, similarity) or None."""
     if not os.path.exists(ANALYTICS_CACHE_PATH):
@@ -514,6 +520,35 @@ def get_person_analytics(name):
 
     G, person_nodes = load_graph_from_neo4j()
     return get_person_context(G, person_nodes, name, communities, centrality, similarity)
+
+
+def update_person_verdict(name, editor_verdict):
+    """Update a Person node's editor_verdict in Neo4j.
+
+    Called by the Editor after confirming/rejecting a dossier so the graph
+    reflects the new verdict immediately.
+    """
+    try:
+        run_write(
+            "MATCH (p:Person {name: $name}) SET p.editor_verdict = $verdict",
+            {"name": name.strip().title(), "verdict": editor_verdict},
+        )
+    except Exception:
+        pass  # Graph unavailable — not critical
+
+
+def recompute_after_verdict():
+    """Invalidate cache and recompute analytics after a verdict change.
+
+    This makes Elena's confirmed findings ripple through the network:
+    community metrics shift, proximity calculations change for everyone nearby.
+    Runs the full pipeline (typically 2-5 seconds).
+    """
+    invalidate_cache()
+    try:
+        run_analytics()
+    except Exception:
+        pass  # Graph unavailable — analytics will recompute on next access
 
 
 # ── Report ────────────────────────────────────────────────────

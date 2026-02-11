@@ -43,6 +43,13 @@ Format: entries are grouped by date, with the most recent at the top.
 - Synthesis prompt includes: PageRank percentile, betweenness, community membership, flagged community members, similar persons, Epstein proximity
 - Dossier output schema extended with graph fields: `graph_community_id`, `graph_pagerank_percentile`, `graph_betweenness_percentile`, `graph_similar_persons`, `graph_epstein_proximity`
 
+### Changed — Miranda Speech System Overhaul
+- **Management notes routed to sprite speech** — `_management_note()` now sets `self._speech` on Miranda and `agent._speech` on the addressed worker instead of writing to Editor Inbox. Both sprites show speech bubbles simultaneously.
+- **Strategic assessment drives sprite speech** — After each ~3-minute assessment, Miranda's sprite shows the LLM-generated `inbox_message` or `summary` (capped at 200 chars). No extra API calls.
+- **Editor speech TTL extended to 200s** — Matches the 180s strategic assessment interval so speech doesn't expire between cycles.
+- **Removed `mirandaSays()` from agent-office.html** — Eliminated ~120 lines of canned random phrases. All 22 call sites now use `mirandaCurrentSpeech`, a variable populated from `agentData.speech` in the data polling loop.
+- **Editor Inbox now exclusively Miranda ↔ Human** — No more `[to Name]` management notes cluttering the inbox.
+
 ### Fixed — Dashboard Popup Positioning
 - Stat detail popups and agent control popups now appear above the cursor when near bottom of viewport (previously clipped off-screen)
 

@@ -24,6 +24,14 @@ BASE_DIR = os.path.join(os.path.dirname(__file__), "..", "..")
 DATA_DIR = os.path.join(BASE_DIR, "data")
 SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")
 LOG_PATH = os.path.join(DATA_DIR, "agent_activity.log")
+COSTS_DIR = os.path.join(DATA_DIR, "costs")
+
+# Per-model pricing (cost per 1M tokens): (input, output)
+MODEL_PRICING = {
+    "opus": (15.00, 75.00),
+    "sonnet": (3.00, 15.00),
+    "haiku": (1.00, 5.00),
+}
 
 # ── JSON File Locking Utilities ──────────────────────────────
 
@@ -357,6 +365,62 @@ class Agent(ABC):
         """Return progress dict: {"current": N, "total": M}"""
         ...
 
+    # ── Cost Tracking ──────────────────────────────────────────
+
+    def _track_api_cost(self, response, model=None):
+        """Track API usage from an Anthropic response object.
+
+        Extracts token counts, calculates dollar cost, and persists to
+        data/costs/{agent_name}.json with file locking.
+
+        Args:
+            response: Anthropic API response with .usage attribute
+            model: Optional model string hint (e.g. "claude-haiku-4-5-20251001").
+                   Auto-detects tier from model name.
+        """
+        try:
+            usage = response.usage
+            input_tokens = usage.input_tokens
+            output_tokens = usage.output_tokens
+        except (AttributeError, TypeError):
+            return  # No usage data
+
+        # Detect pricing tier from model name
+        model_str = (model or getattr(response, 'model', '') or '').lower()
+        if 'opus' in model_str:
+            tier = 'opus'
+        elif 'sonnet' in model_str:
+            tier = 'sonnet'
+        else:
+            tier = 'haiku'
+
+        input_price, output_price = MODEL_PRICING[tier]
+        cost = (input_tokens / 1_000_000 * input_price +
+                output_tokens / 1_000_000 * output_price)
+
+        cost_path = os.path.join(COSTS_DIR, f"{self.name}.json")
+
+        def _update(data):
+            data["api_calls"] = data.get("api_calls", 0) + 1
+            data["input_tokens"] = data.get("input_tokens", 0) + input_tokens
+            data["output_tokens"] = data.get("output_tokens", 0) + output_tokens
+            data["total_cost"] = round(data.get("total_cost", 0.0) + cost, 6)
+            # Per-model breakdown
+            by_model = data.get("by_model", {})
+            m = by_model.get(tier, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0})
+            m["calls"] = m.get("calls", 0) + 1
+            m["input_tokens"] = m.get("input_tokens", 0) + input_tokens
+            m["output_tokens"] = m.get("output_tokens", 0) + output_tokens
+            m["cost"] = round(m.get("cost", 0.0) + cost, 6)
+            by_model[tier] = m
+            data["by_model"] = by_model
+            data["last_updated"] = datetime.now().isoformat()
+
+        try:
+            update_json_locked(cost_path, _update, default=dict)
+        except Exception:
+            pass  # Cost tracking is non-critical
+
     # ── Skills loading ────────────────────────────────────────
 
     def load_skills(self):
@@ -401,8 +465,9 @@ class Agent(ABC):
         try:
             import anthropic
             client = anthropic.Anthropic()
+            model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=100,
                 system=(
                     f"You are the {self.name.title()} agent in a newsroom-style research pipeline. "
@@ -412,6 +477,7 @@ class Agent(ABC):
                 ),
                 messages=[{"role": "user", "content": f"What just happened: {facts}"}],
             )
+            self._track_api_cost(response, model_id)
             text = response.content[0].text.strip()
             self._speech = text
             self._speech_time = _time.time()
@@ -459,8 +525,9 @@ class Agent(ABC):
         try:
             import anthropic
             client = anthropic.Anthropic()
+            model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=80,
                 system=(
                     f"You are {agent_name or self.name.title()}, the {self.name.title()} agent in a newsroom-style research pipeline. "
@@ -473,6 +540,7 @@ class Agent(ABC):
                 ),
                 messages=[{"role": "user", "content": "What are you thinking right now while you wait?"}],
             )
+            self._track_api_cost(response, model_id)
             text = response.content[0].text.strip()
             self._speech = text
             self._speech_time = _time.time()
@@ -529,8 +597,9 @@ class Agent(ABC):
         try:
             import anthropic
             client = anthropic.Anthropic()
+            model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=200,
                 system=(
                     f"You are {agent_name or self.name.title()}, the {self.name.title()} agent. "
@@ -545,6 +614,7 @@ class Agent(ABC):
                 ),
                 messages=[{"role": "user", "content": f"Your recent episodes:\n{episodes_text}\n\nWhat patterns do you see? What would you do differently?"}],
             )
+            self._track_api_cost(response, model_id)
             insight = response.content[0].text.strip()
             self.log(f"Reflection: {insight[:80]}...")
 
@@ -795,8 +865,9 @@ class Agent(ABC):
         try:
             import anthropic
             client = anthropic.Anthropic()
+            model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=250,
                 system=(
                     f"You are {agent_name or self.name.title()}, the {self.name.title()} agent. "
@@ -810,6 +881,7 @@ class Agent(ABC):
                 ),
                 messages=[{"role": "user", "content": f"Your recent experience:\n{context_text}\n\nYour current skills (first 300 chars):\n{skills[:300]}\n\nPropose an improvement:"}],
             )
+            self._track_api_cost(response, model_id)
             proposal = response.content[0].text.strip()
             self.log(f"Improvement proposal: {proposal[:80]}...")
 
@@ -872,8 +944,9 @@ class Agent(ABC):
         try:
             import anthropic
             client = anthropic.Anthropic()
+            model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=200,
                 system=(
                     f"You are {agent_name or self.name.title()}, the {self.name.title()} agent. "
@@ -885,6 +958,7 @@ class Agent(ABC):
                 ),
                 messages=[{"role": "user", "content": f"Recent pipeline activity:\n{episodes_text}\n\nWhat's interesting here that deserves attention?"}],
             )
+            self._track_api_cost(response, model_id)
             insight = response.content[0].text.strip()
             self.log(f"Curiosity: {insight[:80]}...")
 
@@ -1013,8 +1087,9 @@ Respond with JSON only:
         try:
             import anthropic
             client = anthropic.Anthropic()
+            model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
-                model="claude-haiku-4-5-20251001",
+                model=model_id,
                 max_tokens=200,
                 system=(
                     f"You are the {self.name.title()} agent. {personality[:200] if personality else ''}\n"
@@ -1025,6 +1100,7 @@ Respond with JSON only:
                 ),
                 messages=[{"role": "user", "content": prompt}],
             )
+            self._track_api_cost(response, model_id)
             text = response.content[0].text.strip()
             if text.startswith("```"):
                 text = text.split("\n", 1)[1]

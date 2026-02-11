@@ -1,7 +1,12 @@
 "use client";
 
 import type { GraphNode } from "@/lib/graph-types";
-import { nodeColors } from "@/lib/graph-types";
+import {
+  nodeColors,
+  uncertaintyColor,
+  uncertaintyConfig,
+  getConfidenceLevel,
+} from "@/lib/graph-types";
 
 interface NodeDetailsProps {
   node: GraphNode;
@@ -10,6 +15,9 @@ interface NodeDetailsProps {
 }
 
 export function NodeDetails({ node, onClose, onExplore }: NodeDetailsProps) {
+  const confidence = getConfidenceLevel(node);
+  const color = nodeColors[node.nodeType] ?? "#888";
+
   const verdictBadge = () => {
     if (node.nodeType !== "person") return null;
 
@@ -52,7 +60,10 @@ export function NodeDetails({ node, onClose, onExplore }: NodeDetailsProps) {
     properties.push({ label: "AD Appearances", value: node.featureCount });
   }
   if (node.connectionStrength) {
-    properties.push({ label: "Connection Strength", value: node.connectionStrength });
+    properties.push({
+      label: "Connection Strength",
+      value: node.connectionStrength.replace(/_/g, " "),
+    });
   }
   if (node.city || node.state || node.country) {
     const parts = [node.city, node.state, node.country].filter(Boolean);
@@ -72,22 +83,20 @@ export function NodeDetails({ node, onClose, onExplore }: NodeDetailsProps) {
     properties.push({ label: "PageRank", value: node.pagerank.toFixed(4) });
   }
   if (node.betweenness != null && node.betweenness > 0) {
-    properties.push({ label: "Betweenness", value: node.betweenness.toFixed(4) });
+    properties.push({
+      label: "Betweenness",
+      value: node.betweenness.toFixed(4),
+    });
   }
 
-  const color = nodeColors[node.nodeType] ?? "#888";
-
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 p-4">
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-2">
           <span
             className="inline-block h-2.5 w-2.5 rounded-full"
-            style={{
-              border: `1.5px solid ${color}`,
-              boxShadow: `0 0 6px ${color}66`,
-            }}
+            style={{ backgroundColor: color }}
           />
           <span className="text-[10px] uppercase tracking-widest text-neutral-500">
             {node.nodeType.replace("_", " ")}
@@ -95,7 +104,7 @@ export function NodeDetails({ node, onClose, onExplore }: NodeDetailsProps) {
         </div>
         <button
           onClick={onClose}
-          className="text-neutral-500 hover:text-neutral-300"
+          className="text-neutral-600 transition-colors hover:text-neutral-300"
           aria-label="Close details"
         >
           <svg
@@ -119,11 +128,34 @@ export function NodeDetails({ node, onClose, onExplore }: NodeDetailsProps) {
       {/* Verdict badge */}
       {verdictBadge()}
 
+      {/* Confidence / uncertainty indicator */}
+      {confidence && (
+        <div
+          className="flex items-center gap-2 rounded px-3 py-2"
+          style={{
+            backgroundColor: "rgba(212,160,74,0.08)",
+            border: "1px solid rgba(212,160,74,0.15)",
+          }}
+        >
+          <span
+            className="inline-block h-3 w-3 shrink-0 rounded-full"
+            style={{
+              backgroundColor: `rgba(212,160,74,${uncertaintyConfig[confidence].fillOpacity})`,
+              border: `1.5px solid ${uncertaintyColor}`,
+              boxShadow: `0 0 ${uncertaintyConfig[confidence].blur}px rgba(212,160,74,0.5)`,
+            }}
+          />
+          <span className="text-xs capitalize" style={{ color: uncertaintyColor }}>
+            {confidence.replace("_", " ")} confidence
+          </span>
+        </div>
+      )}
+
       {/* Properties */}
       {properties.length > 0 && (
         <div
           className="space-y-2 border-t pt-3"
-          style={{ borderColor: "#222" }}
+          style={{ borderColor: "#1A1A1A" }}
         >
           {properties.map((p) => (
             <div key={p.label} className="flex justify-between text-sm">
@@ -138,13 +170,33 @@ export function NodeDetails({ node, onClose, onExplore }: NodeDetailsProps) {
 
       {/* Actions */}
       {node.nodeType === "person" && (
-        <div className="space-y-2 border-t pt-3" style={{ borderColor: "#222" }}>
+        <div
+          className="space-y-2 border-t pt-3"
+          style={{ borderColor: "#1A1A1A" }}
+        >
           <button
             onClick={() => onExplore(node.label)}
-            className="w-full rounded bg-neutral-800 px-3 py-1.5 text-sm font-medium text-neutral-200 transition-colors hover:bg-neutral-700"
+            className="w-full rounded px-3 py-2 text-sm font-medium text-neutral-200 transition-colors hover:bg-neutral-700/50"
+            style={{
+              backgroundColor: "rgba(255,255,255,0.05)",
+              border: "1px solid rgba(255,255,255,0.08)",
+            }}
           >
             Explore Connections
           </button>
+          {node.detectiveVerdict === "YES" && (
+            <a
+              href={`/dossier/${encodeURIComponent(node.label)}`}
+              className="block w-full rounded px-3 py-2 text-center text-sm font-medium transition-colors"
+              style={{
+                backgroundColor: "rgba(212,160,74,0.1)",
+                border: "1px solid rgba(212,160,74,0.2)",
+                color: uncertaintyColor,
+              }}
+            >
+              View Dossier
+            </a>
+          )}
         </div>
       )}
     </div>

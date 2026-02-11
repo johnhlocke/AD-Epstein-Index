@@ -22,6 +22,7 @@ import sys
 import subprocess
 import tempfile
 import time
+from datetime import datetime
 import anthropic
 from dotenv import load_dotenv
 
@@ -30,10 +31,45 @@ load_dotenv()
 DATA_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
 ISSUES_DIR = os.path.join(DATA_DIR, "issues")
+COSTS_DIR = os.path.join(DATA_DIR, "costs")
 
 # Configure Claude client
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 MODEL = "claude-sonnet-4-5-20250929"
+
+# Cost tracking — writes to data/costs/reader.json (Reader delegates to this module)
+MODEL_PRICING = {"opus": (15.00, 75.00), "sonnet": (3.00, 15.00), "haiku": (1.00, 5.00)}
+
+def _track_extraction_cost(response, model=None):
+    """Track API cost from extraction calls. Writes to reader's cost file."""
+    try:
+        from agents.base import update_json_locked
+        usage = response.usage
+        input_tokens = usage.input_tokens
+        output_tokens = usage.output_tokens
+        model_str = (model or '').lower()
+        tier = 'opus' if 'opus' in model_str else ('sonnet' if 'sonnet' in model_str else 'haiku')
+        inp, outp = MODEL_PRICING[tier]
+        cost = input_tokens / 1_000_000 * inp + output_tokens / 1_000_000 * outp
+
+        cost_path = os.path.join(COSTS_DIR, "reader.json")
+        def _update(data):
+            data["api_calls"] = data.get("api_calls", 0) + 1
+            data["input_tokens"] = data.get("input_tokens", 0) + input_tokens
+            data["output_tokens"] = data.get("output_tokens", 0) + output_tokens
+            data["total_cost"] = round(data.get("total_cost", 0.0) + cost, 6)
+            by_model = data.get("by_model", {})
+            m = by_model.get(tier, {"calls": 0, "input_tokens": 0, "output_tokens": 0, "cost": 0.0})
+            m["calls"] = m.get("calls", 0) + 1
+            m["input_tokens"] = m.get("input_tokens", 0) + input_tokens
+            m["output_tokens"] = m.get("output_tokens", 0) + output_tokens
+            m["cost"] = round(m.get("cost", 0.0) + cost, 6)
+            by_model[tier] = m
+            data["by_model"] = by_model
+            data["last_updated"] = datetime.now().isoformat()
+        update_json_locked(cost_path, _update, default=dict)
+    except Exception:
+        pass  # Cost tracking is non-critical
 
 # Minimum year to process (skip older issues after date verification)
 MIN_YEAR = 1988
@@ -266,6 +302,7 @@ def call_claude_with_retry(prompt, image_paths):
                 max_tokens=2048,
                 messages=[{"role": "user", "content": content}],
             )
+            _track_extraction_cost(response, MODEL)
             return response.content[0].text
         except anthropic.RateLimitError:
             if attempt < MAX_RETRIES - 1:
