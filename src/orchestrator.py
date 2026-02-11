@@ -375,6 +375,25 @@ async def graph_sync_loop(interval=60):
         await asyncio.sleep(interval)
 
 
+async def watercooler_loop(interval=300):
+    """Periodically generate watercooler conversations between agents.
+
+    Every `interval` seconds (default 5 min), two agents have a brief
+    in-character exchange. Displayed on their sprites + newsroom panel.
+    Cost: ~$0.001 per conversation.
+    """
+    await asyncio.sleep(30)  # Let agents settle in
+    while True:
+        try:
+            from agents.watercooler import generate_conversation
+            convo = generate_conversation()
+            if convo:
+                print(f"  [WATERCOOLER] {convo['name_a']} & {convo['name_b']} — {len(convo['lines'])} lines")
+        except Exception as e:
+            print(f"  [WATERCOOLER] Skipped: {e}")
+        await asyncio.sleep(interval)
+
+
 async def run_daemon(agents):
     """Run agents continuously until interrupted."""
     print("\n=== AD-Epstein Pipeline — Daemon Mode ===\n")
@@ -391,6 +410,9 @@ async def run_daemon(agents):
 
     # Start periodic graph sync (Neo4j → graph.json every 60s)
     graph_task = asyncio.create_task(graph_sync_loop(interval=60))
+
+    # Start watercooler conversations (agent-to-agent chatter every 5 min)
+    watercooler_task = asyncio.create_task(watercooler_loop(interval=300))
 
     # Set up signal handlers for graceful shutdown
     loop = asyncio.get_event_loop()
@@ -411,6 +433,7 @@ async def run_daemon(agents):
     # Cancel background loops
     status_task.cancel()
     graph_task.cancel()
+    watercooler_task.cancel()
 
     # Wait for all agents to finish current work
     await asyncio.gather(*tasks.values(), return_exceptions=True)

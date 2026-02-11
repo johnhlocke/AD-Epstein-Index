@@ -6,6 +6,30 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-11 (Session 20)
+
+### Added — Watercooler Conversations (Agent-to-Agent Dialogue)
+- **`src/agents/watercooler.py`** — New system generates in-character 3-4 line conversations between agent pairs via single Haiku call (~$0.001 each). 10 curated pairings with built-in relationship dynamics (e.g., Silas & Elena adversarial respect, Elias & Miranda student/mentor). Loads personality snippets from skills files. Stored at `data/watercooler.json` with 20-conversation history.
+- **`src/orchestrator.py`** — Added `watercooler_loop()` running every 5 minutes. Conversations animate sequentially on agent sprites (6s per line).
+
+### Added — Newsroom Chatter Panel
+- **`src/agent_status.py`** — `read_bulletin_notes()` and `read_watercooler()` functions feed dashboard
+- **`src/agents/base.py`** — `narrate()` and `idle_chatter()` now post to bulletin board for dashboard visibility
+- **Dashboard** — Collapsible "NEWSROOM CHATTER" panel shows active watercooler conversations at top + color-coded bulletin board notes below
+
+### Added — Agent-Colored Speech Bubbles
+- Speech bubbles during watercooler conversations tint to each speaker's agent color (Scout=green, Courier=blue, Detective=orange, etc.) at 18% opacity
+- CSS variable `--bubble-bg` drives both bubble background and arrow triangle color
+- Watercooler panel lines also get 12% opacity background tint matching speaker
+- Bubbles auto-reset to white when conversation line expires
+
+### Fixed — Miranda Inbox (Reply Threading)
+- **`read_combined_inbox()`** rewritten: fixed sender override bug (human messages in editor_messages.json lost their `sender: "human"` field), added deduplication, conversation messages (human + replies) always included regardless of cap
+- **`src/agents/editor.py`** — `MAX_MESSAGES` increased from 50 to 100 to prevent human messages from being evicted
+- **Dashboard** — Miranda replies now display with yellow (#f5c842) text and "MIRANDA" label instead of green "EDITOR"
+
+---
+
 ## 2026-02-11 (Session 19)
 
 ### Fixed — Verdict Pipeline (4 Critical Bugs)

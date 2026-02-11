@@ -409,8 +409,12 @@ EDITOR_MESSAGES_PATH = os.path.join(DATA_DIR, "editor_messages.json")
 HUMAN_MESSAGES_PATH = os.path.join(DATA_DIR, "human_messages.json")
 
 
-def read_combined_inbox(max_messages=20):
-    """Read and combine editor + human messages, most recent first."""
+def read_combined_inbox(max_messages=40):
+    """Read and combine editor + human messages, most recent first.
+
+    Conversation messages (human + replies) are always included regardless of cap,
+    then remaining slots filled with status/alert messages.
+    """
     editor_msgs = []
     human_msgs = []
 
@@ -419,7 +423,9 @@ def read_combined_inbox(max_messages=20):
             with open(EDITOR_MESSAGES_PATH) as f:
                 editor_msgs = json.load(f)
             for m in editor_msgs:
-                m["sender"] = "editor"
+                # Preserve sender on human messages that were copied here
+                if m.get("sender") != "human":
+                    m["sender"] = "editor"
         except Exception:
             pass
 
@@ -433,8 +439,83 @@ def read_combined_inbox(max_messages=20):
             pass
 
     combined = editor_msgs + human_msgs
-    combined.sort(key=lambda m: str(m.get("timestamp", m.get("time", ""))))
-    return combined[-max_messages:][::-1]
+
+    # Deduplicate human messages (they exist in both files)
+    seen_human = set()
+    deduped = []
+    for m in combined:
+        if m.get("sender") == "human":
+            key = (m.get("text", ""), m.get("time", ""))
+            if key in seen_human:
+                continue
+            seen_human.add(key)
+        deduped.append(m)
+
+    deduped.sort(key=lambda m: str(m.get("timestamp", m.get("time", ""))))
+
+    # Always include conversation messages (human + editor replies)
+    conversation = [m for m in deduped if m.get("sender") == "human" or m.get("is_reply")]
+    status = [m for m in deduped if m.get("sender") != "human" and not m.get("is_reply")]
+
+    # Take conversation messages + fill remaining slots with status
+    remaining = max(0, max_messages - len(conversation))
+    result = conversation + status[-remaining:] if remaining else conversation
+
+    # Final sort newest-first
+    result.sort(key=lambda m: str(m.get("timestamp", m.get("time", ""))), reverse=True)
+    return result
+
+
+BULLETIN_PATH = os.path.join(DATA_DIR, "bulletin_board.json")
+
+AGENT_DISPLAY_NAMES = {
+    "scout": "Arthur", "courier": "Casey", "reader": "Elias",
+    "detective": "Silas", "researcher": "Elena", "editor": "Miranda",
+    "designer": "Sable",
+}
+
+
+def read_bulletin_notes(max_notes=15):
+    """Read recent bulletin board notes for dashboard display."""
+    if not os.path.exists(BULLETIN_PATH):
+        return []
+    try:
+        with open(BULLETIN_PATH) as f:
+            notes = json.load(f)
+        if not isinstance(notes, list):
+            return []
+        # Return newest first, with display names
+        result = []
+        for note in notes[-max_notes:][::-1]:
+            agent_key = note.get("agent", "unknown")
+            result.append({
+                "agent": agent_key,
+                "name": AGENT_DISPLAY_NAMES.get(agent_key, agent_key.title()),
+                "text": note.get("text", ""),
+                "tag": note.get("tag", "tip"),
+                "timestamp": note.get("timestamp", 0),
+            })
+        return result
+    except Exception:
+        return []
+
+
+WATERCOOLER_PATH = os.path.join(DATA_DIR, "watercooler.json")
+
+
+def read_watercooler():
+    """Read current watercooler conversation if active."""
+    if not os.path.exists(WATERCOOLER_PATH):
+        return None
+    try:
+        with open(WATERCOOLER_PATH) as f:
+            data = json.load(f)
+        current = data.get("current")
+        if current and time.time() < current.get("display_until", 0):
+            return current
+        return None
+    except Exception:
+        return None
 
 
 def read_editor_cost():
@@ -694,7 +775,7 @@ def build_collaborations(manifest_stats, extraction_stats, xref_stats):
             "label": f"{unextracted} PDFs to extract"
         })
 
-    unchecked = extraction_stats["features"] - xref_stats["checked"]
+    unchecked = manifest_stats["with_homeowner"] - xref_stats["checked"]
     if unchecked > 0 and xref_stats["checked"] > 0:
         collaborations.append({
             "from": "reader",
@@ -774,7 +855,7 @@ def build_pipeline(manifest_stats, extraction_stats, xref_stats, dossier_stats):
             "stage": "Cross-Ref'd",
             "agent": "detective",
             "count": xref_stats["checked"],
-            "total": extraction_stats["features"],
+            "total": manifest_stats["with_homeowner"],
             "color": "#9b59b6",
         },
         {
@@ -794,7 +875,7 @@ def build_queue_depths(manifest_stats, extraction_stats, xref_stats):
                          - manifest_stats["skipped"]
                          - manifest_stats["no_pdf"])
     awaiting_extraction = manifest_stats["downloaded"] - extraction_stats["extracted"]
-    awaiting_xref = extraction_stats["features"] - xref_stats["checked"]
+    awaiting_xref = manifest_stats["with_homeowner"] - xref_stats["checked"]
 
     return [
         {"label": "awaiting download", "count": max(0, awaiting_download), "color": "#3498db"},
@@ -811,7 +892,7 @@ def build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_s
                          - manifest_stats["skipped"]
                          - manifest_stats["no_pdf"])
     awaiting_extraction = manifest_stats["downloaded"] - extraction_stats["extracted"]
-    awaiting_xref = extraction_stats["features"] - xref_stats["checked"]
+    awaiting_xref = manifest_stats["with_homeowner"] - xref_stats["checked"]
 
     remaining_to_discover = TOTAL_EXPECTED_ISSUES - manifest_stats["total"]
     if manifest_stats["total"] == 0:
@@ -955,6 +1036,9 @@ def build_notable_finds(extraction_stats, xref_stats, dossier_stats=None, resear
             "editor_verdict": editor_verdict,
             "editor_reasoning": editor_reasoning,
         })
+
+    # Filter out rejected leads — they should not appear in Current Leads
+    finds = [f for f in finds if (f.get("editor_verdict") or "").upper() != "REJECTED"]
 
     def sort_key(f):
         verdict_order = {"confirmed_match": 0, "likely_match": 1, "possible_match": 2, "needs_review": 3, "bb_match": 4, "pending": 5}
@@ -1191,6 +1275,10 @@ def generate_status():
     confirmed_names_list = dossier_stats.get("confirmed_names", [])
     confirmed_associates = len(confirmed_names_list)
 
+    # Single source of truth for active leads — used by stats, agents, and Current Leads panel
+    notable_finds = build_notable_finds(extraction_stats, xref_stats, dossier_stats)
+    active_leads = len(notable_finds)
+
     # Determine statuses
     scout_status = "working" if 0 < manifest_stats["total"] < TOTAL_EXPECTED_ISSUES else (
         "done" if manifest_stats["total"] >= TOTAL_EXPECTED_ISSUES else "idle"
@@ -1204,13 +1292,12 @@ def generate_status():
         manifest_stats["downloaded"] > 0
     )
     detective_status = determine_agent_status(
-        xref_stats["checked"], extraction_stats["features"],
-        extraction_stats["features"] > 0
+        xref_stats["checked"], manifest_stats["with_homeowner"],
+        manifest_stats["with_homeowner"] > 0
     )
-    researcher_leads = xref_stats.get("leads", xref_stats.get("matches", 0))
     researcher_status = determine_agent_status(
-        dossier_stats["investigated"], researcher_leads,
-        researcher_leads > 0
+        dossier_stats["investigated"], active_leads,
+        active_leads > 0
     )
 
     # Scout message
@@ -1233,9 +1320,8 @@ def generate_status():
         reader_msg = "Waiting for downloads..."
 
     # Detective message
-    detective_leads = xref_stats.get("leads", xref_stats.get("matches", 0))
-    if detective_leads > 0:
-        detective_msg = f"{detective_leads} leads found in {xref_stats['checked']} names checked"
+    if active_leads > 0:
+        detective_msg = f"{active_leads} leads found in {xref_stats['checked']} names checked"
     elif xref_stats["checked"] > 0:
         detective_msg = f"No matches yet ({xref_stats['checked']} names checked)"
     else:
@@ -1244,8 +1330,8 @@ def generate_status():
     # Researcher message
     if dossier_stats["investigated"] > 0:
         researcher_msg = f"{dossier_stats['investigated']} dossiers ({dossier_stats['high']} HIGH, {dossier_stats['medium']} MED)"
-    elif researcher_leads > 0:
-        researcher_msg = f"{researcher_leads} leads to investigate"
+    elif active_leads > 0:
+        researcher_msg = f"{active_leads} leads to investigate"
     else:
         researcher_msg = "Waiting for leads..."
 
@@ -1321,7 +1407,7 @@ def generate_status():
                 "message": detective_msg,
                 "color": "#9b59b6",
                 "deskItems": ["detective-hat", "clipboard"],
-                "progress": {"current": xref_stats["checked"], "total": manifest_stats["total_features"]}
+                "progress": {"current": xref_stats["checked"], "total": manifest_stats["with_homeowner"]}
             },
             {
                 "id": "researcher",
@@ -1331,7 +1417,7 @@ def generate_status():
                 "message": researcher_msg,
                 "color": "#e67e22",
                 "deskItems": ["notebook", "magnifier"],
-                "progress": {"current": dossier_stats["investigated"], "total": researcher_leads}
+                "progress": {"current": dossier_stats["investigated"], "total": active_leads}
             },
             {
                 "id": "editor",
@@ -1358,8 +1444,8 @@ def generate_status():
             {"label": "Discovered", "value": manifest_stats["total"], "total": TOTAL_EXPECTED_ISSUES},
             {"label": "Downloaded Issues", "value": manifest_stats["downloaded"]},
             {"label": "Extracted Issues", "value": manifest_stats["distinct_issues"]},
-            {"label": "Features", "value": manifest_stats["total_features"]},
-            {"label": "XRef Leads", "value": xref_stats.get("leads", xref_stats.get("matches", 0))},
+            {"label": "Names", "value": xref_stats["checked"], "total": manifest_stats["with_homeowner"]},
+            {"label": "XRef Leads", "value": active_leads},
             {"label": "Dossiers", "value": dossier_stats["investigated"],
              "popup_type": "dossiers", "details": _get_all_dossier_details()},
             {"label": "Confirmed", "value": confirmed_associates,
@@ -1371,7 +1457,9 @@ def generate_status():
         "log": build_log(manifest_stats, extraction_stats, xref_stats, log_lines=log_lines),
         "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_stats),
         "editor_inbox": read_combined_inbox(),
-        "notable_finds": build_notable_finds(extraction_stats, xref_stats, dossier_stats),
+        "bulletin": read_bulletin_notes(),
+        "watercooler": read_watercooler(),
+        "notable_finds": notable_finds,
         "quality": build_quality(extraction_stats),
         "cost": cost_data,
         "coverage_map": build_coverage_map(),

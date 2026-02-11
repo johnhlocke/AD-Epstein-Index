@@ -74,6 +74,10 @@ This file should be automatically updated when necessary to answer three key que
 | Miranda speech system overhaul (LLM-driven sprite speech) | Tooling | Done |
 | Deploy website publicly | Phase 3 | Ready to Deploy |
 | Designer agent → spec generator | Tooling | Done |
+| Watercooler conversations (agent-to-agent dialogue) | Tooling | Done |
+| Newsroom Chatter panel (bulletin board + watercooler) | Tooling | Done |
+| Agent-colored speech bubbles | Tooling | Done |
+| Fix Miranda inbox reply threading | Tooling | Done |
 
 ## 2. What's Been Accomplished
 

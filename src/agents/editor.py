@@ -84,7 +84,7 @@ COST_PATH = os.path.join(DATA_DIR, "editor_cost.json")
 MEMORY_PATH = os.path.join(DATA_DIR, "editor_memory.json")
 EXTRACTIONS_DIR = os.path.join(DATA_DIR, "extractions")
 XREF_DIR = os.path.join(DATA_DIR, "cross_references")
-MAX_MESSAGES = 50
+MAX_MESSAGES = 100
 MAX_MEMORY_ENTRIES = 100
 
 MIN_YEAR = 1988
@@ -1002,6 +1002,12 @@ class EditorAgent(Agent):
         # Queue YES names for Researcher investigation
         if yes_entries:
             self._queue_researcher_tasks(yes_entries)
+            # Refresh knowledge graph export when new leads are discovered
+            try:
+                from sync_graph import export_graph_json
+                export_graph_json()
+            except Exception:
+                pass  # Graph export is non-critical
 
         self.ledger.save()
         self._request_status_refresh()
@@ -1184,14 +1190,24 @@ class EditorAgent(Agent):
                     except Exception:
                         self.log(f"Retry also failed for {name} verdict", level="ERROR")
 
-        # ── Step 5: Propagate verdict to knowledge graph ──
+        # ── Step 5: Propagate verdict to knowledge graph + refresh export ──
         try:
+            # Sync latest features to Neo4j first (ensures Person node + relationships exist)
+            try:
+                from sync_graph import incremental_sync, export_graph_json
+                incremental_sync()
+            except Exception:
+                pass  # Sync failure is non-critical; MERGE below creates node if needed
+
             from graph_analytics import update_person_verdict, recompute_after_verdict
-            update_person_verdict(name, verdict)
-            # Recompute analytics so the verdict ripples through the network
-            # (community metrics, proximity calculations, etc.)
+            update_person_verdict(name, verdict, connection_strength=strength)
             recompute_after_verdict()
             self.log(f"Graph updated: {name} → {verdict}, analytics recomputed")
+            # Refresh the dashboard knowledge graph export so new dossier appears
+            try:
+                export_graph_json()
+            except Exception:
+                pass  # Graph export is non-critical
         except ImportError:
             pass  # Graph analytics not available
         except Exception as e:
@@ -1736,11 +1752,11 @@ Respond with JSON only:
         if not unchecked and not doj_retry:
             return
 
-        # Batch up to 20 names (deduplicated, with all feature_ids per name)
+        # Batch up to 30 names (deduplicated, with all feature_ids per name)
         seen_names = set()
         names = []
         feature_ids = {}  # name → list of feature IDs
-        for feat in unchecked[:20]:
+        for feat in unchecked[:30]:
             name = (feat.get("homeowner_name") or "").strip()
             if not name:
                 continue
@@ -1926,8 +1942,9 @@ Respond with JSON only:
             self._speech = sprite_text[:200]
             self._speech_time = _time.time()
 
-        # Mark human messages as read
-        self._mark_messages_read()
+        # Mark human messages as read (only when we actually processed them)
+        if has_human_messages:
+            self._mark_messages_read()
 
         # Update state
         if has_human_messages:
@@ -2581,7 +2598,12 @@ Analyze and provide your assessment."""
             "queued_by": "editor", "queued_time": datetime.now().isoformat(),
             "applied": False,
         }
-        update_json_locked(verdicts_path, lambda data: data.append(new_verdict), default=[])
+        def _append_verdict(data):
+            if not isinstance(data, list):
+                data = []
+            data.append(new_verdict)
+            return data
+        update_json_locked(verdicts_path, _append_verdict, default=[])
         self.log(f"Queued verdict override: {name} → {verdict}")
 
     def _retry_doj_search(self, action):
@@ -2676,6 +2698,19 @@ Analyze and provide your assessment."""
         Uses a fast Haiku call (~$0.0005). Falls back to raw facts on error.
         """
         try:
+            # Include recent messages so Miranda doesn't repeat herself
+            recent_context = ""
+            try:
+                msgs_path = os.path.join(self.data_dir, "editor_messages.json")
+                if os.path.exists(msgs_path):
+                    with open(msgs_path) as f:
+                        all_msgs = json.load(f)
+                    last_few = [m["text"] for m in all_msgs[-5:] if m.get("text")]
+                    if last_few:
+                        recent_context = "\n\nYour recent messages (DO NOT repeat these patterns — vary your voice, structure, and opening words):\n" + "\n".join(f"- {t[:80]}" for t in last_few)
+            except Exception:
+                pass
+
             client = self._get_client()
             response = client.messages.create(
                 model="claude-haiku-4-5-20251001",
@@ -2688,9 +2723,9 @@ Analyze and provide your assessment."""
                     "You're writing a short update to the project owner — they bought the paper and they're learning the ropes. "
                     "You respect them, but you run the newsroom. You teach through pressure and example, not gently. "
                     "1-3 sentences max. No emoji. No pleasantries. Just your take on what happened. "
-                    "The owner gets impatient if they don't hear from you — always give them something."
+                    "CRITICAL: Never start with 'Good.' or repeat phrasing from your recent messages. Vary your openings and structure every time."
                 ),
-                messages=[{"role": "user", "content": facts}],
+                messages=[{"role": "user", "content": facts + recent_context}],
             )
             text = response.content[0].text.strip()
             self._track_usage(response)
@@ -2809,6 +2844,7 @@ If the event doesn't warrant a note, respond with just "—" and nothing else.""
             "time": now.strftime("%H:%M"),
             "timestamp": now.isoformat(),
             "type": msg_type,
+            "sender": "editor",
             "text": msg_text,
             "is_reply": is_reply,
         }

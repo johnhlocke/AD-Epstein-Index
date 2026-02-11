@@ -481,6 +481,11 @@ class Agent(ABC):
             text = response.content[0].text.strip()
             self._speech = text
             self._speech_time = _time.time()
+            # Also post to bulletin board so other agents (and the dashboard) see it
+            try:
+                self.post_bulletin(text, tag="chatter")
+            except Exception:
+                pass
             return text
         except Exception as e:
             self.log(f"Narrate failed: {e}", level="DEBUG")
@@ -544,6 +549,11 @@ class Agent(ABC):
             text = response.content[0].text.strip()
             self._speech = text
             self._speech_time = _time.time()
+            # Post idle chatter to bulletin board for newsroom feed
+            try:
+                self.post_bulletin(text, tag="chatter")
+            except Exception:
+                pass
         except Exception:
             pass  # Silently fail — idle chatter is non-critical
 
