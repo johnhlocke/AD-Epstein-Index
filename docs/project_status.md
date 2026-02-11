@@ -65,6 +65,7 @@ This file should be automatically updated when necessary to answer three key que
 | Connection Explorer web page (force-graph viz) | Phase 3.5 | Done |
 | Graph analytics (NetworkX: communities, centrality) | Phase 3.5 | Done |
 | Researcher graph integration (Elena uses analytics) | Phase 3.5 | Done |
+| Elena dynamic Cypher query generation | Phase 3.5 | Done |
 | Agent Office embedded knowledge graph | Tooling | Done |
 | Courier deep scraping (Azure Blob page images) | Phase 1 | Done |
 | Miranda speech system overhaul (LLM-driven sprite speech) | Tooling | Done |
@@ -204,6 +205,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - **`src/graph_analytics.py`** — NetworkX-powered: Louvain community detection, PageRank, betweenness centrality, Jaccard similarity, Epstein proximity. Writes results back to Neo4j node properties.
 - **Connection Explorer** — Interactive force-directed graph page at `/explorer` with 7 query presets (ego network, shortest path, shared designers, hubs, Epstein subgraph, full graph, search)
 - **Elena integration** — Researcher calls `get_person_analytics()` during investigations, adding community membership, centrality metrics, and Epstein proximity to dossiers
+- **Elena dynamic queries** — After preset graph queries, Elena generates 0-3 ad-hoc Cypher queries via Haiku to follow hunches. Write-guarded via `safe_read_query()`, results fed into synthesis, queries saved in dossier for audit.
 - **Agent Office graph** — Embedded force-graph (vanilla JS CDN) polls `graph.json` every 6s, collapsible panel under CURRENT LEADS
 
 ### Tooling: Agent Office Dashboard

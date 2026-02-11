@@ -183,10 +183,15 @@ Centralized log of every task attempt — replaces scattered per-agent escalatio
 1. Picks up non-`no_match` leads from `results.json` that haven't been investigated
 2. Gathers AD feature context from Supabase (all 14 fields)
 3. Builds investigation context: BB matches, DOJ snippets, AD appearance details
-4. **3-step pipeline**: Triage (Haiku) → Deep Analysis (Sonnet + images) → Synthesis (Sonnet)
+4. **3-step pipeline with graph intelligence**:
+   - Step 1: Triage (Haiku ~$0.001) — filter obvious false positives
+   - Step 2: Deep Analysis (Sonnet + article images ~$0.03)
+   - Graph Investigation: 7 preset queries (shared designers, flagged neighbors, timeline, etc.)
+   - Graph Followups: Elena generates 0-3 ad-hoc Cypher queries via Haiku (~$0.001) based on preset results. Write-guarded via `safe_read_query()`.
+   - Step 3: Synthesis (Sonnet ~$0.02) — receives cached analytics + preset results + followup results
 5. Robust JSON parsing with brace-counting fallback for truncated responses
 6. Proposes connection strength: HIGH / MEDIUM / LOW / COINCIDENCE
-7. Saves dossier to Supabase with `editor_verdict = PENDING_REVIEW` + disk backup
+7. Saves dossier to Supabase with `editor_verdict = PENDING_REVIEW` + disk backup. Graph followup queries stored in dossier for audit trail.
 8. Pushes `TaskResult` to outbox → Editor receives for gatekeeper review
 
 ### Editor Gatekeeper (Dossier Review)
@@ -461,6 +466,7 @@ Editor._commit_investigation()
 | Graph DB Client | Neo4j singleton driver + constraints | Python (`src/graph_db.py`) |
 | Graph Sync | Supabase → Neo4j sync + JSON export | Python (`src/sync_graph.py`) |
 | Graph Analytics | Community, centrality, similarity, proximity | Python, NetworkX (`src/graph_analytics.py`) |
+| Graph Queries | 12 preset + safe LLM-generated ad-hoc queries | Python, Neo4j (`src/graph_queries.py`) |
 | Website | Public-facing visualizations + Connection Explorer | Next.js, Tailwind, Shadcn UI, react-force-graph-2d (Phase 3) |
 
 ## Database Schema

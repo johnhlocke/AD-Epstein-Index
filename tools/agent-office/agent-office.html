@@ -155,6 +155,8 @@ body {
 /* ── Panel Section ── */
 .panel-section {
   flex-shrink: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 .panel-section h3 {
   font-size: 9px;
@@ -511,38 +513,7 @@ body {
   letter-spacing: 0.3px;
 }
 
-/* ══════════════════════════════════════
-   RIGHT PANEL — DATA QUALITY
-   ══════════════════════════════════════ */
-.quality-row {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  margin-bottom: 5px;
-}
-.quality-label {
-  font-size: 7px;
-  color: var(--text-dim);
-  min-width: 70px;
-}
-.quality-bar-wrap {
-  flex: 1;
-  height: 10px;
-  background: rgba(255,255,255,0.05);
-  border: 1px solid var(--border-subtle);
-  overflow: hidden;
-}
-.quality-bar {
-  height: 100%;
-  background: var(--gold);
-  transition: width 0.6s ease;
-}
-.quality-pct {
-  font-size: 8px;
-  color: var(--text);
-  min-width: 32px;
-  text-align: right;
-}
+/* Data Quality panel removed — space reclaimed for Knowledge Graph */
 
 /* ══════════════════════════════════════
    RIGHT PANEL — DISCOVERY COVERAGE MAP
@@ -1113,6 +1084,16 @@ body {
 .agent-char.hub-bored .char-back { display: none !important; }
 .agent-char.hub-bored .char-waiting { display: block !important; }
 
+/* ── Hub-and-Spoke: Rest Agent (rest sprite, no glow — default idle for agents with rest sprite) ── */
+.char-img.char-rest { display: none; }
+.agent-char.hub-rest {
+  filter: none;
+}
+.agent-char.hub-rest .char-front { display: none !important; }
+.agent-char.hub-rest .char-back { display: none !important; }
+.agent-char.hub-rest .char-waiting { display: none !important; }
+.agent-char.hub-rest .char-rest { display: block !important; }
+
 /* ── Hub-and-Spoke: Done Agent (relaxing sprite, subtle green glow) ── */
 .char-img.char-done { display: none; }
 .agent-char.hub-done {
@@ -1524,7 +1505,7 @@ body {
 }
 #graph-container {
   width: 100%;
-  height: 220px;
+  height: 340px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-panel);
   position: relative;
@@ -1655,17 +1636,6 @@ body {
 
   <!-- ── Right Panel ── -->
   <div class="panel-right">
-    <div class="panel-section" id="log-section">
-      <h3>ACTIVITY LOG</h3>
-      <div class="log-filters" id="log-filters"></div>
-      <div class="log-scroll" id="log-scroll">
-        <div id="log-entries"></div>
-      </div>
-    </div>
-    <div class="panel-section" id="finds-section">
-      <h3>CURRENT LEADS</h3>
-      <div id="finds-content"></div>
-    </div>
     <div class="panel-section" id="graph-section">
       <div class="graph-panel-header" id="graph-panel-toggle">
         <h3>KNOWLEDGE GRAPH</h3>
@@ -1680,9 +1650,16 @@ body {
         </div>
       </div>
     </div>
-    <div class="panel-section" id="quality-section">
-      <h3>DATA QUALITY</h3>
-      <div id="quality-content"></div>
+    <div class="panel-section" id="log-section">
+      <h3>ACTIVITY LOG</h3>
+      <div class="log-filters" id="log-filters"></div>
+      <div class="log-scroll" id="log-scroll">
+        <div id="log-entries"></div>
+      </div>
+    </div>
+    <div class="panel-section" id="finds-section">
+      <h3>CURRENT LEADS</h3>
+      <div id="finds-content"></div>
     </div>
     <div class="panel-section" id="coverage-section">
       <h3>DISCOVERY MAP</h3>
@@ -1847,7 +1824,7 @@ const ASSETS = {
                   listen: 'editor_front_listening_trans.png', happy: 'editor_front_happy_trans.png',
                   failure: 'editor_front_failure_trans.png', clipboard: 'editor_back_clipboard_trans.png',
                   studying: 'editor_front_studying_trans.png' },
-    designer:  { front: 'designer_front_trans.png',  back: 'designer_back_trans.png',  waiting: 'designer_front_waiting_trans.png' },
+    designer:  { front: 'designer_front_trans.png',  back: 'designer_back_trans.png',  waiting: 'designer_front_waiting_trans.png', rest: 'designer_front_rest_trans.png' },
     scout:     { front: 'scout_front_trans.png',     back: 'scout_back_trans.png',     waiting: 'scout_front_waiting_trans.png', done: 'scout_front_done_trans.png' },
     courier:   { front: 'courier_front_trans.png',   back: 'courier_back_trans.png',   waiting: 'courier_front_waiting_trans.png', done: 'courier_front_done_trans.png' },
     reader:    { front: 'reader_front_trans.png',    back: 'reader_back_trans.png',    waiting: 'reader_front_waiting_trans.png' },
@@ -1944,6 +1921,17 @@ function initAgents() {
       waitImg.draggable = false;
       waitImg.onerror = () => { waitImg.style.display = 'none'; };
       charEl.appendChild(waitImg);
+    }
+
+    // Rest sprite (agents with a resting/idle pose)
+    if (ASSETS.chars[id].rest) {
+      const restImg = document.createElement('img');
+      restImg.className = 'char-img char-rest';
+      restImg.src = ASSETS.chars[id].rest;
+      restImg.alt = '';
+      restImg.draggable = false;
+      restImg.onerror = () => { restImg.style.display = 'none'; };
+      charEl.appendChild(restImg);
     }
 
     // Done/relaxing sprite (agents that have completed their work)
@@ -2100,7 +2088,7 @@ function updateAgent(agentData) {
   charEl.className = charEl.className.replace(/\banim-\w+/g, '');
   // Only remove hub states if not in an editor-engage animation
   if (!charEl.classList.contains('editor-engage')) {
-    charEl.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done', 'show-front');
+    charEl.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-rest', 'hub-done', 'show-front');
   }
 
   const isWorking = status === 'working' && agentData.liveTask;
@@ -2132,8 +2120,35 @@ function updateAgent(agentData) {
     updateSpeechBubble(aid, agentData.speech || agentData.message || '');
     agentWaitCycles[aid] = 0;
     delete agentBoredThreshold[aid];
+  } else if (ASSETS.chars[aid]?.rest) {
+    // Agent with rest sprite (e.g. Sable): show rest pose as default idle,
+    // bored sprite still kicks in after threshold
+    agentWaitCycles[aid] = (agentWaitCycles[aid] || 0) + 1;
+    if (!agentBoredThreshold[aid]) {
+      agentBoredThreshold[aid] = 3 + Math.floor(Math.random() * 4);
+    }
+    const cycles = agentWaitCycles[aid];
+    const threshold = agentBoredThreshold[aid];
+    const waitText = agentData.speech || '';
+
+    if (cycles >= threshold) {
+      // Alternate between rest and bored every 2-3 cycles
+      const togglePeriod = 2 + (threshold % 2);
+      const showBored = Math.floor((cycles - threshold) / togglePeriod) % 2 === 0;
+      if (showBored) {
+        charEl.classList.add('hub-bored', 'anim-idle');
+        updateSpeechBubble(aid, waitText);
+      } else {
+        charEl.classList.add('hub-rest', 'anim-idle');
+        updateSpeechBubble(aid, waitText);
+      }
+    } else {
+      // Default idle: rest sprite
+      charEl.classList.add('hub-rest', 'anim-idle');
+      updateSpeechBubble(aid, waitText);
+    }
   } else {
-    // Waiting/Idle/Done (no done sprite): increment wait counter
+    // Waiting/Idle/Done (no done or rest sprite): increment wait counter
     agentWaitCycles[aid] = (agentWaitCycles[aid] || 0) + 1;
     // Randomized threshold per agent (3-6 cycles = 15-30s) — set once per wait period
     if (!agentBoredThreshold[aid]) {
@@ -2370,7 +2385,7 @@ async function doCollabMeeting(agentId, label, type) {
   // Yellow glow on both
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-rest', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
   moveAgentTo(agentId, target.exitX, target.homeY, true);
@@ -2966,22 +2981,6 @@ function buildFindPipeline(f) {
   return detHtml + resHtml + edtHtml;
 }
 
-function renderQuality(quality) {
-  const container = document.getElementById('quality-content');
-  if (!quality || !quality.fields || !quality.fields.length) {
-    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No extraction data</div>';
-    return;
-  }
-  container.innerHTML = quality.fields.map(f =>
-    `<div class="quality-row">
-      <span class="quality-label">${escHtml(f.label)}</span>
-      <div class="quality-bar-wrap">
-        <div class="quality-bar" style="width:${f.pct}%"></div>
-      </div>
-      <span class="quality-pct">${f.pct}%</span>
-    </div>`
-  ).join('');
-}
 
 // ══════════════════════════════════════
 // RENDERING — Live Badge
@@ -3445,7 +3444,6 @@ function renderAll(data) {
   if (sectionChanged('log', data))             safe(() => renderLogWithFilters(data.log), 'log');
   if (sectionChanged('notable_finds', data))   safe(() => renderNotableFinds(data.notable_finds), 'notableFinds');
   if (sectionChanged('cost', data))             safe(() => renderCostTracker(data.cost), 'costTracker');
-  if (sectionChanged('quality', data))          safe(() => renderQuality(data.quality), 'quality');
   if (sectionChanged('collaborations', data))   safe(() => renderCollaborations(data.collaborations), 'collaborations');
   if (sectionChanged('editor_ledger', data))    safe(() => renderChalkboards(data.task_board, data.editor_ledger), 'chalkboards');
   if (sectionChanged('coverage_map', data))     safe(() => renderCoverageMap(data.coverage_map), 'coverageMap');
@@ -3456,16 +3454,49 @@ function renderAll(data) {
 // KNOWLEDGE GRAPH
 // ══════════════════════════════════════
 
+// Colors synced with web/src/lib/graph-types.ts
 const GRAPH_NODE_COLORS = {
-  person: '#5B8DB8', designer: '#7EB5D6', location: '#D4A04A',
-  style: '#C27C4E', issue: '#E8C47A', author: '#A89070',
+  person: '#4A8FE7', designer: '#5CB3CC', location: '#E07A5F',
+  style: '#6BAF7B', issue: '#C4A882', author: '#8B7D6B',
   epstein_source: '#E05A47',
 };
 const GRAPH_LINK_COLORS = {
-  FEATURED_IN: '#C27C4E', HIRED: '#5B8DB8', LIVES_IN: '#D4A04A',
-  HAS_STYLE: '#C27C4E', PROFILED_BY: '#A89070', APPEARS_IN: '#E05A47',
+  FEATURED_IN: '#C27C4E', HIRED: '#5CB3CC', LIVES_IN: '#E07A5F',
+  HAS_STYLE: '#6BAF7B', PROFILED_BY: '#8B7D6B', APPEARS_IN: '#E05A47',
 };
 const GRAPH_EPSTEIN_COLOR = '#E05A47';
+const GRAPH_UNCERTAINTY_COLOR = '#D4A04A';
+const GRAPH_LABEL_DEGREE_THRESHOLD = 2;
+const GRAPH_UNCERTAINTY_CONFIG = {
+  high:     { blur: 2,  fillOpacity: 0.85, ringOpacity: 1.0, ringWidth: 2.0 },
+  good:     { blur: 6,  fillOpacity: 0.6,  ringOpacity: 0.9, ringWidth: 1.8 },
+  medium:   { blur: 12, fillOpacity: 0.35, ringOpacity: 0.8, ringWidth: 1.5 },
+  low:      { blur: 18, fillOpacity: 0.15, ringOpacity: 0.7, ringWidth: 1.2 },
+  very_low: { blur: 24, fillOpacity: 0.05, ringOpacity: 0.6, ringWidth: 1.0 },
+};
+
+function getNodeConfidence(node) {
+  if (node.nodeType !== 'person') return null;
+  if (node.editorVerdict === 'CONFIRMED') return 'high';
+  if (node.editorVerdict === 'REJECTED') return null;
+  if (node.detectiveVerdict === 'YES') {
+    switch (node.connectionStrength) {
+      case 'confirmed_match': return 'high';
+      case 'likely_match': return 'good';
+      case 'possible_match': return 'medium';
+      case 'needs_review': return 'low';
+      default: return 'medium';
+    }
+  }
+  return null;
+}
+
+function graphNodeSize(degree, pagerank) {
+  if (pagerank != null && pagerank > 0) {
+    return Math.max(2, Math.min(8, 2 + pagerank * 400));
+  }
+  return Math.max(2, Math.min(7, 2 + degree * 0.35));
+}
 
 function initKnowledgeGraph() {
   // Collapsible toggle
@@ -3492,80 +3523,111 @@ function createGraphInstance() {
   const container = document.getElementById('graph-container');
   container.innerHTML = ''; // Remove placeholder
 
+  let hoveredNodeId = null;
+
   graphInstance = ForceGraph()(container)
     .width(container.clientWidth)
     .height(container.clientHeight)
     .backgroundColor('#1a0e2e')
     .nodeCanvasObject((node, ctx, globalScale) => {
       const x = node.x || 0, y = node.y || 0;
-      const color = node.color || GRAPH_NODE_COLORS[node.nodeType] || '#888';
-      const isEpstein = node.detectiveVerdict === 'YES';
+      const color = GRAPH_NODE_COLORS[node.nodeType] || '#888';
       const degree = node._degree || 0;
-      const pr = node.pagerank || 0;
-      // Size: pagerank if available, else degree
-      const size = pr > 0
-        ? Math.max(2, Math.min(10, 2 + pr * 500))
-        : Math.max(2, Math.min(8, 1.5 + degree * 0.5));
+      const size = graphNodeSize(degree, node.pagerank);
+      const confidence = getNodeConfidence(node);
+      const isHovered = hoveredNodeId === node.id;
 
       ctx.save();
-      ctx.shadowColor = color;
-      ctx.shadowBlur = isEpstein ? 12 : 5;
 
-      // Epstein ring
-      if (isEpstein) {
-        ctx.shadowColor = GRAPH_EPSTEIN_COLOR;
-        ctx.shadowBlur = 14;
+      // Uncertainty ring (confidence-based glow)
+      if (confidence) {
+        const uc = GRAPH_UNCERTAINTY_CONFIG[confidence];
+        ctx.save();
+        ctx.shadowColor = GRAPH_UNCERTAINTY_COLOR;
+        ctx.shadowBlur = uc.blur;
         ctx.beginPath();
-        ctx.arc(x, y, size + 2, 0, 2 * Math.PI);
-        ctx.strokeStyle = GRAPH_EPSTEIN_COLOR;
-        ctx.lineWidth = 1.2 / globalScale;
+        ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
+        ctx.strokeStyle = GRAPH_UNCERTAINTY_COLOR;
+        ctx.lineWidth = uc.ringWidth / globalScale;
+        ctx.globalAlpha = uc.ringOpacity;
+        ctx.stroke();
+        if (uc.fillOpacity > 0.05) {
+          ctx.beginPath();
+          ctx.arc(x, y, size + 3, 0, 2 * Math.PI);
+          ctx.fillStyle = GRAPH_UNCERTAINTY_COLOR;
+          ctx.globalAlpha = uc.fillOpacity * 0.3;
+          ctx.fill();
+        }
+        ctx.restore();
+      }
+
+      // Hover ring
+      if (isHovered) {
+        ctx.beginPath();
+        ctx.arc(x, y, size + 5, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
       }
 
-      // Outer ring
+      // Node body — outer ring + inner fill
+      ctx.shadowColor = color;
+      ctx.shadowBlur = isHovered ? 10 : 4;
+
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1 / globalScale;
+      ctx.lineWidth = 1.5 / globalScale;
+      ctx.globalAlpha = 1;
       ctx.stroke();
 
-      // Inner fill
       ctx.beginPath();
-      ctx.arc(x, y, size * 0.5, 0, 2 * Math.PI);
+      ctx.arc(x, y, size * 0.55, 0, 2 * Math.PI);
       ctx.fillStyle = color;
-      ctx.globalAlpha = 0.7;
+      ctx.globalAlpha = isHovered ? 0.9 : 0.7;
       ctx.fill();
-      ctx.globalAlpha = 1;
+
       ctx.restore();
 
-      // Label on zoom
-      if (globalScale > 3 && degree > 1 && node.nodeType !== 'issue') {
-        const fontSize = Math.max(7 / globalScale, 1.2);
-        ctx.font = `${fontSize}px "Press Start 2P", monospace`;
-        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+      // Labels — show for hovered or high-degree nodes
+      const showLabel = isHovered || degree >= GRAPH_LABEL_DEGREE_THRESHOLD;
+      if (showLabel && node.nodeType !== 'issue') {
+        const fontSize = Math.max(10 / globalScale, 1.8);
+        ctx.font = `${fontSize}px Inter, sans-serif`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
-        ctx.fillText(node.label, x, y + size + 2);
+        // Text shadow
+        ctx.fillStyle = 'rgba(0,0,0,0.85)';
+        ctx.fillText(node.label, x + 0.5, y + size + 3 + 0.5);
+        ctx.fillStyle = isHovered ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.6)';
+        ctx.fillText(node.label, x, y + size + 3);
       }
     })
     .nodePointerAreaPaint((node, color, ctx) => {
-      const size = (node.pagerank || 0) > 0
-        ? Math.max(2, Math.min(10, 2 + (node.pagerank || 0) * 500))
-        : Math.max(2, Math.min(8, 1.5 + (node._degree || 0) * 0.5));
+      const size = graphNodeSize(node._degree || 0, node.pagerank);
       ctx.beginPath();
-      ctx.arc(node.x || 0, node.y || 0, size + 4, 0, 2 * Math.PI);
+      ctx.arc(node.x || 0, node.y || 0, size + 8, 0, 2 * Math.PI);
       ctx.fillStyle = color;
       ctx.fill();
     })
+    .onNodeHover(node => { hoveredNodeId = node ? node.id : null; })
     .linkColor(link => {
       const base = GRAPH_LINK_COLORS[link.relType] || '#444';
-      return base + '55'; // Low opacity
+      return base + 'AA';
     })
-    .linkWidth(0.5)
-    .linkCurvature(0.25)
-    .d3AlphaDecay(0.03)
-    .d3VelocityDecay(0.35)
-    .cooldownTime(2000)
+    .linkWidth(link => {
+      if (link.relType === 'APPEARS_IN') return 4;
+      if (link.relType === 'HIRED') return 3;
+      return 2.5;
+    })
+    .linkCurvature(0.2)
+    .linkDirectionalParticles(2)
+    .linkDirectionalParticleWidth(1.5)
+    .linkDirectionalParticleSpeed(0.004)
+    .d3AlphaDecay(0.02)
+    .d3VelocityDecay(0.3)
+    .cooldownTime(3000)
+    .warmupTicks(30)
     .onNodeClick((node) => {
       showToast(`${node.label} (${node.nodeType})`, 'info', 2000);
     });
@@ -3904,7 +3966,7 @@ async function editorVisitAgent(agentId) {
   const targetChar = agentCharElements[agentId];
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-rest', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
 
@@ -3956,7 +4018,7 @@ async function editorGatherReports() {
     const targetChar = agentCharElements[agentId];
     if (editorChar) editorChar.classList.add('editor-engage');
     if (targetChar) {
-      targetChar.classList.remove('hub-working', 'hub-waiting');
+      targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-rest');
       targetChar.classList.add('editor-engage', 'show-front');
     }
 
@@ -4090,7 +4152,7 @@ async function editorAssignTask(agentId, label) {
   // Step 2: Yellow glow on both — agent steps to aisle
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-rest', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
   moveAgentTo(agentId, target.exitX, target.homeY, true);
@@ -4130,7 +4192,7 @@ async function editorCollectResult(agentId, label) {
   // Yellow glow
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-rest', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
 
@@ -4179,7 +4241,7 @@ async function editorHandleFailure(agentId, label) {
     editorChar.style.setProperty('--glow-color', '#e74c3c');
   }
   if (targetChar) {
-    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
+    targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-rest', 'hub-done');
     targetChar.classList.add('collab-glow', 'show-front');
     targetChar.style.setProperty('--glow-color', '#e74c3c');
   }

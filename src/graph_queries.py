@@ -336,3 +336,27 @@ def raw_query(cypher, params=None):
     Returns list of record dicts.
     """
     return _safe_query(cypher, params)
+
+
+# ═══════════════════════════════════════════════════════════════
+# SAFE READ-ONLY QUERY — For LLM-generated Cypher
+# ═══════════════════════════════════════════════════════════════
+
+_WRITE_KEYWORDS = {"CREATE", "MERGE", "DELETE", "DETACH", "SET", "REMOVE", "DROP", "CALL"}
+
+
+def safe_read_query(cypher, params=None):
+    """Execute LLM-generated Cypher ONLY if read-only.
+
+    Guards against write operations by checking for write keywords.
+    Auto-appends LIMIT 50 if no LIMIT clause present.
+    Returns list of dicts on success, or {"error": "..."} on rejection.
+    """
+    import re
+    upper = cypher.upper()
+    for kw in _WRITE_KEYWORDS:
+        if re.search(r'\b' + kw + r'\b', upper):
+            return {"error": f"Rejected: write keyword '{kw}'"}
+    if "LIMIT" not in upper:
+        cypher = cypher.rstrip().rstrip(";") + "\nLIMIT 50"
+    return _safe_query(cypher, params)

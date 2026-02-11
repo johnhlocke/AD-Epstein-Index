@@ -38,6 +38,20 @@ Format: entries are grouped by date, with the most recent at the top.
 - Added `_extract_features_with_images()` and `_extract_single_article_from_images()`: Claude Vision for richer extraction
 - Fallback to teaser-only extraction if page images unavailable
 
+### Added — Elena Dynamic Cypher Query Generation
+- **`safe_read_query()`** in `src/graph_queries.py` — Write-guarded Cypher executor for LLM-generated queries. Rejects any query containing CREATE/MERGE/DELETE/SET/REMOVE/DROP/DETACH/CALL. Auto-appends `LIMIT 50` if missing.
+- **`_graph_followup_queries()`** in `src/agents/researcher.py` — Elena generates 0-3 ad-hoc Cypher queries via Haiku (~$0.001) after reviewing preset graph results. Executes through `safe_read_query()`, caps at 20 results per query.
+- **Pipeline integration**: Followup queries run between graph investigation (preset queries) and synthesis. Results injected into synthesis prompt alongside cached analytics and preset results.
+- **Audit trail**: Every generated query (question, Cypher, result count) stored in dossier JSON under `graph_followup_queries` field.
+- **Cost**: ~$0.001 per non-COINCIDENCE investigation (one Haiku call). ~2% pipeline cost increase.
+
+### Added — Sable Rest Sprite State
+- New `rest` sprite state for Sable (Designer agent) using `designer_front_rest_trans.png`
+- Rest pose is the default idle state when Sable has no work (replaces front-facing idle)
+- Bored sprite still kicks in after the randomized threshold, alternating with rest
+- Generic implementation: any agent with a `rest` asset defined gets the same behavior
+- Added `hub-rest` CSS class and sprite element creation to agent-office.html
+
 ### Changed — Researcher Graph Integration
 - Elena now calls `get_person_analytics(name)` from `graph_analytics.py` before synthesis step
 - Synthesis prompt includes: PageRank percentile, betweenness, community membership, flagged community members, similar persons, Epstein proximity

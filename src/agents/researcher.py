@@ -794,6 +794,116 @@ class ResearcherAgent(Agent):
 
         return "\n".join(lines) if len(lines) > 1 else ""
 
+    def _graph_followup_queries(self, name, context, graph_investigation):
+        """Generate and execute ad-hoc Cypher queries based on preset results.
+
+        Elena sees the preset graph query results, decides what threads to pull,
+        generates 0-3 ad-hoc queries via Haiku, and executes them through
+        safe_read_query(). Returns list of {question, cypher, reasoning, results, result_count}.
+        """
+        if not graph_investigation:
+            return []
+
+        try:
+            from graph_queries import safe_read_query
+        except ImportError:
+            return []
+
+        # Truncate preset results for the prompt (~3000 chars)
+        preset_summary = json.dumps(graph_investigation, default=str)[:3000]
+
+        # Build AD context snippet
+        ad = context.get("ad_feature", {})
+        ad_snippet = f"Designer: {ad.get('designer_name', 'unknown')}, " \
+                     f"Location: {ad.get('location_city', '?')}, {ad.get('location_state', ad.get('location_country', '?'))}, " \
+                     f"Year: {ad.get('issue_year', '?')}"
+
+        system_prompt = """You are Elena, the Researcher agent. You've just seen the results of preset graph queries
+about a person under investigation. Now you can ask follow-up questions — ad-hoc Cypher queries
+that dig into threads the presets couldn't anticipate.
+
+GRAPH SCHEMA:
+- Nodes: Person, Designer, Location, Style, Issue, Author, EpsteinSource
+- Relationships: FEATURED_IN, HIRED, LIVES_IN, HAS_STYLE, PROFILED_BY, APPEARS_IN
+- Person props: name, detective_verdict (YES/null), connection_strength (HIGH/MEDIUM/LOW/null), editor_verdict, community_id, pagerank, betweenness, feature_count
+- Issue props: year, month, issue_id
+- Designer props: name
+- Location props: key (e.g. "New York, New York")
+- Style props: name
+- Author props: name
+
+RULES:
+- READ-ONLY queries only (no CREATE, MERGE, DELETE, SET, REMOVE, DROP, CALL)
+- Use $name parameter for the subject's name (will be provided)
+- Always include a LIMIT clause (max 50)
+- Only ask questions that could CHANGE the investigation's conclusion
+- 0 queries is valid — if nothing stood out, return empty list
+
+Respond with JSON only:
+{"queries": [{"question": "What are you asking?", "cypher": "MATCH ...", "reasoning": "Why this matters"}]}
+
+Max 3 queries. 0 if nothing stood out."""
+
+        user_msg = f"""Subject: {name}
+Verdict: {context.get('combined_verdict', '?')}
+BB status: {context.get('black_book_status', '?')}
+AD context: {ad_snippet}
+
+Preset query results:
+{preset_summary}
+
+What threads do you want to pull? Generate 0-3 ad-hoc Cypher queries."""
+
+        try:
+            client = self._get_client()
+            response = client.messages.create(
+                model=HAIKU_MODEL,
+                max_tokens=1024,
+                system=system_prompt,
+                messages=[{"role": "user", "content": user_msg}],
+            )
+            self._track_api_cost(response, HAIKU_MODEL)
+            parsed = self._parse_json_response(response.content[0].text)
+            queries = parsed.get("queries", [])[:3]
+        except Exception as e:
+            self.log(f"Graph followup generation failed: {e}", level="WARN")
+            return []
+
+        if not queries:
+            self.log("Graph followup: 0 ad-hoc queries (nothing stood out)")
+            return []
+
+        self.log(f"Graph followup: {len(queries)} ad-hoc queries")
+
+        followups = []
+        for q in queries:
+            question = q.get("question", "?")
+            cypher = q.get("cypher", "")
+            reasoning = q.get("reasoning", "")
+
+            if not cypher:
+                continue
+
+            self.log(f"  Cypher: {question}")
+            result = safe_read_query(cypher, {"name": name})
+
+            if isinstance(result, dict) and "error" in result:
+                self.log(f"  Rejected: {result['error']}", level="WARN")
+                continue
+
+            # Cap results at 20 per query
+            capped = result[:20] if isinstance(result, list) else []
+
+            followups.append({
+                "question": question,
+                "cypher": cypher,
+                "reasoning": reasoning,
+                "results": capped,
+                "result_count": len(result) if isinstance(result, list) else 0,
+            })
+
+        return followups
+
     # ═══════════════════════════════════════════════════════════
     # 3-STEP INVESTIGATION PIPELINE
     # ═══════════════════════════════════════════════════════════
@@ -836,19 +946,30 @@ class ResearcherAgent(Agent):
         self.log(f"Graph investigation — {name}")
         graph_investigation = self._investigate_graph(name, context)
 
+        # ── GRAPH FOLLOWUPS (Elena's ad-hoc queries) ──────────
+        graph_followups = self._graph_followup_queries(name, context, graph_investigation)
+
         # ── STEP 3: SYNTHESIS (Sonnet — patterns + final) ─────
         self.log(f"Step 3: Synthesis — {name}")
         time.sleep(SONNET_PAUSE_SECONDS)
 
         pattern_context = self._build_pattern_context(name)
         graph_context = self._get_graph_analytics(name)
-        dossier = self._step_synthesis(context, step2_result, pattern_context, triage, skills, graph_context, graph_investigation)
+        dossier = self._step_synthesis(context, step2_result, pattern_context, triage, skills,
+                                       graph_context, graph_investigation, graph_followups)
 
         # Ensure required fields
         dossier["investigated_at"] = datetime.now().isoformat()
         dossier["combined_verdict"] = combined_verdict
         dossier["triage_result"] = "investigate"
         dossier["triage_reasoning"] = triage.get("reasoning", "")
+
+        # Store followup queries in dossier for audit trail
+        if graph_followups:
+            dossier["graph_followup_queries"] = [
+                {"question": fq["question"], "cypher": fq["cypher"], "result_count": fq["result_count"]}
+                for fq in graph_followups
+            ]
 
         # Tag for image/supabase flow
         dossier["_feature_id"] = feature_id
@@ -1050,7 +1171,7 @@ Analyze the home, the person, and all available evidence.""",
 
     # ── Step 3: Synthesis ──────────────────────────────────────
 
-    def _step_synthesis(self, context, step2_result, pattern_context, triage, skills, graph_context=None, graph_investigation=None):
+    def _step_synthesis(self, context, step2_result, pattern_context, triage, skills, graph_context=None, graph_investigation=None, graph_followups=None):
         """Cross-lead patterns, final strength, complete dossier. Uses Sonnet (~$0.02)."""
         client = self._get_client()
 
@@ -1114,6 +1235,16 @@ Graph evidence interpretation:
         graph_inv_prompt = self._format_graph_investigation(graph_investigation)
         if graph_inv_prompt:
             graph_prompt += graph_inv_prompt
+
+        # Elena's ad-hoc followup queries
+        if graph_followups:
+            graph_prompt += "\n\n## Elena's Ad-Hoc Graph Queries"
+            for fq in graph_followups:
+                graph_prompt += f"\n\n**Q: {fq['question']}**"
+                graph_prompt += f"\nReasoning: {fq['reasoning']}"
+                graph_prompt += f"\nResults ({fq['result_count']} records):"
+                for r in fq.get("results", [])[:10]:
+                    graph_prompt += f"\n  {json.dumps(r, default=str)}"
 
         # Summarize existing dossiers for cross-lead context
         dossier_summaries = self._get_dossier_summaries()
