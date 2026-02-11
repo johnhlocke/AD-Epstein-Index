@@ -181,6 +181,46 @@ async def write_status(agents):
         status["task_board"] = task_board
         status["editor_cost"] = cost
 
+        # Build real-time collaborations from Editor's actual task assignments
+        # instead of the count-based heuristics from agent_status.py
+        rt_collabs = []
+
+        # Active assignments: Editor → Agent (Miranda briefing each worker)
+        for task in task_board.get("in_flight", []):
+            agent = task.get("agent", "")
+            goal = task.get("goal") or task.get("type", "task")
+            if agent and agent in WORKER_NAMES:
+                rt_collabs.append({
+                    "from": "editor",
+                    "to": agent,
+                    "type": "assign",
+                    "label": goal[:60],
+                })
+
+        # Recent completions: Agent → Editor (worker delivering results)
+        now = datetime.now()
+        for task in task_board.get("completed", []):
+            completed_at = task.get("completed_at")
+            if completed_at:
+                try:
+                    t = datetime.fromisoformat(completed_at)
+                    if (now - t).total_seconds() < 15:
+                        agent = task.get("agent") or task.get("completed_by", "")
+                        goal = task.get("goal") or task.get("type", "task")
+                        if agent and agent in WORKER_NAMES:
+                            rt_collabs.append({
+                                "from": agent,
+                                "to": "editor",
+                                "type": "deliver",
+                                "label": f"Done: {goal[:50]}",
+                            })
+                except (ValueError, TypeError):
+                    pass
+
+        # Real-time collabs override count-based when available
+        if rt_collabs:
+            status["collaborations"] = rt_collabs
+
     # Add live activity log entries from agent_activity.log
     # These are real timestamped events (e.g., "Downloaded AD Nov 2013")
     # and replace the static summary lines from agent_status.py

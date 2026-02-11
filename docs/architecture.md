@@ -68,8 +68,10 @@ The system runs as 7 autonomous agents coordinated by the Editor via asyncio.Que
 ```
        Editor decides WHAT                   Agent decides HOW
  ─────────────────────────────       ─────────────────────────────────
- "Find Jan-Mar 2015 issues"    →    Scout searches archive.org API,
-                                     then web, then eBay
+ "Find Jan-Mar 2015 issues"    →    Scout checks AD Archive first (HTTP),
+                                     then archive.org API, then Claude CLI
+ "Scrape AD Archive 2025-01"   →    Courier decodes JWT tocConfig,
+                                     extracts features via Anthropic API
  "Download sim_ad_1995-03"     →    Courier downloads with retry,
                                      resume support, rate limiting
  "Extract features from PDF"   →    Reader does TOC analysis, page
@@ -82,12 +84,12 @@ The system runs as 7 autonomous agents coordinated by the Editor via asyncio.Que
 
 | Agent | Interval | AI Model | Key Behavior |
 |-------|----------|----------|-------------|
-| Scout | 60s | None (API calls) | Built-in archive.org HTTP search + Claude CLI for creative strategies |
+| Scout | 60s | None (API calls) | Three-tier discovery: AD Archive HTTP → archive.org API → Claude CLI |
 | Courier | 5s | Haiku (scraping) | Downloads PDFs + scrapes AD Archive via HTTP/JWT + Anthropic API |
 | Reader | 30s | Claude Sonnet | Extracts homeowner data via Vision API, TOC + article pages |
 | Detective | 180s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright (batched) |
 | Researcher | 120s | Claude Haiku | Builds dossiers with pattern analysis + home analysis |
-| Editor | event-driven | Claude Opus | Central coordinator: event queue replaces polling, plans tasks, validates results, commits to Supabase |
+| Editor | event-driven | Sonnet (routine) / Opus (human+quality) | Central coordinator: event queue, plans tasks, validates results, commits to Supabase |
 | Designer | 600s | Claude Haiku | Learns design patterns from training sources |
 
 ### Editor Coordinator Model (Event-Driven Hub-and-Spoke)
@@ -138,6 +140,7 @@ The Editor blocks on a single `asyncio.Queue` that receives events from 4 backgr
 
 **Strategic assessment (every 5 min via `timer_strategic` event, OR immediately on `human_message` event):**
 - `_strategic_assessment()` — call Claude for complex decisions, handle human messages
+- **Model selection:** Uses Sonnet for routine status checks (task routing, progress). Switches to Opus when human messages are present or quality issues need judgment (nulls, duplicates, near-duplicates, xref leads).
 
 **Event batching:**
 - `_drain_pending_events()` — after handling one event, drains any that accumulated during processing (e.g., multiple agent results arriving during a long LLM call). Batches `agent_result` events into a single `_process_results()` call for efficiency.
@@ -317,7 +320,7 @@ Scout posts: "archive.org rate limiting — slow down" (tag: warning)
 ### Orchestrator (`src/orchestrator.py`)
 - Launches all 7 agents as async tasks
 - Wires Editor with worker references (Editor.workers = all other agents)
-- Writes `status.json` every 5 seconds (merges live agent data with disk-based stats)
+- Writes `status.json` every 2 seconds (merges live agent data with disk-based stats)
 - Includes Editor's task board (in_flight/completed/failed) in status.json
 - Overlays `editor_state` for dashboard sprite animation
 - Processes pause/resume commands from `data/agent_commands.json`
@@ -405,16 +408,19 @@ Editor._commit_investigation()
 ## Data Flow
 
 ### Path A: archive.org (PDF pipeline)
-1. **Discover** — Query archive.org API for AD magazine text items, parse month/year, upsert to Supabase issues table
-2. **Download** — Fetch PDFs from archive.org with rate limiting and resume support
-3. **Extract** — Convert PDF pages to PNG (pdftoppm at 150 DPI), send to Claude Sonnet for structured data extraction
-4. **Load** — Insert issues and features into Supabase with duplicate detection
+1. **Discover** — Scout checks AD Archive first (Tier 1), then archive.org API (Tier 2), then Claude CLI (Tier 3)
+2. **Editor commits** — Upserts issue to Supabase, cascades `download_pdf` to Courier
+3. **Download** — Courier fetches PDF from archive.org with rate limiting and resume support
+4. **Editor commits** — Marks issue `downloaded`, cascades `extract_features` to Reader
+5. **Extract** — Reader converts PDF pages to PNG (pdftoppm 150 DPI), sends to Claude Sonnet
+6. **Editor commits** — Quality gate, loads features to Supabase, cascades to Detective
 
 ### Path B: AD Archive (direct HTTP scraper)
-1. **Discover** — Bulk-insert issues using AD Archive URL pattern (`ad-archive-YYYYMM01`)
-2. **Scrape** — HTTP GET issue page → decode JWT `tocConfig` → extract featured articles (instant)
-3. **Extract** — Single Anthropic API call (Haiku) batch-extracts homeowner/designer/location from article teasers (~3s)
-4. **Load** — Same `_commit_extraction()` → `load_extraction()` path as PDF pipeline
+1. **Discover** — Scout checks AD Archive URL (Tier 1 HTTP check, instant)
+2. **Editor commits** — Upserts issue with `source=ad_archive`, cascades `scrape_features` to Courier
+3. **Scrape+Extract** — Courier decodes JWT `tocConfig` → Anthropic API (Haiku) batch-extracts features (~4s total)
+4. **Editor commits** — Quality gate, loads features to Supabase, cascades to Detective
+5. **Note:** Reader is NOT involved — Courier extracts directly from JWT metadata
 
 ### Shared (both paths)
 5. **Cross-reference** — Match AD homeowner names against DOJ Epstein Library (Playwright) and Little Black Book (text search)
@@ -428,12 +434,12 @@ Editor._commit_investigation()
 | Orchestrator | Launches & coordinates all agents | Python, asyncio (`src/orchestrator.py`) |
 | Agent Base | Shared agent behavior (work loop, pause, progress) | Python (`src/agents/base.py`) |
 | Shared DB | Singleton Supabase client, issue/feature CRUD | Python (`src/db.py`) |
-| Scout Agent | Discover AD issues on archive.org | Python, requests (`src/agents/scout.py`) |
+| Scout Agent | Discover AD issues (AD Archive + archive.org + CLI) | Python, requests (`src/agents/scout.py`) |
 | Courier Agent | Download PDFs | Python, requests (`src/agents/courier.py`) |
 | Reader Agent | Extract homeowner data from PDFs | Python, Claude Sonnet, pdftoppm (`src/agents/reader.py`) |
 | Detective Agent | Cross-reference names against Epstein records | Python, Playwright (`src/agents/detective.py`) |
 | Researcher Agent | Build dossiers on flagged leads | Python, Claude Haiku (`src/agents/researcher.py`) |
-| Editor Agent | Monitor pipeline, process messages, escalate | Python, Claude Haiku (`src/agents/editor.py`) |
+| Editor Agent | Central coordinator, validates, commits to Supabase | Python, Claude Sonnet/Opus (`src/agents/editor.py`) |
 | Designer Agent | Learn design patterns | Python, Claude Haiku (`src/agents/designer.py`) |
 | Dashboard Server | HTTP API for Agent Office | Python, http.server (`src/dashboard_server.py`) |
 | Agent Status | Generate status.json from pipeline data | Python (`src/agent_status.py`) |

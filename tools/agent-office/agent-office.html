@@ -75,35 +75,37 @@ body {
 /* ── Scene Stats Overlay (over brick wall) ── */
 .scene-stats-overlay {
   position: absolute;
-  top: 8px;
-  left: 50%;
-  transform: translateX(-50%);
+  bottom: 16px;
+  left: 8px;
+  right: 8px;
   z-index: 10;
   display: flex;
-  gap: 4px;
+  gap: 3px;
   pointer-events: none;
-  max-width: 100%;
+  transform: scale(0.92);
+  transform-origin: bottom center;
 }
 .top-stat {
+  flex: 1;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding: 5px 7px;
+  gap: 1px;
+  padding: 3px 2px;
   background: rgba(0,0,0,0.6);
   border: 1px solid rgba(245,200,66,0.25);
   backdrop-filter: blur(4px);
   pointer-events: auto;
 }
 .top-stat-value {
-  font-size: 13px;
+  font-size: 12px;
   color: var(--gold);
 }
 .top-stat-label {
-  font-size: 7px;
+  font-size: 6px;
   color: var(--text-dim);
   text-transform: uppercase;
-  letter-spacing: 0px;
+  letter-spacing: 0.5px;
 }
 .top-stat.has-details {
   cursor: context-menu;
@@ -120,7 +122,7 @@ body {
   background: var(--bg-panel);
   border-right: 2px solid var(--border);
   overflow: hidden;
-  padding: 16px 16px 0 16px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -129,11 +131,13 @@ body {
 /* ── Center (Office Scene) ── */
 .center-scene {
   grid-area: center;
+  position: relative;
   overflow: hidden;
   display: flex;
   align-items: flex-start;
   justify-content: center;
-  background: var(--bg-darker);
+  background: var(--bg-darker) url('bg-office-clear-new.png?v=3') top center / cover no-repeat;
+  image-rendering: pixelated;
 }
 
 /* ── Right Panel ── */
@@ -227,7 +231,12 @@ body {
 .inbox-scroll {
   flex: 1;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: #333 transparent;
 }
+.inbox-scroll::-webkit-scrollbar { width: 4px; }
+.inbox-scroll::-webkit-scrollbar-track { background: transparent; }
+.inbox-scroll::-webkit-scrollbar-thumb { background: #333; }
 .inbox-msg {
   padding: 5px 7px;
   margin-bottom: 4px;
@@ -273,7 +282,7 @@ body {
   display: flex;
   gap: 4px;
   padding-top: 10px;
-  margin-top: 8px;
+  margin-top: auto;
   border-top: 1px solid var(--border-subtle);
   flex-shrink: 0;
 }
@@ -310,37 +319,90 @@ body {
 }
 
 /* ══════════════════════════════════════
-   LEFT PANEL — NOW PROCESSING
+   LEFT PANEL — AGENT NETWORK DIAGRAM
    ══════════════════════════════════════ */
-.now-row {
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  margin-bottom: 8px;
-  font-size: 7px;
-  line-height: 1.6;
+.agent-network {
+  position: relative;
+  width: 100%;
+  height: 340px;
 }
-.now-dot {
-  width: 8px;
-  height: 8px;
-  flex-shrink: 0;
-  margin-top: 3px;
+.agent-network svg {
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  pointer-events: none;
+  z-index: 0;
 }
-.now-dot.active {
-  animation: dot-pulse 1s infinite;
+.network-line {
+  stroke: rgba(255,255,255,0.06);
+  stroke-width: 0.75;
+  fill: none;
+  transition: stroke 0.4s, stroke-width 0.4s;
 }
-.now-agent {
-  color: var(--text);
-  font-size: 8px;
-  min-width: 60px;
-  flex-shrink: 0;
+.network-line.active {
+  stroke-width: 0.75;
+  stroke-dasharray: 4 2.5;
+  animation: dash-flow 1.2s linear infinite;
 }
-.now-task {
+@keyframes dash-flow {
+  to { stroke-dashoffset: -13; }
+}
+.network-node {
+  position: absolute;
+  text-align: center;
+  width: 110px;
+  transform: translateX(-50%);
+  z-index: 1;
+  transition: opacity 0.3s;
+  padding: 5px 8px;
+  border: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.3);
+}
+.network-node.idle { opacity: 0.45; }
+.network-node.active {
+  opacity: 1;
+  border-color: rgba(255,255,255,0.2);
+  background: rgba(0,0,0,0.45);
+}
+.network-node.network-editor .network-role {
+  font-size: 11px;
+  letter-spacing: 1.5px;
+}
+.network-node.network-editor.active {
+  filter: drop-shadow(0 0 6px rgba(245,200,66,0.25));
+  border-color: rgba(245,200,66,0.3);
+}
+.network-role {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  line-height: 1.2;
+}
+.network-name {
+  font-size: 6.5px;
   color: var(--text-dim);
-  font-size: 7px;
+  margin-top: 1px;
+  letter-spacing: 0.3px;
+}
+.network-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 0;
+  margin: 3px auto 0;
+}
+.network-dot.active {
+  animation: dot-pulse 1.2s infinite;
+  box-shadow: 0 0 4px currentColor;
+}
+.network-task {
+  font-size: 6px;
+  color: var(--text-muted);
+  margin-top: 3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  max-width: 100%;
+  line-height: 1.4;
 }
 
 /* ══════════════════════════════════════
@@ -349,18 +411,19 @@ body {
 .log-filters {
   display: flex;
   gap: 3px;
-  flex-wrap: wrap;
   margin-bottom: 6px;
 }
 .log-filter-btn {
+  flex: 1;
   font-family: 'Press Start 2P', monospace;
-  font-size: 6px;
-  padding: 3px 5px;
+  font-size: 7px;
+  padding: 5px 4px;
   background: rgba(255,255,255,0.05);
   border: 1px solid var(--border-subtle);
   color: var(--text-dim);
   cursor: pointer;
   transition: all 0.2s;
+  text-align: center;
 }
 .log-filter-btn:hover { color: var(--text); border-color: var(--text-dim); }
 .log-filter-btn.active { color: var(--gold); border-color: var(--gold-dark); background: rgba(245,200,66,0.08); }
@@ -378,12 +441,12 @@ body {
   line-height: 1.6;
 }
 .log-entry:last-child { border-bottom: none; }
-.log-time { color: var(--text-muted); flex-shrink: 0; width: 38px; }
-.log-agent { flex-shrink: 0; width: 68px; }
-.log-event { color: #aaa; }
+.log-time { color: var(--text-muted); flex-shrink: 0; width: 48px; }
+.log-agent { flex-shrink: 0; width: 56px; margin-left: 4px; }
+.log-event { color: #aaa; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* ══════════════════════════════════════
-   RIGHT PANEL — NOTABLE FINDS
+   RIGHT PANEL — CURRENT LEADS
    ══════════════════════════════════════ */
 .find-card {
   padding: 6px 8px;
@@ -509,15 +572,16 @@ body {
 .coverage-cell {
   width: 100%;
   height: 6px;
-  background: rgba(255,255,255,0.04);
+  background: #e74c3c;
+  opacity: 0.6;
   border: 1px solid rgba(255,255,255,0.02);
 }
-.coverage-cell.discovered { background: var(--scout-color); opacity: 0.7; }
-.coverage-cell.downloaded { background: var(--courier-color); opacity: 0.8; }
-.coverage-cell.extracted { background: var(--reader-color); opacity: 0.9; }
-.coverage-cell.error, .coverage-cell.extraction_error { background: #e74c3c; opacity: 0.4; }
-.coverage-cell.skipped_pre1988 { background: rgba(255,255,255,0.08); }
-.coverage-cell.no_pdf { background: rgba(255,255,255,0.08); }
+.coverage-cell.discovered { background: #f1c40f; opacity: 0.7; }
+.coverage-cell.downloaded, .coverage-cell.downloading { background: #f1c40f; opacity: 0.85; }
+.coverage-cell.extracted { background: #2ecc71; opacity: 0.9; }
+.coverage-cell.error, .coverage-cell.extraction_error { background: #e67e22; opacity: 0.6; }
+.coverage-cell.skipped_pre1988 { background: rgba(255,255,255,0.08); opacity: 0.5; }
+.coverage-cell.no_pdf { background: #e74c3c; opacity: 0.35; }
 .coverage-legend {
   display: flex;
   gap: 8px;
@@ -548,7 +612,7 @@ body {
 .office-scene {
   position: relative;
   width: 100%;
-  aspect-ratio: 1792 / 2110;
+  aspect-ratio: 1888 / 2497;
   background: var(--bg-darker);
   overflow: hidden;
 }
@@ -612,20 +676,20 @@ body {
 .chalkboard {
   position: absolute;
   overflow: hidden;
-  padding: 14px 10px 6px;
+  padding: 15px 10px 6px;
   font-family: 'Press Start 2P', monospace;
 }
 .chalkboard-left {
-  left: 0.8%;
-  top: 9%;
-  width: 38%;
-  height: 14%;
+  left: 6.5%;
+  top: 7.5%;
+  width: 30.5%;
+  height: 13.8%;
 }
 .chalkboard-right {
-  left: 61%;
-  top: 9%;
-  width: 38%;
-  height: 14%;
+  left: 63%;
+  top: 7.5%;
+  width: 30.5%;
+  height: 13.8%;
 }
 .chalk-title {
   font-size: 5px;
@@ -751,34 +815,34 @@ body {
 .desk-overlay[data-desk="designer"] {
   width: 25.92%;
   right: 10%;
-  top: 72%;
+  top: 66%;
 }
 .desk-overlay[data-desk="researcher"] {
   width: 27.78%;
   left: 9%;
-  top: 77%;
+  top: 71%;
 }
 /* Mid row — Scout & Courier */
 .desk-overlay[data-desk="scout"] {
   width: 24%;
   left: 10%;
-  top: 42%;
+  top: 36%;
 }
 .desk-overlay[data-desk="courier"] {
   width: 28.51%;
   right: 6%;
-  top: 42%;
+  top: 34%;
 }
 /* Front row — Reader & Detective */
 .desk-overlay[data-desk="reader"] {
   width: 24%;
   left: 10%;
-  top: 58%;
+  top: 52%;
 }
 .desk-overlay[data-desk="detective"] {
   width: 24%;
   right: 10%;
-  top: 58%;
+  top: 51%;
 }
 
 /* ── Agent Character ── */
@@ -799,6 +863,15 @@ body {
   background: radial-gradient(ellipse, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.35) 50%, transparent 70%);
   border-radius: 50%;
   pointer-events: none;
+}
+/* Per-agent shadow fixes */
+.agent-char[data-agent="reader"]::after {
+  bottom: 2px;
+  width: 75%;
+  height: 15%;
+}
+.agent-char[data-agent="researcher"]::after {
+  bottom: 6px;
 }
 
 /* Character images */
@@ -1248,15 +1321,38 @@ body {
 .agent-controls-popup {
   position: fixed;
   display: none;
+  flex-direction: column;
   gap: 6px;
   z-index: 200;
   pointer-events: auto;
-  padding: 6px;
-  background: rgba(0,0,0,0.9);
+  padding: 8px;
+  background: rgba(0,0,0,0.92);
   border: 1px solid var(--gold-dark);
+  max-width: 220px;
 }
 .agent-controls-popup.visible {
   display: flex;
+}
+.agent-popup-header {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding-bottom: 5px;
+  border-bottom: 1px solid var(--border-subtle);
+}
+.agent-popup-name {
+  font-size: 10px;
+  color: var(--agent-color, var(--gold));
+  letter-spacing: 1px;
+}
+.agent-popup-desc {
+  font-size: 7px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.agent-popup-buttons {
+  display: flex;
+  gap: 6px;
 }
 .agent-ctrl-btn {
   font-family: 'Press Start 2P', monospace;
@@ -1404,16 +1500,8 @@ body {
 
   <!-- ── Left Panel ── -->
   <div class="panel-left">
-    <div class="panel-section" id="pipeline-section">
-      <h3>PIPELINE</h3>
-      <div id="pipeline-content"></div>
-    </div>
-    <div class="panel-section" id="queues-section">
-      <h3>QUEUES</h3>
-      <div id="queues-content"></div>
-    </div>
     <div class="panel-section" id="now-section">
-      <h3>NOW PROCESSING</h3>
+      <h3>AGENT NETWORK</h3>
       <div id="now-content"></div>
     </div>
     <div class="panel-section" id="inbox-section" style="flex:1;display:flex;flex-direction:column;min-height:0">
@@ -1428,12 +1516,12 @@ body {
 
   <!-- ── Center — Office Scene ── -->
   <div class="center-scene">
+    <!-- Stats overlay (bottom-aligned with editor message box) -->
+    <div class="scene-stats-overlay" id="top-stats"></div>
     <div class="office-scene-wrapper">
-      <!-- Stats overlay (over brick wall) -->
-      <div class="scene-stats-overlay" id="top-stats"></div>
       <div class="office-scene" id="office-scene">
         <!-- Layer 0: Room background -->
-        <img class="layer-bg" id="room-bg" src="bg-office-clear-new.png"
+        <img class="layer-bg" id="room-bg" src="bg-office-clear-new.png?v=3"
              onerror="this.style.display='none'">
         <!-- CSS fallback floor (hidden when bg loads) -->
         <div class="office-floor" id="fallback-floor">
@@ -1505,7 +1593,7 @@ body {
       </div>
     </div>
     <div class="panel-section" id="finds-section">
-      <h3>NOTABLE FINDS</h3>
+      <h3>CURRENT LEADS</h3>
       <div id="finds-content"></div>
     </div>
     <div class="panel-section" id="throughput-section">
@@ -1529,9 +1617,15 @@ body {
 
 <!-- Agent Controls Popup (shared, positioned at cursor) -->
 <div class="agent-controls-popup" id="agent-controls-popup">
-  <button class="agent-ctrl-btn pause-btn" id="ctrl-pause">PAUSE</button>
-  <button class="agent-ctrl-btn resume-btn" id="ctrl-resume" style="display:none">RESUME</button>
-  <button class="agent-ctrl-btn skills-btn" id="ctrl-skills">SKILLS</button>
+  <div class="agent-popup-header" id="ctrl-header">
+    <div class="agent-popup-name" id="ctrl-name"></div>
+    <div class="agent-popup-desc" id="ctrl-desc"></div>
+  </div>
+  <div class="agent-popup-buttons">
+    <button class="agent-ctrl-btn pause-btn" id="ctrl-pause">PAUSE</button>
+    <button class="agent-ctrl-btn resume-btn" id="ctrl-resume" style="display:none">RESUME</button>
+    <button class="agent-ctrl-btn skills-btn" id="ctrl-skills">SKILLS</button>
+  </div>
 </div>
 
 <!-- Skills Modal -->
@@ -1594,52 +1688,52 @@ const AGENT_NAMES = {
 // ── Agent Config ──
 const AGENT_CONFIG = {
   editor: {
-    homeX: 50, homeY: 78, exitX: 50,
+    homeX: 50, homeY: 86, exitX: 50,
     charHeight: 14,
     color: '#f5c842',
     row: 'editor',
   },
   designer: {
-    homeX: 78, homeY: 88, exitX: 56,
+    homeX: 78, homeY: 80, exitX: 56,
     charHeight: 15.12,
     color: '#e91e63',
     row: 'bottom',
   },
   scout: {
-    homeX: 22, homeY: 52, exitX: 44,
-    charHeight: 14,
+    homeX: 22, homeY: 42, exitX: 44,
+    charHeight: 15.12,
     color: '#e74c3c',
     row: 'mid',
   },
   courier: {
-    homeX: 76, homeY: 52, exitX: 56,
+    homeX: 76, homeY: 42, exitX: 56,
     charHeight: 14,
     color: '#3498db',
     row: 'mid',
   },
   reader: {
-    homeX: 22, homeY: 70, exitX: 44,
-    charHeight: 14,
+    homeX: 22, homeY: 61, exitX: 44,
+    charHeight: 12.88,
     color: '#2ecc71',
     row: 'front',
   },
   detective: {
-    homeX: 78, homeY: 70, exitX: 56,
+    homeX: 78, homeY: 62, exitX: 56,
     charHeight: 14,
     color: '#9b59b6',
     row: 'front',
   },
   researcher: {
-    homeX: 22, homeY: 88, exitX: 44,
+    homeX: 22, homeY: 79, exitX: 44,
     charHeight: 17.96,
     color: '#e67e22',
     row: 'bottom',
   },
 };
-const CORRIDOR_MEET_Y = 55;
+const CORRIDOR_MEET_Y = 49;
 // Chalkboard positions (where Editor stands when visiting boards)
-const BOARD_LEFT_POS = { x: 20, y: 32 };   // Editor's Board (left chalkboard)
-const BOARD_RIGHT_POS = { x: 80, y: 32 };  // Completed/Failed Board (right chalkboard)
+const BOARD_LEFT_POS = { x: 20, y: 26 };   // Editor's Board (left chalkboard)
+const BOARD_RIGHT_POS = { x: 80, y: 26 };  // Completed/Failed Board (right chalkboard)
 
 // ── State ──
 let currentState = null;
@@ -1663,7 +1757,7 @@ let pendingHumanMessages = []; // Optimistic messages not yet in server data
 
 // ── Image Asset Paths ──
 const ASSETS = {
-  bg: 'bg-office-clear-new.png',
+  bg: 'bg-office-clear-new.png?v=3',
   chars: {
     editor:    { front: 'editor_front_trans.png', back: 'editor_back_trans.png',
                   blink: 'editor_front_blink_trans.png', tap: 'editor_front_tap_trans.png',
@@ -1683,7 +1777,7 @@ const ASSETS = {
 // ── Initialize ──
 function init() {
   initAgents();
-  initDeskLabels();
+  // Desk labels removed — agent names shown in right-click popup
   initBackground();
   initLogFilters();
   initEditorBehavior();
@@ -1826,17 +1920,6 @@ function initAgents() {
     bubble.id = `bubble-${id}`;
     uiEl.appendChild(bubble);
 
-    // Only Editor gets a nametag that follows her (no desk)
-    if (id === 'editor') {
-      const tag = document.createElement('div');
-      tag.className = 'agent-nametag';
-      tag.style.color = cfg.color;
-      tag.style.borderColor = cfg.color;
-      tag.textContent = (AGENT_NAMES[id] || id).toUpperCase();
-      tag.id = `tag-${id}`;
-      uiEl.appendChild(tag);
-    }
-
     const dot = document.createElement('div');
     dot.className = 'status-dot idle';
     dot.id = `dot-${id}`;
@@ -1852,46 +1935,7 @@ function initAgents() {
   }
 }
 
-// ── Desk Labels (fixed workstation nametags) ──
-function initDeskLabels() {
-  const uiLayer = document.getElementById('ui-layer');
-
-  // Labels sit 5px outside the nearest desk edge, vertically centered on desk.
-  // Left desks (Scout, Reader) have left edge at 10%; label right-edge → calc(10% - 5px)
-  // Right desks (Courier, Detective, Designer) have right edge at 90%; label left-edge → calc(90% + 5px)
-  const labels = {
-    scout:     { side: 'left',  y: '49%' },
-    reader:    { side: 'left',  y: '66.2%' },
-    courier:   { side: 'right', y: '48.7%' },
-    detective: { side: 'right', y: '67%' },
-    designer:   { side: 'right', y: '85.5%' },
-    researcher: { side: 'left',  y: '85.5%' },
-  };
-
-  for (const [id, pos] of Object.entries(labels)) {
-    const cfg = AGENT_CONFIG[id];
-    const tag = document.createElement('div');
-    tag.className = 'agent-nametag desk-label';
-    tag.id = `tag-${id}`;
-    tag.style.position = 'absolute';
-    tag.style.top = pos.y;
-    tag.style.whiteSpace = 'nowrap';
-    if (pos.side === 'left') {
-      // Anchor label's right edge 5px left of desk's left edge (10%)
-      tag.style.left = 'calc(10% - 5px)';
-      tag.style.transform = 'translate(-100%, -50%)';
-    } else {
-      // Anchor label's left edge 5px right of desk's right edge (90%)
-      tag.style.left = 'calc(90% + 5px)';
-      tag.style.transform = 'translateY(-50%)';
-    }
-    tag.style.color = cfg.color;
-    tag.style.borderColor = cfg.color;
-    tag.textContent = (AGENT_NAMES[id] || id).toUpperCase();
-    tag.style.pointerEvents = 'none';
-    uiLayer.appendChild(tag);
-  }
-}
+// (Desk labels removed — agent identity shown in right-click popup)
 
 // ── Log Filter Buttons ──
 function initLogFilters() {
@@ -1948,17 +1992,17 @@ function updateAgent(agentData) {
       switch (editorState) {
         case 'listening':
           editorSetSprite('listen');
-          updateSpeechBubble('editor', 'Reading your message...');
+          updateSpeechBubble('editor', mirandaSays('human-read'));
           break;
         case 'happy':
           editorSetSprite('happy');
-          updateSpeechBubble('editor', 'Got it! Instructions acknowledged.');
+          updateSpeechBubble('editor', mirandaSays('human-ack'));
           break;
         case 'assessing':
           // Editor studies at desk — behavior loop handles the full studying animation
           if (!editorBusy) {
             editorSetSprite('studying');
-            updateSpeechBubble('editor', 'Analyzing pipeline strategy...');
+            updateSpeechBubble('editor', mirandaSays('strategy'));
           }
           break;
         case 'monitoring':
@@ -2192,77 +2236,248 @@ function moveAgentHome(agentId) {
   if (cfg) moveAgentTo(agentId, cfg.homeX, cfg.homeY, false);
 }
 
-// ── Collaboration System (Hub-and-Spoke: Editor mediates all exchanges) ──
-function triggerCollaboration(fromId, toId, label) {
-  // In hub-and-spoke model, all collaborations route through Editor
-  // If neither party is the editor, Editor visits both sequentially
-  if (fromId !== 'editor' && toId !== 'editor') {
-    editorMeeting(fromId, label);
-    setTimeout(() => editorMeeting(toId, label), 7000);
-    return;
-  }
+// ── Miranda's Voice (personality-driven speech for all editor interactions) ──
+// Inspired by Miranda Priestly: clipped, deadpan, newspaper metaphors, earned warmth
+function mirandaSays(context, label) {
+  const pick = arr => arr[Math.floor(Math.random() * arr.length)];
+  const agentName = label ? label.split(' ').pop() : '';
 
-  // One party is the editor — do a direct Editor↔Agent meeting
-  const agentId = fromId === 'editor' ? toId : fromId;
-  editorMeeting(agentId, label);
+  switch (context) {
+    case 'assign':
+      return pick([
+        `${label}. That's all.`,
+        `${label}. I need this yesterday.`,
+        `${label}. By all means, move at a glacial pace.`,
+        `${label}. Don't disappoint me.`,
+        `${label}. Make it count.`,
+        `${label}. Questions? Good.`,
+      ]);
+    case 'pickup':
+      return pick([
+        'Something just came across my desk.',
+        'New copy for the bullpen.',
+        'Fresh assignment.',
+        'This just moved to the top of the pile.',
+      ]);
+    case 'react':
+      return pick([
+        'Groundbreaking.',
+        'Hmm. Acceptable.',
+        'Finally.',
+        'Not terrible.',
+        'Is that all?',
+        'Adequate. Barely.',
+        'Good. Don\'t let it go to your head.',
+      ]);
+    case 'log':
+      return pick([
+        'For the record.',
+        'Noted.',
+        'Filed. Next.',
+        'On the board.',
+        'That\'s one for the morning edition.',
+      ]);
+    case 'failure':
+      return pick([
+        'Details of your incompetence do not interest me.',
+        'That\'s unfortunate. Try again.',
+        'Unacceptable. Find another way.',
+        'I\'m not angry. I\'m disappointed. Actually, I\'m angry.',
+        'We don\'t print excuses.',
+        'Fix it. I don\'t care how.',
+      ]);
+    case 'failure-log':
+      return pick([
+        'Logging the damage.',
+        'For the post-mortem.',
+        'Strike one.',
+        'On the board. In red.',
+      ]);
+    case 'brief':
+      return pick([
+        `${label}. Keep me posted.`,
+        `${label}. That's all.`,
+        `${label}. Make it happen.`,
+        `${label}. Don't waste my time.`,
+      ]);
+    case 'human-read':
+      return pick([
+        'I\'m reading. Don\'t hover.',
+        'Message received.',
+        'Let me see what the owner wants.',
+        'New directive from upstairs.',
+      ]);
+    case 'human-ack':
+      return pick([
+        'I\'ll take it under advisement.',
+        'Noted. We\'ll adjust.',
+        'Consider it done.',
+        'Understood. Moving on.',
+      ]);
+    case 'strategy':
+      return pick([
+        'Let me think about this.',
+        'Running the numbers.',
+        'Analyzing the pipeline.',
+        'Something doesn\'t add up.',
+      ]);
+    case 'check-watch':
+      return pick([
+        'We\'re behind schedule.',
+        'Tick tock.',
+        'Time waits for no one.',
+        'Where does the day go.',
+      ]);
+    case 'study-board':
+      return pick([
+        'Let\'s see what we\'re working with.',
+        'Reviewing the board.',
+        'Status check.',
+        'Where do we stand.',
+      ]);
+    case 'study-results':
+      return pick([
+        'And the results are...',
+        'Let\'s see what came back.',
+        'Show me what you\'ve got.',
+      ]);
+    case 'gather-start':
+      return pick([
+        'Status. All of you. Now.',
+        'Reports. On my desk.',
+        'Everyone. Briefing. Now.',
+        'Drop what you\'re doing. Status report.',
+      ]);
+    case 'gather-done':
+      return pick([
+        'That\'s all.',
+        'Carry on.',
+        'Back to work. All of you.',
+        'Dismissed.',
+      ]);
+    default:
+      return label || 'That\'s all.';
+  }
 }
 
-/** Editor walks to agent's row, both glow yellow, exchange info, return. */
-async function editorMeeting(agentId, label) {
-  if (editorBusy) return;
-  editorBusy = true;
+// ── Collaboration System (Hub-and-Spoke: Editor mediates all exchanges) ──
+// Queue ensures meetings execute sequentially without being dropped by editorBusy
+const meetingQueue = [];
+let processingQueue = false;
 
+async function processMeetingQueue() {
+  if (processingQueue) return;
+  processingQueue = true;
+  while (meetingQueue.length > 0) {
+    // Wait for any direct editor behavior to finish
+    while (editorBusy) await sleep(300);
+    editorBusy = true;
+    const { agentId, label, type } = meetingQueue.shift();
+    await doCollabMeeting(agentId, label, type);
+    editorBusy = false;
+    await sleep(500);
+  }
+  processingQueue = false;
+}
+
+function triggerCollaboration(fromId, toId, label, type) {
+  // In hub-and-spoke model, all collaborations route through Editor
+  if (fromId !== 'editor' && toId !== 'editor') {
+    meetingQueue.push({ agentId: fromId, label, type: type || 'handoff' });
+    meetingQueue.push({ agentId: toId, label, type: type || 'handoff' });
+    processMeetingQueue();
+    return;
+  }
+  const agentId = fromId === 'editor' ? toId : fromId;
+  const collabType = type || (fromId === 'editor' ? 'assign' : 'deliver');
+  meetingQueue.push({ agentId, label, type: collabType });
+  processMeetingQueue();
+}
+
+/**
+ * Dispatches to the right animation based on collaboration type:
+ *   'assign'  — Miranda picks up clipboard from board, walks to agent, delivers task
+ *   'deliver' — Miranda walks to agent, collects result (happy), logs on completed board
+ *   'handoff' — Simple walk-and-talk exchange
+ * Called from the queue with editorBusy already set.
+ */
+async function doCollabMeeting(agentId, label, type) {
   const target = AGENT_CONFIG[agentId];
-  if (!target) { editorBusy = false; return; }
+  if (!target) return;
   const cfg = AGENT_CONFIG.editor;
-
   const editorChar = agentCharElements['editor'];
   const targetChar = agentCharElements[agentId];
 
   if (soundOn) playCollabSound();
 
-  // Yellow glow on both Editor and target agent
+  // Yellow glow on both
   if (editorChar) editorChar.classList.add('editor-engage');
   if (targetChar) {
     targetChar.classList.remove('hub-working', 'hub-waiting', 'hub-bored', 'hub-done');
     targetChar.classList.add('editor-engage', 'show-front');
   }
-
-  // Agent steps toward the aisle
   moveAgentTo(agentId, target.exitX, target.homeY, true);
 
-  // Editor walks toward agent's row in center aisle
-  const goingUp = target.homeY < cfg.homeY;
-  editorSetSprite(goingUp ? 'back' : 'front');
-  moveAgentTo('editor', 50, target.homeY, !goingUp);
-  if (goingUp) editorSetSprite('back');
-  await sleep(1800);
+  if (type === 'assign') {
+    // ── ASSIGN: Miranda grabs clipboard from board, walks to agent ──
+    await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
+    editorSetSprite('clipboard');
+    updateSpeechBubble('editor', mirandaSays('pickup'));
+    await sleep(800);
+    await walkEditorTo(50, target.homeY, { carrySprite: 'clipboard' });
+    editorSetSprite('front');
+    updateSpeechBubble('editor', mirandaSays('assign', label));
+    await sleep(2500);
 
-  // Face each other and interact
-  editorSetSprite('front');
-  if (label) {
-    updateSpeechBubble('editor', label);
+    // Cleanup
+    if (editorChar) editorChar.classList.remove('editor-engage');
+    if (targetChar) targetChar.classList.remove('editor-engage', 'show-front');
+    moveAgentHome(agentId);
+    await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
+
+  } else if (type === 'deliver') {
+    // ── DELIVER: Miranda walks to agent, collects result, logs on board ──
+    await walkEditorTo(50, target.homeY);
+    // Agent speaks their result first
+    if (label) updateSpeechBubble(agentId, label);
+    await sleep(1500);
+    // Miranda reacts in character
+    editorSetSprite('happy');
+    updateSpeechBubble('editor', mirandaSays('react'));
+    await sleep(2000);
+
+    // Clear glow, agent returns while Miranda heads to completed board
+    if (editorChar) editorChar.classList.remove('editor-engage');
+    if (targetChar) targetChar.classList.remove('editor-engage', 'show-front');
+    moveAgentHome(agentId);
+    await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
+    editorSetSprite('clipboard');
+    updateSpeechBubble('editor', mirandaSays('log'));
+    await sleep(1500);
+    await walkEditorTo(cfg.homeX, cfg.homeY, { finalSprite: 'front' });
+
   } else {
-    updateSpeechBubble('editor', `Briefing ${agentId}...`);
+    // ── HANDOFF: Simple walk-and-talk ──
+    const goingUp = target.homeY < cfg.homeY;
+    editorSetSprite(goingUp ? 'back' : 'front');
+    moveAgentTo('editor', 50, target.homeY, !goingUp);
+    if (goingUp) editorSetSprite('back');
+    await sleep(1800);
+    editorSetSprite('front');
+    updateSpeechBubble('editor', mirandaSays('brief', label));
+    await sleep(2500);
+
+    // Cleanup
+    if (editorChar) editorChar.classList.remove('editor-engage');
+    if (targetChar) targetChar.classList.remove('editor-engage', 'show-front');
+    moveAgentHome(agentId);
+    const goingHome = cfg.homeY > target.homeY;
+    editorSetSprite(goingHome ? 'front' : 'back');
+    moveAgentTo('editor', cfg.homeX, cfg.homeY, goingHome);
+    if (!goingHome) editorSetSprite('back');
+    await sleep(1800);
+    editorSetSprite('front');
   }
-  await sleep(2500);
-
-  // Clear engagement glow
-  if (editorChar) editorChar.classList.remove('editor-engage');
-  if (targetChar) targetChar.classList.remove('editor-engage', 'show-front');
-
-  // Agent returns to desk
-  moveAgentHome(agentId);
-
-  // Editor returns home
-  const goingHome = cfg.homeY > target.homeY;
-  editorSetSprite(goingHome ? 'front' : 'back');
-  moveAgentTo('editor', cfg.homeX, cfg.homeY, goingHome);
-  if (!goingHome) editorSetSprite('back');
-  await sleep(1800);
-
-  editorSetSprite('front');
-  editorBusy = false;
 }
 
 function renderCollaborations(collaborations) {
@@ -2275,8 +2490,8 @@ function renderCollaborations(collaborations) {
     return true;
   });
   if (newCollabs.length > 0) {
-    newCollabs.forEach((c, i) => {
-      setTimeout(() => triggerCollaboration(c.from, c.to, c.label || ''), i * 5000);
+    newCollabs.forEach((c) => {
+      triggerCollaboration(c.from, c.to, c.label || '', c.type || 'handoff');
     });
   }
 }
@@ -2549,16 +2764,70 @@ function renderNowProcessing(now) {
     container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">Idle</div>';
     return;
   }
-  const agentColors = { editor: '#f5c842', scout: '#e74c3c', courier: '#3498db', reader: '#2ecc71', detective: '#9b59b6', researcher: '#e67e22', designer: '#e91e63' };
-  container.innerHTML = Object.entries(now).map(([id, info]) => {
-    const color = agentColors[id] || '#888';
-    const activeClass = info.active ? ' active' : '';
-    return `<div class="now-row">
-      <div class="now-dot${activeClass}" style="background:${color}"></div>
-      <span class="now-agent" style="color:${color}">${AGENT_NAMES[id] || id.charAt(0).toUpperCase() + id.slice(1)}</span>
-      <span class="now-task">${escHtml(info.task)}</span>
+
+  const colors = { editor: '#f5c842', scout: '#e74c3c', courier: '#3498db', reader: '#2ecc71', detective: '#9b59b6', researcher: '#e67e22', designer: '#e91e63' };
+  const roles = { scout: 'Scout', courier: 'Courier', reader: 'Reader', editor: 'Editor', detective: 'Detective', researcher: 'Researcher', designer: 'Designer' };
+
+  // Zigzag layout: top-left → center → right → center → left → right → center-bottom
+  const positions = {
+    scout:      { x: 18, y: 2 },
+    courier:    { x: 50, y: 16 },
+    reader:     { x: 82, y: 30 },
+    editor:     { x: 50, y: 40 },
+    detective:  { x: 18, y: 62 },
+    researcher: { x: 82, y: 76 },
+    designer:   { x: 50, y: 91 }
+  };
+
+  // Hub-and-spoke: Miranda (editor) connects to every agent
+  const spokes = ['scout', 'courier', 'reader', 'detective', 'researcher', 'designer'];
+
+  // Build SVG connection lines — all radiate from Miranda
+  // A spoke lights up when its agent is active (Miranda is always the other end)
+  const ep = positions.editor;
+  let svgLines = '';
+  for (const agent of spokes) {
+    const ap = positions[agent];
+    const agentActive = now[agent]?.active;
+    // Spoke activates when the agent is working — Miranda is implicitly the other end
+    const color = agentActive ? colors[agent] : 'rgba(255,255,255,0.06)';
+    const cls = agentActive ? 'network-line active' : 'network-line';
+    // Connect from editor box center toward agent box edge
+    const ey = ep.y + 4;
+    const ay = ap.y < ep.y ? ap.y + 6 : ap.y + 1;
+    svgLines += `<line x1="${ep.x}" y1="${ey}" x2="${ap.x}" y2="${ay}" class="${cls}" style="stroke:${color}" />`;
+  }
+
+  // Miranda is active if she's working OR any worker agent is active
+  const anyWorkerActive = spokes.some(a => now[a]?.active);
+  const editorIsActive = now.editor?.active || anyWorkerActive;
+
+  // Build agent nodes
+  const order = ['scout', 'courier', 'reader', 'editor', 'detective', 'researcher', 'designer'];
+  let nodes = '';
+  for (const id of order) {
+    const pos = positions[id];
+    const info = now[id] || { task: 'Offline', active: false };
+    const color = colors[id];
+    const isActive = id === 'editor' ? editorIsActive : info.active;
+    const isEditor = id === 'editor';
+    const cls = `network-node ${isActive ? 'active' : 'idle'}${isEditor ? ' network-editor' : ''}`;
+    const roleColor = isActive ? color : 'var(--text-dim)';
+
+    nodes += `<div class="${cls}" style="left:${pos.x}%;top:${pos.y}%">
+      <div class="network-role" style="color:${roleColor}">${roles[id]}</div>
+      <div class="network-name">${AGENT_NAMES[id] || id}</div>
+      <div class="network-dot${isActive ? ' active' : ''}" style="background:${color}"></div>
+      <div class="network-task">${escHtml(info.task)}</div>
     </div>`;
-  }).join('');
+  }
+
+  container.innerHTML = `<div class="agent-network">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none">
+      ${svgLines}
+    </svg>
+    ${nodes}
+  </div>`;
 }
 
 // ══════════════════════════════════════
@@ -2607,7 +2876,7 @@ const _prevFinds = new Set();
 function renderNotableFinds(finds) {
   const container = document.getElementById('finds-content');
   if (!finds || !finds.length) {
-    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No notable finds yet</div>';
+    container.innerHTML = '<div style="font-size:5px;color:var(--text-dim)">No current leads yet</div>';
     return;
   }
   const currentKeys = new Set(finds.map(f => f.name));
@@ -2974,10 +3243,9 @@ function renderCoverageMap(coverageMap) {
   html += '</div>';
 
   html += `<div class="coverage-legend">
-    <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:var(--scout-color);opacity:0.7"></span>Disc.</div>
-    <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:var(--courier-color);opacity:0.8"></span>Down.</div>
-    <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:var(--reader-color);opacity:0.9"></span>Extr.</div>
-    <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:rgba(255,255,255,0.04)"></span>Missing</div>
+    <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:#e74c3c;opacity:0.6"></span>Unscouted</div>
+    <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:#f1c40f;opacity:0.7"></span>Scouted</div>
+    <div class="coverage-legend-item"><span class="coverage-legend-swatch" style="background:#2ecc71;opacity:0.9"></span>Complete</div>
   </div>`;
 
   el.innerHTML = html;
@@ -2988,6 +3256,16 @@ function renderCoverageMap(coverageMap) {
 // AGENT CONTROLS — Floating Popup
 // ══════════════════════════════════════
 let activeControlAgent = null;
+
+const AGENT_SUMMARIES = {
+  editor:     'Pipeline supervisor. Assigns tasks, reviews output, commits to Supabase.',
+  scout:      'Discovery specialist. Finds AD issues on archive.org and the AD Archive.',
+  courier:    'Download agent. Retrieves PDFs and delivers them for extraction.',
+  reader:     'Extraction specialist. Reads magazines and pulls homeowner data.',
+  detective:  'Cross-reference agent. Checks names against Epstein records.',
+  researcher: 'Investigation lead. Builds dossiers on confirmed matches.',
+  designer:   'Frontend designer. Studies patterns and builds the Phase 3 website.',
+};
 
 function showAgentControlsPopup(agentId, clientX, clientY) {
   const popup = document.getElementById('agent-controls-popup');
@@ -3000,6 +3278,11 @@ function showAgentControlsPopup(agentId, clientX, clientY) {
   // Set button colors to match the agent
   const cfg = AGENT_CONFIG[agentId];
   if (cfg) popup.style.setProperty('--agent-color', cfg.color);
+
+  // Populate header
+  const name = AGENT_NAMES[agentId] || agentId;
+  document.getElementById('ctrl-name').textContent = name.toUpperCase();
+  document.getElementById('ctrl-desc').textContent = AGENT_SUMMARIES[agentId] || '';
 
   popup.classList.add('visible');
 
@@ -3215,8 +3498,6 @@ function renderAll(data) {
   safe(() => renderAgents(data.agents), 'agents');
   // Diff-gated sections — skip render if data unchanged
   if (sectionChanged('stats', data))           safe(() => renderTopStats(data.stats), 'topStats');
-  if (sectionChanged('pipeline', data))        safe(() => renderPipeline(data.pipeline), 'pipeline');
-  if (sectionChanged('queue_depths', data))    safe(() => renderQueueDepths(data.queue_depths), 'queueDepths');
   if (sectionChanged('now_processing', data))  safe(() => renderNowProcessing(data.now_processing), 'nowProcessing');
   if (sectionChanged('editor_inbox', data))    safe(() => renderInbox(data.editor_inbox), 'inbox');
   if (sectionChanged('log', data))             safe(() => renderLogWithFilters(data.log), 'log');
@@ -3266,18 +3547,6 @@ const DEMO_DATA = {
       { agent: "detective", text: "Cross-referenced Miranda Brooks against Black Book — exact match", outcome: "decision", time: "10:28 PM" },
     ]}
   ],
-  pipeline: [
-    { stage: "Discovered", agent: "scout", count: 163, total: 444, color: "#e74c3c" },
-    { stage: "Downloaded", agent: "courier", count: 75, total: 163, color: "#3498db" },
-    { stage: "Extracted", agent: "reader", count: 12, total: 75, color: "#2ecc71" },
-    { stage: "Cross-Ref'd", agent: "detective", count: 1, total: 89, color: "#9b59b6" },
-    { stage: "Investigated", agent: "researcher", count: 0, total: 1, color: "#e67e22" }
-  ],
-  queue_depths: [
-    { label: "awaiting download", count: 87, color: "#3498db" },
-    { label: "awaiting extraction", count: 63, color: "#2ecc71" },
-    { label: "awaiting xref", count: 88, color: "#9b59b6" }
-  ],
   now_processing: {
     editor: { task: "Pipeline GOOD — all agents active", active: true },
     scout: { task: "Found 163/444 (281 remaining)", active: true },
@@ -3310,7 +3579,8 @@ const DEMO_DATA = {
     ]
   },
   collaborations: [
-    { from: "editor", to: "reader", type: "task_assign", label: "New extraction task" }
+    { from: "editor", to: "reader", type: "assign", label: "Extract features from AD Jan 2015" },
+    { from: "scout", to: "editor", type: "deliver", label: "Done: Discovered 12 new issues" }
   ],
   log: [
     { time: "14:32", agent: "Courier", event: "Downloading AD March 2005..." },
@@ -3463,7 +3733,7 @@ async function editorCheckWatch() {
   if (editorBusy) return;
   editorBusy = true;
   editorSetSprite('watch');
-  updateSpeechBubble('editor', 'Hmm, checking the time...');
+  updateSpeechBubble('editor', mirandaSays('check-watch'));
   await sleep(2500);
   editorSetSprite('front');
   editorBusy = false;
@@ -3494,19 +3764,19 @@ async function editorStudyBoards() {
   const cfg = AGENT_CONFIG.editor;
 
   // Walk to Editor's Board (left chalkboard) via aisle
-  updateSpeechBubble('editor', 'Let me check the board...');
+  updateSpeechBubble('editor', mirandaSays('study-board'));
   await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
 
   // Study the board
   editorSetSprite('studying');
-  updateSpeechBubble('editor', 'Reviewing assignments...');
+  updateSpeechBubble('editor', mirandaSays('study-board'));
   await sleep(3000);
 
   // Walk to Completed/Failed board (right chalkboard) — same row, horizontal
   await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y);
 
   editorSetSprite('studying');
-  updateSpeechBubble('editor', 'Checking results...');
+  updateSpeechBubble('editor', mirandaSays('study-results'));
   await sleep(2500);
 
   // Walk back home via aisle
@@ -3541,7 +3811,7 @@ async function editorVisitAgent(agentId) {
 
   // Turn to face the agent and interact
   editorSetSprite('front');
-  updateSpeechBubble('editor', `Checking in with ${agentId}...`);
+  updateSpeechBubble('editor', mirandaSays('brief', `Status update from ${agentId}`));
   await sleep(2000);
 
   // Clear engagement glow
@@ -3570,7 +3840,7 @@ async function editorGatherReports() {
   const cfg = AGENT_CONFIG.editor;
   const editorChar = agentCharElements['editor'];
 
-  updateSpeechBubble('editor', 'Time for status reports!');
+  updateSpeechBubble('editor', mirandaSays('gather-start'));
   await sleep(1000);
 
   for (const agentId of workers) {
@@ -3597,7 +3867,7 @@ async function editorGatherReports() {
 
     // Interact
     editorSetSprite('front');
-    updateSpeechBubble('editor', `Report, ${agentId}?`);
+    updateSpeechBubble('editor', mirandaSays('gather-start'));
     await sleep(1500);
 
     // Clear engagement glow, agent returns to desk
@@ -3612,7 +3882,7 @@ async function editorGatherReports() {
   editorSetSprite('front');
   await sleep(1500);
 
-  updateSpeechBubble('editor', 'All reports collected!');
+  updateSpeechBubble('editor', mirandaSays('gather-done'));
   editorBusy = false;
 }
 
@@ -3709,7 +3979,7 @@ async function editorAssignTask(agentId, label) {
   await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y);
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', 'New assignment...');
+  updateSpeechBubble('editor', mirandaSays('pickup'));
   await sleep(1500);
 
   // Step 2: Yellow glow on both — agent steps to aisle
@@ -3725,7 +3995,7 @@ async function editorAssignTask(agentId, label) {
 
   // Step 4: Face agent, deliver task
   editorSetSprite('front');
-  updateSpeechBubble('editor', label);
+  updateSpeechBubble('editor', mirandaSays('assign', label));
   await sleep(2500);
 
   // Step 5: Clear engagement, agent returns
@@ -3766,7 +4036,7 @@ async function editorCollectResult(agentId, label) {
 
   // Collect and show happy face
   editorSetSprite('happy');
-  updateSpeechBubble('editor', 'Good work!');
+  updateSpeechBubble('editor', mirandaSays('react'));
   await sleep(2000);
 
   // Clear engagement
@@ -3778,7 +4048,7 @@ async function editorCollectResult(agentId, label) {
   await walkEditorTo(BOARD_RIGHT_POS.x, BOARD_RIGHT_POS.y, { carrySprite: 'clipboard' });
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', 'Logging result...');
+  updateSpeechBubble('editor', mirandaSays('log'));
   await sleep(1800);
 
   // Walk home via aisle
@@ -3816,7 +4086,7 @@ async function editorHandleFailure(agentId, label) {
 
   // Show failure/concerned face
   editorSetSprite('failure');
-  updateSpeechBubble('editor', 'Let\u2019s try a different approach...');
+  updateSpeechBubble('editor', mirandaSays('failure'));
   await sleep(2500);
 
   // Clear glow
@@ -3828,7 +4098,7 @@ async function editorHandleFailure(agentId, label) {
   await walkEditorTo(BOARD_LEFT_POS.x, BOARD_LEFT_POS.y, { carrySprite: 'clipboard' });
 
   editorSetSprite('clipboard');
-  updateSpeechBubble('editor', 'Logging failure...');
+  updateSpeechBubble('editor', mirandaSays('failure-log'));
   await sleep(1800);
 
   // Walk home via aisle
@@ -3986,20 +4256,18 @@ function playCollabSound() {
 // ── Scale to fit window ──
 function scaleDashboard() {
   const el = document.querySelector('.dashboard');
-  const scaleX = window.innerWidth / 1920;
-  const scaleY = window.innerHeight / 1080;
-  const scale = Math.min(scaleX, scaleY);
+  // Scale to fill viewport width exactly — no side gaps
+  const scale = window.innerWidth / 1920;
+  // Stretch height to fill viewport
+  const naturalHeight = window.innerHeight / scale;
+  el.style.height = naturalHeight + 'px';
   el.style.transform = `scale(${scale})`;
-  // Sync left panel bottom with office scene bottom
+  el.style.marginLeft = '0px';
+  el.style.marginTop = '0px';
   requestAnimationFrame(syncPanelHeight);
 }
 function syncPanelHeight() {
-  const wrapper = document.querySelector('.office-scene-wrapper');
-  const leftPanel = document.querySelector('.panel-left');
-  if (wrapper && leftPanel) {
-    // Use offsetHeight — unaffected by CSS transform scale
-    leftPanel.style.maxHeight = wrapper.offsetHeight + 'px';
-  }
+  // No-op: panels now stretch to full dashboard height via grid
 }
 scaleDashboard();
 window.addEventListener('resize', scaleDashboard);

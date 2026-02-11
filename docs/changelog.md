@@ -6,6 +6,48 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-10 (Session 17)
+
+### Changed — Editor: Sonnet/Opus Model Split
+- **Cost optimization**: Editor now uses Sonnet (`claude-sonnet-4-5-20250929`) for routine status assessments and Opus (`claude-opus-4-6`) only for human interaction and quality reviews
+- Added `OPUS_MODEL` constant and `_has_quality_issues(report)` method — checks for supabase nulls, duplicates, near-duplicates, reextraction needs, and xref leads
+- `_strategic_assessment()` determines `needs_opus` based on human messages present OR quality issues detected
+- `_call_haiku()` accepts `use_opus=False` parameter, logs model selection
+- Estimated 80%+ of assessment cycles use Sonnet (~$3/$15 per 1M tokens vs ~$15/$75 for Opus)
+
+### Fixed — AD Archive Cascade in Editor
+- `_commit_discovered_issues()` was sending `download_pdf` tasks for AD Archive issues — identifiers like `ad-archive-YYYYMM01` don't exist on archive.org, so these would fail silently
+- Added source filter: `"ad_archive" not in i.get("source", "")` to archive.org download cascade
+- Added immediate `scrape_features` cascade for AD Archive issues — no longer waits for 30s planning cycle
+- Fixed narration: dynamic source counting replaces hardcoded "on archive.org"
+
+### Fixed — Scout Legacy `work()` Three-Tier Bypass
+- Scout's `work()` fallback (runs when no Editor task assigned) was using legacy single-tier Claude CLI path, bypassing the three-tier `_execute_discover()` strategy (AD Archive HTTP → archive.org API → CLI)
+- Race condition: Scout runs before Editor can assign tasks, falls through to `work()`, skips AD Archive tier
+- Fixed: `work()` now self-assigns a `discover_issues` Task and routes through `_execute_discover()` for fill_gaps strategy
+
+### Fixed — Bug Fixes (from prior session, first documented here)
+- `db.py`: Added `@retry_supabase` decorator with exponential backoff (3 retries, 2s base) for transient Supabase failures
+- Cross-reference atomicity: `_commit_cross_reference()` records ledger success AFTER Supabase write, not before
+- Cost tracking: API cost accumulator in agent status
+- Scout priority inversion: fix_dates no longer blocks discovery
+- Stale task cleanup: Editor clears orphaned in-progress tasks on startup
+- Orphan xref cleanup: Removes cross-references for deleted features
+
+### Data — Intentional Reset
+- All Supabase tables and local data directories wiped per user request to rebuild pipeline from clean slate
+- Agent episodic memory (1,127 episodes) preserved in `data/agent_memory/episodes.json`
+
+### Verified — Integration Test
+- Full pipeline flow verified end-to-end in 40 seconds:
+  - Scout discovered 6 issues on AD Archive (2025-01 through 2025-06)
+  - Editor committed all 6 to Supabase
+  - Editor cascaded `scrape_features` to Courier for 2025-01
+  - Courier scraped JWT, extracted 5 features (Kelly Ripa, Lorenzo Hadar, Markham Roberts, 2 Anonymous)
+  - Editor loaded 5 features to Supabase, queued Detective for 4 names
+
+---
+
 ## 2026-02-10 (Session 16)
 
 ### Database — Cross-References → Supabase

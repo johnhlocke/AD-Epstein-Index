@@ -102,12 +102,16 @@ PLAN_INTERVAL = 30       # seconds between planning cycles
 STRATEGIC_INTERVAL = 180  # seconds between LLM assessments (3 min)
 MAX_TASK_FAILURES = 3     # before giving up on an identifier/name
 
-# Opus pricing per 1M tokens (used for strategic assessments)
-HAIKU_INPUT_COST_PER_1M = 15.00
-HAIKU_OUTPUT_COST_PER_1M = 75.00
+# Per-model pricing (cost per 1M tokens)
+MODEL_PRICING = {
+    "opus": (15.00, 75.00),    # input, output
+    "sonnet": (3.00, 15.00),
+    "haiku": (1.00, 5.00),
+}
 
-# Sonnet model for dossier review (~$0.005 per review)
-SONNET_MODEL = "claude-sonnet-4-5-20250929"
+# Model selection
+OPUS_MODEL = "claude-opus-4-6"         # Human interaction, quality reviews
+SONNET_MODEL = "claude-sonnet-4-5-20250929"  # Routine assessments, dossier reviews
 SONNET_INPUT_COST_PER_1M = 3.00
 SONNET_OUTPUT_COST_PER_1M = 15.00
 
@@ -196,8 +200,17 @@ class EditorAgent(Agent):
         usage = response.usage
         input_tokens = usage.input_tokens
         output_tokens = usage.output_tokens
-        cost = (input_tokens / 1_000_000 * HAIKU_INPUT_COST_PER_1M +
-                output_tokens / 1_000_000 * HAIKU_OUTPUT_COST_PER_1M)
+        # Detect model tier from response for accurate pricing
+        model_id = getattr(response, "model", "") or ""
+        if "opus" in model_id:
+            tier = "opus"
+        elif "sonnet" in model_id:
+            tier = "sonnet"
+        else:
+            tier = "haiku"
+        input_cost, output_cost = MODEL_PRICING[tier]
+        cost = (input_tokens / 1_000_000 * input_cost +
+                output_tokens / 1_000_000 * output_cost)
         self._api_calls += 1
         self._total_input_tokens += input_tokens
         self._total_output_tokens += output_tokens
@@ -441,6 +454,7 @@ class EditorAgent(Agent):
 
         elif event.type == "timer_plan":
             self._last_plan_time = _time.time()
+            self._cleanup_stale_tasks()
             await self._plan_and_assign()
 
         elif event.type == "timer_strategic":
@@ -512,6 +526,7 @@ class EditorAgent(Agent):
                     "type": result.task_type,
                     "goal": task_info.get("task", {}).get("goal", result.task_type),
                     "completed_by": agent_name,
+                    "completed_at": datetime.now().isoformat(),
                 })
                 if len(self._tasks_completed) > 20:
                     self._tasks_completed = self._tasks_completed[-20:]
@@ -537,24 +552,28 @@ class EditorAgent(Agent):
         task_type = result.task_type
         data = result.result
 
-        if task_type == "discover_issues":
-            self._commit_discovered_issues(data)
-        elif task_type == "fix_dates":
-            self._commit_fixed_dates(data)
-        elif task_type == "download_pdf":
-            self._commit_download(data)
-        elif task_type == "extract_features":
-            self._commit_extraction(data)
-        elif task_type == "reextract_features":
-            self._commit_extraction(data)
-        elif task_type == "cross_reference":
-            self._commit_cross_reference(data)
-        elif task_type == "investigate_lead":
-            self._commit_investigation(data)
-        elif task_type == "scrape_features":
-            self._commit_extraction(data)
-        else:
-            self.log(f"Unknown task type '{task_type}' from {agent_name}", level="WARN")
+        try:
+            if task_type == "discover_issues":
+                self._commit_discovered_issues(data)
+            elif task_type == "fix_dates":
+                self._commit_fixed_dates(data)
+            elif task_type == "download_pdf":
+                self._commit_download(data)
+            elif task_type == "extract_features":
+                self._commit_extraction(data)
+            elif task_type == "reextract_features":
+                self._commit_extraction(data)
+            elif task_type == "cross_reference":
+                self._commit_cross_reference(data)
+            elif task_type == "investigate_lead":
+                self._commit_investigation(data)
+            elif task_type == "scrape_features":
+                self._commit_extraction(data)
+            else:
+                self.log(f"Unknown task type '{task_type}' from {agent_name}", level="WARN")
+        finally:
+            # Always persist ledger even if commit raises mid-way
+            self.ledger.save()
 
     def _commit_discovered_issues(self, data):
         """Commit Scout's discovered issues to Supabase."""
@@ -589,11 +608,23 @@ class EditorAgent(Agent):
         if found:
             valid = [i for i in found if i.get("year") and i["year"] >= MIN_YEAR]
             if valid:
-                self._narrate_event(f"Scout discovered {len(valid)} new AD issues on archive.org.")
+                ad_count = sum(1 for i in valid if "ad_archive" in i.get("source", ""))
+                ao_count = len(valid) - ad_count
+                parts = []
+                if ao_count:
+                    parts.append(f"{ao_count} on archive.org")
+                if ad_count:
+                    parts.append(f"{ad_count} on AD Archive")
+                self._narrate_event(f"Scout discovered {len(valid)} new AD issues ({', '.join(parts)}).")
 
-        # Cascade: enqueue Courier tasks for newly discovered issues
+        # Cascade: enqueue Courier download tasks for archive.org issues only
+        # AD Archive issues go through _fill_scrape_queue() in the planning cycle
         if "courier" in self.workers:
-            valid = [i for i in found if i.get("year") and i["year"] >= MIN_YEAR and i.get("identifier")]
+            valid = [
+                i for i in found
+                if i.get("year") and i["year"] >= MIN_YEAR and i.get("identifier")
+                and "ad_archive" not in i.get("source", "")
+            ]
             for issue in valid:
                 ident = issue["identifier"]
                 if not self.ledger.should_retry(ident, "download_pdf", max_failures=MAX_TASK_FAILURES):
@@ -613,6 +644,33 @@ class EditorAgent(Agent):
                 )
                 self._plan.enqueue("courier", task, source="cascade")
             self._dispatch_next("courier")
+
+        # Cascade: enqueue Courier scrape tasks for AD Archive issues immediately
+        if "courier" in self.workers:
+            ad_issues = [
+                i for i in found
+                if i.get("year") and i["year"] >= MIN_YEAR and i.get("identifier")
+                and "ad_archive" in i.get("source", "")
+            ]
+            for issue in ad_issues:
+                ident = issue["identifier"]
+                if not self.ledger.should_retry(ident, "scrape_features", max_failures=MAX_TASK_FAILURES):
+                    continue
+                _m = issue.get("month")
+                _ms = f"{_m:02d}" if isinstance(_m, int) else "??"
+                task = Task(
+                    type="scrape_features",
+                    goal=f"Scrape AD Archive {issue.get('year')}-{_ms}",
+                    params={
+                        "identifier": ident, "title": issue.get("title", ""),
+                        "year": issue.get("year"), "month": issue.get("month"),
+                        "source_url": issue.get("url"),
+                    },
+                    priority=2,
+                )
+                self._plan.enqueue("courier", task, source="cascade")
+            if ad_issues:
+                self._dispatch_next("courier")
 
         not_found = data.get("not_found", [])
         for month_key in not_found:
@@ -817,6 +875,7 @@ class EditorAgent(Agent):
             # Write full xref + binary verdict to ALL feature IDs for this name
             write_ok = True
             for fid in feature_id_list:
+                xref_written = False
                 try:
                     # Write full xref data to cross_references table
                     xref_data = {
@@ -833,14 +892,18 @@ class EditorAgent(Agent):
                         "individuals_searched": entry.get("individuals_searched"),
                     }
                     upsert_cross_reference(fid, xref_data)
+                    xref_written = True
 
                     # Also write binary verdict to features table for compat
                     update_detective_verdict(fid, binary_verdict)
                 except Exception as e:
                     write_ok = False
+                    if xref_written:
+                        # xref succeeded but verdict failed — log partial state
+                        self.log(f"PARTIAL: xref written but verdict failed for {name} (fid={fid}): {e}", level="WARN")
                     decision = self.problem_solve(
                         error=str(e)[:200],
-                        context={"name": name, "feature_id": fid, "verdict": binary_verdict, "operation": "upsert_cross_reference"},
+                        context={"name": name, "feature_id": fid, "verdict": binary_verdict, "operation": "upsert_cross_reference", "xref_written": xref_written},
                         strategies={
                             "continue": "Skip this feature — others may succeed",
                             "retry_batch": "DB connection issue — retry entire batch later",
@@ -1309,6 +1372,31 @@ Respond with JSON only:
         self.log(f"Assigned {agent_name}: {task.goal[:60]}", level="DEBUG")
         return True
 
+    def _cleanup_stale_tasks(self, max_age_minutes=15):
+        """Remove stale entries from _tasks_in_flight.
+
+        If an agent crashes mid-task, its entry stays forever. This purges
+        entries older than max_age_minutes and records the failure in the ledger.
+        """
+        now = datetime.now()
+        stale_ids = []
+        for tid, info in self._tasks_in_flight.items():
+            try:
+                assigned = datetime.fromisoformat(info["assigned_at"])
+                if (now - assigned).total_seconds() > max_age_minutes * 60:
+                    stale_ids.append(tid)
+            except (ValueError, KeyError):
+                stale_ids.append(tid)
+
+        for tid in stale_ids:
+            info = self._tasks_in_flight.pop(tid)
+            agent_name = info.get("agent", "?")
+            task_data = info.get("task", {})
+            key = task_data.get("params", {}).get("identifier") or task_data.get("params", {}).get("name") or tid
+            self.ledger.record(key, agent_name, task_data.get("type", "unknown"), False,
+                               note=f"Stale task (>{max_age_minutes}m) — agent may have crashed")
+            self.log(f"Purged stale task {tid} ({agent_name}): {task_data.get('goal', '?')[:50]}", level="WARN")
+
     def _dispatch_next(self, agent_name):
         """Pop the next ready task from the plan and assign it.
 
@@ -1365,7 +1453,7 @@ Respond with JSON only:
                 priority=3,  # LOW priority — don't block discovery
             )
             self._plan.enqueue("scout", task)
-            return
+            # Don't return — let discovery tasks enqueue too (priority system handles ordering)
 
         # Priority 2: Discover missing issues
         missing_months = []
@@ -1659,9 +1747,12 @@ Respond with JSON only:
         skills = self.load_skills()
         report = self._build_situation_report()
 
+        # Use Opus for human interaction and quality reviews; Sonnet for routine checks
+        needs_opus = has_human_messages or self._has_quality_issues(report)
+
         try:
             assessment = await asyncio.to_thread(
-                self._call_haiku, skills, report
+                self._call_haiku, skills, report, use_opus=needs_opus
             )
         except Exception as e:
             decision = await asyncio.to_thread(
@@ -1975,12 +2066,33 @@ Respond with JSON only:
 
         return summary
 
+    def _has_quality_issues(self, report):
+        """Check if the situation report contains quality issues needing Opus-level judgment."""
+        qa = report.get("quality_audit", {})
+        if qa.get("supabase_nulls"):
+            return True
+        if qa.get("duplicates"):
+            return True
+        if qa.get("near_duplicates"):
+            return True
+        if qa.get("issues_needing_reextraction"):
+            return True
+        # New xref matches that need editor review
+        xref = report.get("xref_summary", {})
+        if xref.get("new_leads") or xref.get("needs_review"):
+            return True
+        return False
+
     # ═══════════════════════════════════════════════════════════
     # LLM CALL — Strategic assessment
     # ═══════════════════════════════════════════════════════════
 
-    def _call_haiku(self, skills, report):
-        """Call Claude with the situation report. Returns parsed JSON."""
+    def _call_haiku(self, skills, report, use_opus=False):
+        """Call Claude with the situation report. Returns parsed JSON.
+
+        Uses Opus for human interaction and quality reviews (nuanced judgment needed).
+        Uses Sonnet for routine status assessments (task routing, progress checks).
+        """
         client = self._get_client()
 
         system_prompt = f"""You are Miranda, the Editor — everyone calls you Boss. The chief. The one who runs this office.
@@ -2057,8 +2169,11 @@ If "human_messages" exist, RESPOND DIRECTLY. This is highest priority.
 
 Analyze and provide your assessment."""
 
+        model = OPUS_MODEL if use_opus else SONNET_MODEL
+        self.log(f"Assessment model: {'Opus' if use_opus else 'Sonnet'}")
+
         response = client.messages.create(
-            model="claude-opus-4-6",
+            model=model,
             max_tokens=4096,
             system=system_prompt,
             messages=[{"role": "user", "content": user_message}],
@@ -2200,10 +2315,12 @@ Analyze and provide your assessment."""
         if not feature_ids:
             return
         try:
+            # Clean up cross-references first (foreign key dependency)
+            delete_cross_references(feature_ids)
             sb = get_supabase()
             for fid in feature_ids:
                 sb.table("features").delete().eq("id", fid).execute()
-            self.log(f"Deleted {len(feature_ids)} features: {feature_ids} — {reason}")
+            self.log(f"Deleted {len(feature_ids)} features + xrefs: {feature_ids} — {reason}")
         except Exception as e:
             self.log(f"delete_features failed: {e}", level="ERROR")
 
@@ -2532,6 +2649,7 @@ Analyze and provide your assessment."""
                 "agent": info.get("agent", "?"),
                 "type": task_dict.get("type", ""),
                 "goal": task_dict.get("goal", ""),
+                "assigned_at": info.get("assigned_at", ""),
             })
         base["task_board"] = {
             "in_flight": in_flight_list,

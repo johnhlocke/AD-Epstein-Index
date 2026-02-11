@@ -49,8 +49,12 @@ This file should be automatically updated when necessary to answer three key que
 | Cross-references → Supabase (full xref data, not just binary) | Tooling | Done |
 | AD Archive direct HTTP scraper (JWT + Anthropic API) | Phase 1 | Done |
 | AD Archive issue discovery (100% coverage: 456/456) | Phase 1 | Done |
+| Data reset + pipeline rebuild from scratch | Tooling | In Progress |
+| Scout three-tier discovery (AD Archive → archive.org → CLI) | Phase 1 | Done |
+| Editor Sonnet/Opus model split (cost optimization) | Tooling | Done |
+| Bug fixes: db retry, xref atomicity, cost tracking, cascade | Tooling | Done |
 | Batch process all archive.org issues (~57 PDFs extracted) | Phase 1 | In Progress |
-| Batch scrape AD Archive issues (106 done, ~211 remaining) | Phase 1 | In Progress |
+| Batch scrape AD Archive issues | Phase 1 | In Progress |
 | Investigation policy: BB=confirmed, no fame dismissal | Phase 2 | Done |
 | Fix Detective BB match verdict bug | Tooling | Done |
 | Build cross-reference engine | Phase 2 | Done |
@@ -131,19 +135,19 @@ Built a 7-agent autonomous pipeline that runs continuously:
 
 | Agent | Role | Key Capabilities |
 |-------|------|------------------|
-| **Scout** | Discovers AD issues on archive.org | Multi-strategy discovery, date fixing, retry logic |
-| **Courier** | Downloads PDFs | Rate limiting, resume support, priority sorting |
+| **Scout** | Discovers AD issues | Three-tier: AD Archive HTTP → archive.org API → Claude CLI |
+| **Courier** | Downloads PDFs + scrapes AD Archive | Rate limiting, JWT scraping, Anthropic API extraction |
 | **Reader** | Extracts homeowner data | Claude Sonnet Vision, TOC analysis, retry for NULLs |
 | **Detective** | Cross-references names | BB search + DOJ browser search, combined verdicts |
 | **Researcher** | Builds dossiers | Claude Haiku analysis, pattern detection, home analysis |
-| **Editor** | Pipeline oversight | Health monitoring, human message processing, escalations |
+| **Editor** | Central coordinator | Sonnet (routine) / Opus (human+quality), validates, commits to Supabase |
 | **Designer** | Learns design patterns | Training from design sources, pattern cataloging |
 
 **Infrastructure (Hub-and-Spoke):**
 - `src/agents/tasks.py` — Task/TaskResult dataclasses, EditorLedger for centralized failure tracking
 - `src/agents/base.py` — Async work loop with inbox/outbox asyncio.Queue, execute() for task-driven work, watchdog timer
-- `src/agents/editor.py` — Central coordinator with event-driven architecture: blocks on unified event queue instead of polling. 4 producer tasks (outbox forwarder, message watcher, planning/strategic heartbeats) feed events. Human messages detected in <2s (was 300s), agent results in <0.5s (was 5s).
-- `src/db.py` — Shared DB module (singleton Supabase client, issue/feature CRUD). All agents import from here — Supabase `issues` table is the single source of truth
+- `src/agents/editor.py` — Central coordinator with event-driven architecture: blocks on unified event queue instead of polling. 4 producer tasks (outbox forwarder, message watcher, planning/strategic heartbeats) feed events. Human messages detected in <2s (was 300s), agent results in <0.5s (was 5s). Uses Sonnet for routine assessments, Opus for human interaction and quality reviews.
+- `src/db.py` — Shared DB module (singleton Supabase client, issue/feature CRUD, retry decorator with exponential backoff). All agents import from here — Supabase `issues` table is the single source of truth
 - `src/orchestrator.py` — Launches all agents, wires Editor with worker references, merges live status + task board into `status.json`
 - `src/dashboard_server.py` — HTTP server: inbox API, agent pause/resume, skills editing
 - `src/agents/skills/*.md` — Per-agent personality, methodology, and behavior documentation
@@ -204,16 +208,17 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 
 ## 3. What's Next
 
-**Immediate — Batch Scrape AD Archive Issues:**
-- 318 AD Archive issues discovered and ready for scraping (~4s each via direct HTTP + JWT)
-- Run orchestrator to batch-process: Editor assigns `scrape_features` → Courier scrapes → features loaded to Supabase
-- Estimated: ~21 minutes for all 318 issues (automated via pipeline)
+**Immediate — Rebuild Pipeline from Clean Slate:**
+- All Supabase tables and local data intentionally reset (Feb 10)
+- Pipeline verified end-to-end: Scout discovers → Editor commits → Courier scrapes → Editor loads features → Detective queued
+- Integration test passed: 6 issues discovered, 1 fully extracted (5 features), in 40 seconds
+- Run `python3 src/orchestrator.py --daemon` to rebuild full database
 
 **Ongoing — Scale the Pipeline:**
-- Run the multi-agent orchestrator to batch-process remaining archive.org issues (download + extract)
-- AD Archive scraping now covers the 271 issues not available on archive.org
+- Run the multi-agent orchestrator to rediscover and process all 456 issues (1988-2025)
+- AD Archive issues (~300+) processed via JWT scraping (~4s each)
+- archive.org issues (~50) processed via PDF download + Reader extraction
 - Review Researcher dossiers and manually confirm/reject matches
-- 20 extraction errors available for retry
 
 **Phase 1 — Complete the AD Database:**
 - ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456 issues)

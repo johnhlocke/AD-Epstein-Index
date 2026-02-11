@@ -1241,8 +1241,6 @@ def generate_status():
         ],
         "collaborations": build_collaborations(manifest_stats, extraction_stats, xref_stats),
         "log": build_log(manifest_stats, extraction_stats, xref_stats, log_lines=log_lines),
-        "pipeline": build_pipeline(manifest_stats, extraction_stats, xref_stats, dossier_stats),
-        "queue_depths": build_queue_depths(manifest_stats, extraction_stats, xref_stats),
         "now_processing": build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_stats),
         "editor_inbox": read_combined_inbox(),
         "notable_finds": build_notable_finds(extraction_stats, xref_stats, dossier_stats),

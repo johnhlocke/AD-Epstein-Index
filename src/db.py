@@ -8,8 +8,10 @@ Usage:
     from db import get_supabase, list_issues, update_issue, get_or_create_issue
 """
 
+import functools
 import json
 import os
+import time
 from datetime import datetime, timezone
 from dotenv import load_dotenv
 from supabase import create_client
@@ -32,9 +34,41 @@ def get_supabase():
     return _supabase
 
 
+def with_retry(max_retries=3, base_delay=0.5):
+    """Decorator that retries Supabase operations with exponential backoff.
+
+    Retries on network/timeout errors only — not on constraint violations
+    or other application-level errors which should fail immediately.
+    """
+    def decorator(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            last_exc = None
+            for attempt in range(max_retries + 1):
+                try:
+                    return fn(*args, **kwargs)
+                except Exception as e:
+                    err_str = str(e).lower()
+                    # Don't retry constraint violations, auth errors, or bad requests
+                    if any(k in err_str for k in (
+                        "violates", "constraint", "duplicate",
+                        "not found", "permission", "unauthorized",
+                        "invalid", "23505", "23514", "42",
+                    )):
+                        raise
+                    last_exc = e
+                    if attempt < max_retries:
+                        delay = base_delay * (2 ** attempt)
+                        time.sleep(delay)
+            raise last_exc
+        return wrapper
+    return decorator
+
+
 # ── Issue Operations ─────────────────────────────────────────
 
 
+@with_retry()
 def get_issue_by_identifier(identifier):
     """Fetch a single issue by its archive.org identifier. Returns dict or None."""
     sb = get_supabase()
@@ -49,6 +83,7 @@ def get_issue_by_id(issue_id):
     return result.data[0] if result.data else None
 
 
+@with_retry()
 def get_or_create_issue(month, year, **extra):
     """Get existing issue by (month, year) or create a new one. Returns the issue ID.
 
@@ -77,6 +112,7 @@ def get_or_create_issue(month, year, **extra):
     return result.data[0]["id"]
 
 
+@with_retry()
 def upsert_issue(identifier, data):
     """Upsert an issue by identifier. Used by Scout for discovery.
 
@@ -99,6 +135,7 @@ def upsert_issue(identifier, data):
         return result.data[0] if result.data else None
 
 
+@with_retry()
 def update_issue(identifier, updates):
     """Update an issue's fields by identifier. Used for status transitions.
 
@@ -111,6 +148,7 @@ def update_issue(identifier, updates):
     return result.data[0] if result.data else None
 
 
+@with_retry()
 def update_issue_by_id(issue_id, updates):
     """Update an issue's fields by numeric ID.
 
@@ -123,6 +161,7 @@ def update_issue_by_id(issue_id, updates):
     return result.data[0] if result.data else None
 
 
+@with_retry()
 def list_issues(status=None, min_year=None, source=None):
     """List issues from Supabase, optionally filtered.
 
@@ -148,6 +187,7 @@ def list_issues(status=None, min_year=None, source=None):
     return result.data
 
 
+@with_retry()
 def count_issues_by_status():
     """Count issues grouped by status. Returns dict like {"discovered": N, "downloaded": M, ...}.
 
@@ -209,6 +249,7 @@ def feature_exists(issue_id, page_number):
     return len(existing.data) > 0
 
 
+@with_retry()
 def insert_feature(issue_id, row):
     """Insert a single feature row into Supabase.
 
@@ -221,6 +262,7 @@ def insert_feature(issue_id, row):
     sb.table("features").insert(row).execute()
 
 
+@with_retry()
 def update_detective_verdict(feature_id, verdict):
     """Write Detective's binary YES/NO verdict to a feature row.
 
@@ -237,6 +279,7 @@ def update_detective_verdict(feature_id, verdict):
     }).eq("id", feature_id).execute()
 
 
+@with_retry()
 def get_features_needing_detective(issue_id=None):
     """Get features with detective_verdict IS NULL and non-empty homeowner_name.
 
@@ -258,6 +301,7 @@ def get_features_needing_detective(issue_id=None):
     return result.data
 
 
+@with_retry()
 def delete_features_for_issue(issue_id):
     """Delete all features for a given issue. Returns count of deleted rows."""
     sb = get_supabase()
@@ -271,6 +315,7 @@ def delete_features_for_issue(issue_id):
 # ── Dossier Operations ──────────────────────────────────────
 
 
+@with_retry()
 def upsert_dossier(feature_id, data):
     """Upsert a dossier by feature_id (one dossier per feature).
 
@@ -308,6 +353,7 @@ def get_dossier(feature_id):
     return result.data[0] if result.data else None
 
 
+@with_retry()
 def list_dossiers(strength=None, editor_verdict=None):
     """List all dossiers, optionally filtered by connection_strength and/or editor_verdict.
 
@@ -422,6 +468,7 @@ def upload_to_storage(bucket, path, file_data, content_type="image/png"):
 # ── Cross-Reference Operations ────────────────────────────
 
 
+@with_retry()
 def upsert_cross_reference(feature_id, data):
     """Upsert a cross-reference result by feature_id (one row per feature).
 
@@ -455,6 +502,7 @@ def get_cross_reference(feature_id):
     return result.data[0] if result.data else None
 
 
+@with_retry()
 def list_cross_references(combined_verdict=None):
     """List all cross-references, optionally filtered by combined_verdict.
 
@@ -543,6 +591,7 @@ def update_xref_editor_override(feature_id, verdict, reason):
     }).eq("feature_id", feature_id).execute()
 
 
+@with_retry()
 def get_features_without_xref():
     """Get features that have no cross-reference row yet.
 

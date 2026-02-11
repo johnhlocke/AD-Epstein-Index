@@ -5,12 +5,13 @@ Hub-and-spoke model: Editor assigns tasks via inbox, Scout reports via outbox.
 When no task is assigned, falls back to legacy work() loop.
 
 Task types:
-  - discover_issues: Search for missing issues (archive.org API + web + creative)
+  - discover_issues: Search for missing issues (AD Archive + archive.org API + creative)
   - fix_dates: Verify dates on misdated issues
 
 Three-tier search strategy (for discover_issues):
-  1. Built-in archive.org API (direct HTTP — no LLM needed)
-  2. Claude CLI for creative/complex strategies (fallback)
+  1. AD Archive (HTTP check — instant, covers ~1988-2024)
+  2. archive.org API (HTTP search — no LLM needed)
+  3. Claude CLI for creative/complex strategies (fallback)
 
 Interval: 60s (fast poll for tasks from Editor).
 """
@@ -320,36 +321,69 @@ class ScoutAgent(Agent):
         not_found = []
         strategies_tried = []
 
-        # ── Tier 1: Built-in archive.org API search (no LLM needed) ──
-        self._current_task = f"Searching archive.org API for {len(missing_months)} months..."
-        self.log(f"Tier 1: archive.org API search for {len(missing_months)} months")
+        # ── Tier 1: AD Archive HTTP check (instant, covers ~1988-2024) ──
+        self._current_task = f"Checking AD Archive for {len(missing_months)} months..."
+        self.log(f"Tier 1: AD Archive check for {len(missing_months)} months")
 
+        still_missing = []
+        ad_found = 0
         for month_key in missing_months:
             year_str, month_str = month_key.split("-")
             year, month = int(year_str), int(month_str)
 
-            results = await asyncio.to_thread(
-                self._search_archive_org_api, year, month
-            )
-
-            if results:
-                for r in results:
-                    found_issues.append(r)
-                    self._record_search_attempt(month_key, found=True)
-                    self.log(f"Found via API: {year}-{month:02d} → {r['identifier'][:40]}")
+            exists = await asyncio.to_thread(self._check_ad_archive, year, month)
+            if exists:
+                ad_found += 1
+                found_issues.append({
+                    "identifier": f"ad-archive-{year}{month:02d}01",
+                    "title": f"Architectural Digest {year}-{month:02d}",
+                    "year": year,
+                    "month": month,
+                    "source": "ad_archive",
+                    "confidence": "high",
+                    "url": f"https://archive.architecturaldigest.com/issue/{year}{month:02d}01",
+                })
+                self._record_search_attempt(month_key, found=True)
+                self.log(f"Found on AD Archive: {year}-{month:02d}")
             else:
-                not_found.append(month_key)
-                self._record_search_attempt(month_key, found=False)
+                still_missing.append(month_key)
 
-            # Small delay between API calls
-            await asyncio.sleep(0.5)
+            await asyncio.sleep(0.3)
 
-        strategies_tried.append(f"archive.org API: {len(found_issues)} found, {len(not_found)} not found")
+        strategies_tried.append(f"AD Archive: {ad_found} found, {len(still_missing)} not found")
 
-        # ── Tier 2: Claude CLI for remaining (creative strategies) ──
+        # ── Tier 2: archive.org API for remaining (no LLM needed) ──
+        if still_missing:
+            self._current_task = f"Searching archive.org API for {len(still_missing)} remaining..."
+            self.log(f"Tier 2: archive.org API search for {len(still_missing)} months")
+
+            tier2_remaining = []
+            for month_key in still_missing:
+                year_str, month_str = month_key.split("-")
+                year, month = int(year_str), int(month_str)
+
+                results = await asyncio.to_thread(
+                    self._search_archive_org_api, year, month
+                )
+
+                if results:
+                    for r in results:
+                        found_issues.append(r)
+                        self._record_search_attempt(month_key, found=True)
+                        self.log(f"Found via API: {year}-{month:02d} → {r['identifier'][:40]}")
+                else:
+                    tier2_remaining.append(month_key)
+                    self._record_search_attempt(month_key, found=False)
+
+                await asyncio.sleep(0.5)
+
+            not_found = tier2_remaining
+            strategies_tried.append(f"archive.org API: {len(still_missing) - len(tier2_remaining)} found, {len(tier2_remaining)} not found")
+
+        # ── Tier 3: Claude CLI for remaining (creative strategies) ──
         if not_found and len(not_found) <= 6:
             self._current_task = f"Claude CLI search for {len(not_found)} remaining..."
-            self.log(f"Tier 2: Claude CLI search for {len(not_found)} remaining months")
+            self.log(f"Tier 3: Claude CLI search for {len(not_found)} remaining months")
 
             # Only try CLI if we have some unfound months
             skills = self.load_skills()
@@ -453,6 +487,25 @@ class ScoutAgent(Agent):
             },
             agent=self.name,
         )
+
+    # ── AD Archive HTTP check ──────────────────────────────────────
+
+    def _check_ad_archive(self, year, month):
+        """Check if an issue exists on archive.architecturaldigest.com.
+
+        Simple HTTP GET with tocConfig JWT check. No auth, no LLM.
+        Returns True if the issue page exists and has article data.
+        """
+        url = f"https://archive.architecturaldigest.com/issue/{year}{month:02d}01"
+        headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+        try:
+            resp = requests.get(url, headers=headers, timeout=15, allow_redirects=False)
+            if resp.status_code != 200:
+                return False
+            # Check for tocConfig JWT — confirms this is a real issue page
+            return "tocConfig" in resp.text
+        except Exception:
+            return False
 
     # ── Built-in archive.org API search ─────────────────────────────
 
@@ -1102,12 +1155,14 @@ Prior knowledge (what's worked and what hasn't):
     # ── Main Work Loop ─────────────────────────────────────────────
 
     async def work(self):
-        skills = self.load_skills()
+        """Fallback when no task from Editor. Self-assigns a discover_issues task
+        and routes through _execute_discover() for the three-tier strategy."""
+        from agents.tasks import Task
+
         issues = self._load_issues()
         gap_report = self._analyze_gaps(issues)
 
         strategy = self._pick_strategy(gap_report, issues)
-
         self._current_task = f"{strategy['type']}: {strategy['description'][:50]}"
         self.log(f"Scout strategy: {strategy['type']} — {strategy['description']}")
 
@@ -1131,205 +1186,77 @@ Prior knowledge (what's worked and what hasn't):
         except Exception:
             pass
 
-        prompt = self._build_prompt(strategy, gap_report, skills)
-        result = await asyncio.to_thread(self._call_claude, prompt)
-
-        strategy_success = False
-
-        if not result:
-            # ── Problem-solving: diagnose CLI failure and decide recovery ──
-            decision = await asyncio.to_thread(
-                self.problem_solve,
-                error="Claude CLI returned no result",
-                context={
-                    "strategy_type": strategy["type"],
-                    "strategy_description": strategy["description"][:100],
-                    "missing_months": len(gap_report.get("missing_months", [])),
-                    "coverage_pct": gap_report.get("coverage_pct", 0),
-                    "recent_results": self._recent_strategy_results[-5:],
-                },
-                strategies={
-                    "retry_different_strategy": "Switch to a different strategy type (fill_gaps → explore_sources, etc.)",
-                    "simplify_prompt": "Try with a smaller batch or simpler search terms",
-                    "wait_and_retry": "Possible rate limit or transient error — retry next cycle",
-                    "escalate": "Report to Editor — CLI may be broken or overloaded",
-                },
+        if strategy["type"] == "fill_gaps":
+            # Route through _execute_discover for three-tier search
+            task = Task(
+                type="discover_issues",
+                goal=strategy["description"],
+                params={"missing_months": strategy.get("batch", [])},
+                priority=1,
             )
-            strategy_name = decision.get("strategy", "escalate")
-            self.log(f"Problem solve: {decision.get('diagnosis', '?')} → {strategy_name}")
+            result = await self._execute_discover(task)
 
-            self._current_task = f"Failed — {strategy['type']} ({strategy_name})"
-            self._record_learning("failed_strategies", {
-                "strategy": f"{strategy['type']}: {strategy['description'][:80]}",
-                "reason": f"{decision.get('diagnosis', 'CLI returned no result')} → {strategy_name}",
-            })
+            # Push result to outbox so Editor can commit
+            self.outbox.put_nowait(result)
+
+            found = result.result.get("found_issues", [])
+            self.log(f"Self-assigned discovery: {len(found)} issues found")
+
+            # Record strategy result
             self._recent_strategy_results.append({
-                "type": strategy["type"], "success": False,
+                "type": strategy["type"],
+                "success": len(found) > 0,
             })
-            if strategy_name == "escalate":
-                self._maybe_escalate(gap_report, strategy["type"], strategy_failed=True)
+            self._recent_strategy_results = self._recent_strategy_results[-10:]
+
+            if not found:
+                decision = await asyncio.to_thread(
+                    self.problem_solve,
+                    error=f"Strategy '{strategy['type']}' produced no useful results",
+                    context={
+                        "strategy_type": strategy["type"],
+                        "batch_size": len(strategy.get("batch", [])),
+                        "coverage_pct": gap_report.get("coverage_pct", 0),
+                        "recent_results": self._recent_strategy_results[-5:],
+                    },
+                    strategies={
+                        "try_different_era": "Focus on a different decade or year range",
+                        "broaden_search": "Use more creative or alternative search terms",
+                        "switch_strategy": "Try a completely different strategy type",
+                        "escalate": "Report to Editor — this approach is exhausted",
+                    },
+                )
+                self.log(f"Strategy failed → {decision.get('strategy', '?')}: {decision.get('diagnosis', '?')}")
+                if decision.get("strategy") == "escalate":
+                    self._maybe_escalate(gap_report, strategy["type"], strategy_failed=True)
+
+            self._cycle_count += 1
+            self._save_scout_log()
+            return len(found) > 0
+        else:
+            # Non-fill_gaps strategies (explore_sources, etc.) use Claude CLI directly
+            skills = self.load_skills()
+            prompt = self._build_prompt(strategy, gap_report, skills)
+            result = await asyncio.to_thread(self._call_claude, prompt)
+
+            if not result:
+                self.log(f"Claude CLI returned no result for {strategy['type']}")
+                self._cycle_count += 1
+                self._save_scout_log()
+                return False
+
+            findings = self._parse_findings(result)
+            if findings:
+                existing_ids = {i["identifier"]: i for i in issues if i.get("identifier")}
+                changes = self._apply_findings(findings, strategy, existing_ids)
+                self.log(f"Scout complete: {changes} changes via {strategy['type']}")
+                self._cycle_count += 1
+                self._save_scout_log()
+                return changes > 0
+
             self._cycle_count += 1
             self._save_scout_log()
             return False
-
-        findings = self._parse_findings(result)
-        if findings:
-            existing_ids = {i["identifier"]: i for i in issues if i.get("identifier")}
-            changes = self._apply_findings(findings, strategy, existing_ids)
-
-            # Track search attempts for fill_gaps strategy
-            if strategy["type"] == "fill_gaps":
-                found_months = set()
-                for issue in findings.get("found_issues", []):
-                    y, m = issue.get("year"), issue.get("month")
-                    if y and m:
-                        found_months.add(f"{y}-{m:02d}")
-                for month_key in strategy["batch"]:
-                    if month_key in found_months:
-                        self._record_search_attempt(month_key, found=True)
-                    else:
-                        self._record_search_attempt(month_key, found=False)
-                        self.log(f"Not found (will cooldown): {month_key}")
-
-            # ── Record learnings ──
-            found_issues = findings.get("found_issues", [])
-            strategy_success = changes > 0
-
-            if found_issues:
-                # Record successful source
-                sources_used = set(f.get("source", "unknown") for f in found_issues)
-                years_found = [f.get("year") for f in found_issues if f.get("year")]
-                year_range = (f"{min(years_found)}-{max(years_found)}"
-                              if years_found else "unknown")
-                for src in sources_used:
-                    src_count = sum(1 for f in found_issues if f.get("source") == src)
-                    self._record_learning("successful_sources", {
-                        "source": src,
-                        "query": strategy["type"],
-                        "found_count": src_count,
-                        "year_range": year_range,
-                    })
-
-            if not found_issues and strategy["type"] in ("fill_gaps", "explore_sources"):
-                self._record_learning("failed_strategies", {
-                    "strategy": f"{strategy['type']}: {strategy['description'][:80]}",
-                    "reason": findings.get("notes", "No issues found"),
-                })
-
-            # Record new sources discovered (explore_sources returns structured sources)
-            new_sources = findings.get("new_sources", [])
-            for src in new_sources:
-                if isinstance(src, dict):
-                    self._record_learning("source_notes", {
-                        "source": src.get("name", "unknown"),
-                        "note": f"{src.get('coverage', '')} — access: {src.get('access', '?')}. {src.get('notes', '')}",
-                    })
-                elif isinstance(src, str):
-                    self._record_learning("source_notes", {
-                        "source": "discovered",
-                        "note": src,
-                    })
-
-            # Record strategy recommendations as insights
-            for rec in findings.get("strategy_recommendations", []):
-                self._record_learning("insights", {"text": rec})
-
-            # Record general notes as insights if substantive
-            notes = findings.get("notes", "")
-            if notes and len(notes) > 20:
-                self._record_learning("insights", {"text": notes})
-
-            # Re-analyze after changes (re-fetch from Supabase)
-            updated_issues = self._load_issues()
-            updated = self._analyze_gaps(updated_issues)
-            self._current_task = (
-                f"{changes} changes — {updated['total_confirmed']}/{TOTAL_EXPECTED} "
-                f"({updated['coverage_pct']}%)"
-            )
-            self.log(
-                f"Scout complete: {changes} changes, "
-                f"{updated['total_confirmed']}/{TOTAL_EXPECTED} confirmed "
-                f"({updated['coverage_pct']}%)"
-            )
-
-            # Commit discovery episode to memory
-            try:
-                self.commit_episode(
-                    "discover_issues",
-                    f"Discovery cycle: {strategy['type']} — {changes} changes. "
-                    f"Coverage now {updated['coverage_pct']}% ({updated['total_confirmed']}/{TOTAL_EXPECTED}). "
-                    f"Found {len(found_issues)} issues.",
-                    "success" if changes > 0 else "failure",
-                    {"strategy": strategy["type"], "changes": changes,
-                     "coverage_pct": updated["coverage_pct"]},
-                )
-            except Exception:
-                pass
-
-            # Post bulletin for coverage milestones
-            if changes > 0:
-                try:
-                    self.post_bulletin(
-                        f"Discovery: {changes} new issues found via {strategy['type']}. "
-                        f"Coverage: {updated['coverage_pct']}%",
-                        tags=["discovery", "coverage", strategy["type"]],
-                    )
-                except Exception:
-                    pass
-
-            # Narrate the result
-            try:
-                self.narrate(
-                    f"Cycle complete: {changes} changes via {strategy['type']}. "
-                    f"Now at {updated['coverage_pct']}% coverage."
-                )
-            except Exception:
-                pass
-        else:
-            self._current_task = f"No findings — {strategy['type']}"
-            strategy_success = False
-            # If fill_gaps returned nothing at all, mark entire batch as failed
-            if strategy["type"] == "fill_gaps":
-                for month_key in strategy["batch"]:
-                    self._record_search_attempt(month_key, found=False)
-            self._record_learning("failed_strategies", {
-                "strategy": f"{strategy['type']}: {strategy['description'][:80]}",
-                "reason": "Could not parse findings from response",
-            })
-
-        # Track strategy result for escalation logic
-        self._recent_strategy_results.append({
-            "type": strategy["type"],
-            "success": strategy_success,
-        })
-        # Keep only last 10
-        self._recent_strategy_results = self._recent_strategy_results[-10:]
-
-        # Check if we should escalate — use problem_solve for diagnosis
-        if not strategy_success:
-            decision = await asyncio.to_thread(
-                self.problem_solve,
-                error=f"Strategy '{strategy['type']}' produced no useful results",
-                context={
-                    "strategy_type": strategy["type"],
-                    "batch_size": len(strategy.get("batch", [])),
-                    "coverage_pct": gap_report.get("coverage_pct", 0),
-                    "recent_results": self._recent_strategy_results[-5:],
-                },
-                strategies={
-                    "try_different_era": "Focus on a different decade or year range",
-                    "broaden_search": "Use more creative or alternative search terms",
-                    "switch_strategy": "Try a completely different strategy type",
-                    "escalate": "Report to Editor — this approach is exhausted",
-                },
-            )
-            self.log(f"Strategy failed → {decision.get('strategy', '?')}: {decision.get('diagnosis', '?')}")
-            if decision.get("strategy") == "escalate":
-                self._maybe_escalate(gap_report, strategy["type"], strategy_failed=True)
-
-        self._cycle_count += 1
-        self._save_scout_log()
-        return True
 
     def get_progress(self):
         issues = self._load_issues()
