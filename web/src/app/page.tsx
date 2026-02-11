@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { getStats } from "@/lib/queries";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { KeyFindings } from "@/components/landing/KeyFindings";
+import { GraphPreview } from "@/components/graph/GraphPreview";
 import { MethodologySection } from "@/components/landing/MethodologySection";
 import { CoverageHeatmap } from "@/components/charts/CoverageHeatmap";
 import { FeaturesTimeline } from "@/components/charts/FeaturesTimeline";
@@ -23,6 +24,24 @@ export default async function Home() {
 
       {/* 2. Key Findings */}
       <KeyFindings stats={stats} />
+
+      {/* 2.5 Knowledge Graph Preview */}
+      <section className="bg-[#1A1A1A] pb-20" id="graph">
+        <div className="w-full px-6 lg:px-[100px]">
+          <div className="mb-6 flex items-baseline justify-between">
+            <div>
+              <h2 className="font-serif text-3xl font-bold text-white">
+                Connection Graph
+              </h2>
+              <p className="mt-2 text-sm text-white/40">
+                Interactive knowledge graph of people, designers, locations, and
+                Epstein connections. Drag to explore.
+              </p>
+            </div>
+          </div>
+          <GraphPreview />
+        </div>
+      </section>
 
       {/* 3. Coverage Heatmap */}
       <CoverageHeatmap coverage={stats.coverage} />
