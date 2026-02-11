@@ -653,16 +653,19 @@ def verdict_to_binary(combined_verdict, confidence_score, glance_override=None):
     Args:
         combined_verdict: One of confirmed_match, likely_match, possible_match, needs_review, no_match
         confidence_score: Float 0-1
-        glance_override: Optional "YES"/"NO" from contextual_glance (takes precedence)
+        glance_override: Optional "YES"/"NO" from contextual_glance (for ambiguous cases only)
 
     Returns:
         "YES" or "NO"
     """
+    # Strong verdicts are immune to glance override — always YES
+    if combined_verdict in ("confirmed_match", "likely_match"):
+        return "YES"
+
+    # Glance override only applies to ambiguous tiers
     if glance_override in ("YES", "NO"):
         return glance_override
 
-    if combined_verdict in ("confirmed_match", "likely_match"):
-        return "YES"
     if combined_verdict == "possible_match" and confidence_score >= 0.40:
         return "YES"
     if combined_verdict == "needs_review":
@@ -757,14 +760,16 @@ def contextual_glance(name, bb_matches, doj_result):
                 if m.get("context"):
                     bb_context += f"\nBB context: {m['context'][:150]}"
 
-        prompt = f"""Is the person "{name}" from Architectural Digest magazine the same person referenced in these Epstein-related records?
+        prompt = f"""Is the person "{name}" from Architectural Digest magazine possibly the same person referenced in these Epstein-related records?
 
 {bb_context}
 
 DOJ search snippets:
 {snippet_text}
 
-Answer YES if this is likely the same person, NO if this is clearly a different person or coincidence.
+Answer YES if there is any reasonable possibility this could be the same person. This flags the name for deeper investigation — it is NOT a final verdict.
+Answer NO only if it is clearly a different person (e.g., different country, different era, clearly a contractor/vendor invoice, or a completely different context like a cultural reference).
+IMPORTANT: Being famous or a public figure is NOT a reason to say NO. Celebrities and public figures DO appear in Epstein records.
 Respond with only YES or NO."""
 
         model_id = "claude-haiku-4-5-20251001"

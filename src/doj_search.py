@@ -17,7 +17,7 @@ import re
 from datetime import datetime
 
 DOJ_URL = "https://www.justice.gov/epstein"
-SEARCH_TIMEOUT_MS = 15000
+SEARCH_TIMEOUT_MS = 8000
 MAX_RETRIES = 2
 
 # Keywords in DOJ result snippets that indicate high-relevance Epstein connection

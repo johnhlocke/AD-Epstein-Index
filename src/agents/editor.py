@@ -58,7 +58,7 @@ from db import (
     get_dossier, upsert_dossier, upload_to_storage, insert_dossier_image,
     upsert_cross_reference, get_cross_reference, list_cross_references,
     get_xref_leads, update_xref_editor_override, get_features_without_xref,
-    delete_cross_references, reset_xref_doj,
+    delete_cross_references, reset_xref_doj, get_xrefs_needing_doj_retry,
 )
 
 @dataclass
@@ -1713,7 +1713,10 @@ Respond with JSON only:
                     self.log(f"Failed to load extraction for {ident}: {e}", level="ERROR")
 
     def _fill_detective_queue(self):
-        """Catch-up: find features with detective_verdict IS NULL and enqueue Detective."""
+        """Catch-up: find features with detective_verdict IS NULL and enqueue Detective.
+
+        Also retries names whose DOJ search was skipped (browser unavailable).
+        """
         if "detective" not in self.workers:
             return
 
@@ -1723,7 +1726,14 @@ Respond with JSON only:
             self.log(f"Planning detective tasks failed: {e}", level="ERROR")
             return
 
-        if not unchecked:
+        # Also find names needing DOJ retry (had doj_status='pending' from browser unavailability)
+        doj_retry = []
+        try:
+            doj_retry = get_xrefs_needing_doj_retry()
+        except Exception:
+            pass
+
+        if not unchecked and not doj_retry:
             return
 
         # Batch up to 20 names (deduplicated, with all feature_ids per name)
@@ -1739,12 +1749,27 @@ Respond with JSON only:
                 seen_names.add(name)
             feature_ids.setdefault(name, []).append(feat["id"])
 
+        # Add DOJ retry names (reset their xref first so detective re-checks)
+        for xr in doj_retry:
+            name = (xr.get("homeowner_name") or "").strip()
+            fid = xr.get("feature_id")
+            if not name or name in seen_names:
+                continue
+            # Reset the xref so detective treats it as fresh
+            try:
+                reset_xref_doj(fid)
+            except Exception:
+                pass
+            names.append(name)
+            seen_names.add(name)
+            feature_ids.setdefault(name, []).append(fid)
+
         if not names:
             return
 
         task = Task(
             type="cross_reference",
-            goal=f"Cross-reference {len(names)} unchecked names (planning fallback)",
+            goal=f"Cross-reference {len(names)} names ({len(doj_retry)} DOJ retries)",
             params={"names": names, "feature_ids": feature_ids},
             priority=3,  # Lower priority than extraction-triggered
         )
@@ -1840,6 +1865,9 @@ Respond with JSON only:
         if has_human_messages:
             self._editor_state = "listening"
             self._current_task = "Reading human message..."
+            # Write human messages to inbox so they appear in the conversation
+            for msg in self._read_human_messages():
+                self._write_human_to_inbox(msg.get("text", ""))
         else:
             self._editor_state = "assessing"
             self._current_task = "Strategic assessment..."
@@ -1847,8 +1875,8 @@ Respond with JSON only:
         skills = self.load_skills()
         report = self._build_situation_report()
 
-        # Use Opus for human interaction and quality reviews; Sonnet for routine checks
-        needs_opus = has_human_messages or self._has_quality_issues(report)
+        # Opus ONLY for human interaction — Sonnet handles everything else fine
+        needs_opus = has_human_messages
 
         try:
             assessment = await asyncio.to_thread(
@@ -2796,6 +2824,32 @@ If the event doesn't warrant a note, respond with just "—" and nothing else.""
         if len(messages) > MAX_MESSAGES:
             messages = messages[-MAX_MESSAGES:]
 
+        os.makedirs(os.path.dirname(MESSAGES_PATH), exist_ok=True)
+        with open(MESSAGES_PATH, "w") as f:
+            json.dump(messages, f)
+
+    def _write_human_to_inbox(self, text):
+        """Write a human message to the inbox file so it shows in the conversation."""
+        if not text:
+            return
+        now = datetime.now()
+        message = {
+            "time": now.strftime("%H:%M"),
+            "timestamp": now.isoformat(),
+            "type": "human",
+            "sender": "human",
+            "text": text,
+        }
+        messages = []
+        if os.path.exists(MESSAGES_PATH):
+            try:
+                with open(MESSAGES_PATH) as f:
+                    messages = json.load(f)
+            except Exception:
+                messages = []
+        messages.append(message)
+        if len(messages) > MAX_MESSAGES:
+            messages = messages[-MAX_MESSAGES:]
         os.makedirs(os.path.dirname(MESSAGES_PATH), exist_ok=True)
         with open(MESSAGES_PATH, "w") as f:
             json.dump(messages, f)

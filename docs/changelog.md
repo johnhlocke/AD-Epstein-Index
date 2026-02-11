@@ -6,6 +6,40 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-11 (Session 19)
+
+### Fixed — Verdict Pipeline (4 Critical Bugs)
+- **verdict_to_binary() precedence bug**: `glance_override` was checked BEFORE `combined_verdict`, allowing Haiku's contextual glance to override strong verdicts (`likely_match`, `confirmed_match`) → binary NO. Fixed by moving strong verdict check first — `confirmed_match` and `likely_match` are now immune to glance override, always return YES.
+- **Contextual glance scope**: `contextual_glance()` was being called on ALL non-no_match verdicts including `likely_match`. Fixed to only run for ambiguous tiers (`possible_match`, `needs_review`). Strong verdicts skip the LLM call entirely.
+- **Glance prompt bias**: Prompt was biased toward NO (DOJ snippets are just filenames, not descriptive evidence). Rewrote with flipped burden of proof: "Answer YES if there is any reasonable possibility... Answer NO only if it is clearly a different person." Added explicit anti-fame-bias instruction.
+- **DOJ retry for pending entries**: Names checked when Chromium wasn't installed got `doj_status='pending'` permanently. Added `get_xrefs_needing_doj_retry()` to `db.py` and wired into Editor's `_fill_detective_queue()` to reset and re-enqueue pending entries.
+
+### Fixed — Miranda Inbox (Human Messages Not Visible)
+- Dashboard checked `m.sender === 'human'` to style human messages, but Miranda's `status.json` entries never included `sender` or `type` fields
+- Added `_write_human_to_inbox()` method in `editor.py` — writes human messages with `type: 'human'` and `sender: 'human'` fields
+- Dashboard now correctly shows human messages with blue "YOU" badge
+
+### Changed — Miranda Cost Optimization (Opus Gate)
+- `_has_quality_issues()` returned True almost every cycle during active pipeline (nulls, duplicates always exist), causing Opus ($15/$75/M) for ~95% of assessments
+- Changed Opus gate: `needs_opus = has_human_messages` only — quality cleanup no longer triggers Opus
+- Expected cost reduction: Miranda drops from ~82% to ~30% of total pipeline spend
+
+### Data — Intentional Reset (Run 3)
+- All Supabase tables wiped (57 cross-references, 8 dossiers, 419 features, 121 issues)
+- All local data directories wiped (costs, extractions, dossiers, cross-references, issues)
+- Agent episodic memory preserved (1,127+ episodes in `data/agent_memory/episodes.json`)
+- Pipeline verified end-to-end before wipe: 351 issues, 419 features, 57 xrefs, 13 YES verdicts, 8 dossiers produced in ~54 minutes
+
+### Pipeline Verification (Run 2 Results Before Wipe)
+- **351 issues** discovered (121 committed to Supabase)
+- **419 features** extracted across AD Archive + archive.org sources
+- **57 cross-references** completed (Detective two-pass: BB + DOJ)
+- **13 YES verdicts** (up from 0 in Run 1 — verdict bug fixes working)
+- **8 dossiers** produced (all COINCIDENCE — correct triage by Elena)
+- **$16.57 total cost** in 54 minutes — Miranda at $13.53 (82%, prompting Opus gate fix)
+
+---
+
 ## 2026-02-11 (Session 18)
 
 ### Added — Neo4j Knowledge Graph (Phase 3.5)

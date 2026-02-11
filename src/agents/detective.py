@@ -194,15 +194,15 @@ class DetectiveAgent(Agent):
                     best_doj_result = doj_result
                     best_doj_verdict = doj_verdict
 
-                await asyncio.sleep(2)  # Rate limiting between individuals
+                await asyncio.sleep(0.5)  # Rate limiting between individuals
 
             if best_verdict_info is None:
                 best_verdict_info = {"verdict": "no_match", "confidence_score": 0, "rationale": "No results", "false_positive_indicators": []}
 
-            # Contextual glance for ambiguous cases
+            # Contextual glance for ambiguous cases only (not strong verdicts)
             combined = best_verdict_info["verdict"]
             glance_result = None
-            if combined in ("possible_match", "needs_review", "likely_match"):
+            if combined in ("possible_match", "needs_review"):
                 glance_result = await asyncio.to_thread(
                     contextual_glance, name, best_bb_matches, best_doj_result
                 )
@@ -229,7 +229,7 @@ class DetectiveAgent(Agent):
                 "binary_verdict": binary_verdict,
             })
 
-            await asyncio.sleep(2)  # Rate limiting between names
+            await asyncio.sleep(1)  # Rate limiting between names
 
         # Commit episodes for significant findings
         yes_names = [c["name"] for c in checked if c.get("binary_verdict") == "YES"]

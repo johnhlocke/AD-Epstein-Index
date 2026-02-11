@@ -49,10 +49,13 @@ This file should be automatically updated when necessary to answer three key que
 | Cross-references → Supabase (full xref data, not just binary) | Tooling | Done |
 | AD Archive direct HTTP scraper (JWT + Anthropic API) | Phase 1 | Done |
 | AD Archive issue discovery (100% coverage: 456/456) | Phase 1 | Done |
-| Data reset + pipeline rebuild from scratch | Tooling | In Progress |
+| Data reset + pipeline rebuild from scratch | Tooling | Done (Run 3) |
 | Scout three-tier discovery (AD Archive → archive.org → CLI) | Phase 1 | Done |
 | Editor Sonnet/Opus model split (cost optimization) | Tooling | Done |
 | Bug fixes: db retry, xref atomicity, cost tracking, cascade | Tooling | Done |
+| Fix verdict pipeline (4 bugs: precedence, scope, prompt, DOJ retry) | Tooling | Done |
+| Fix Miranda inbox (human messages not visible) | Tooling | Done |
+| Miranda cost optimization (Opus gate tightened) | Tooling | Done |
 | Batch process all archive.org issues (~57 PDFs extracted) | Phase 1 | In Progress |
 | Batch scrape AD Archive issues | Phase 1 | In Progress |
 | Investigation policy: BB=confirmed, no fame dismissal | Phase 2 | Done |
@@ -231,7 +234,8 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 **Immediate — Rebuild Pipeline from Clean Slate:**
 - All Supabase tables and local data intentionally reset (Feb 10)
 - Pipeline verified end-to-end: Scout discovers → Editor commits → Courier scrapes → Editor loads features → Detective queued
-- Integration test passed: 6 issues discovered, 1 fully extracted (5 features), in 40 seconds
+- Run 2 verified all fixes: 351 issues, 419 features, 57 xrefs, 13 YES verdicts, 8 dossiers in 54 minutes
+- Data wiped for Run 3 with all bug fixes applied (verdict pipeline, Miranda inbox, Opus gate)
 - Run `python3 src/orchestrator.py --daemon` to rebuild full database
 
 **Ongoing — Scale the Pipeline:**

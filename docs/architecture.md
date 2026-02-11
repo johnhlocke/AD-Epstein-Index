@@ -146,7 +146,7 @@ The Editor blocks on a single `asyncio.Queue` that receives events from 4 backgr
 
 **Strategic assessment (every 5 min via `timer_strategic` event, OR immediately on `human_message` event):**
 - `_strategic_assessment()` — call Claude for complex decisions, handle human messages
-- **Model selection:** Uses Sonnet for routine status checks (task routing, progress). Switches to Opus when human messages are present or quality issues need judgment (nulls, duplicates, near-duplicates, xref leads).
+- **Model selection:** Uses Sonnet for routine status checks (task routing, progress). Switches to Opus only when human messages are present (quality cleanup runs on Sonnet).
 
 **Event batching:**
 - `_drain_pending_events()` — after handling one event, drains any that accumulated during processing (e.g., multiple agent results arriving during a long LLM call). Batches `agent_result` events into a single `_process_results()` call for efficiency.
@@ -402,8 +402,8 @@ Editor._commit_investigation()
 
 1. **Detective BB pass** — Grep search of `data/black_book.txt` with word-boundary matching, min 5-char last names
 2. **Detective DOJ pass** — Playwright browser search of justice.gov/epstein with WAF bypass, bot check handling
-3. **Combined verdict** — 5-tier internally (`confirmed_match` → `needs_review`), mapped to binary YES/NO at Supabase boundary via `verdict_to_binary()`
-4. **Contextual glance** — For ambiguous cases only (~10-20%): Haiku reads DOJ snippets to determine if same person. Clear YES/NO cases skip LLM call.
+3. **Combined verdict** — 5-tier internally (`confirmed_match` → `needs_review`), mapped to binary YES/NO at Supabase boundary via `verdict_to_binary()`. Strong verdicts (`confirmed_match`, `likely_match`) always map to YES — immune to glance override.
+4. **Contextual glance** — For ambiguous tiers only (`possible_match`, `needs_review`): Haiku reads DOJ snippets to determine if same person. Strong verdicts and clear `no_match` skip the LLM call entirely.
 5. **Editor writes verdict** — `detective_verdict` (YES/NO) and `detective_checked_at` on features table
 6. **Researcher investigation** — 3-step pipeline (Triage → Deep Analysis → Synthesis) builds dossier for each YES lead:
    - Full AD feature context (all 14 fields from Supabase)
