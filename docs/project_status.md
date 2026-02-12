@@ -94,6 +94,10 @@ This file should be automatically updated when necessary to answer three key que
 | Speech bubble persistence fix | Tooling | Done |
 | Agent work cycle error fixes (Casey, Arthur) | Tooling | Done |
 | Traceback logging in agent error handler | Tooling | Done |
+| Cost control toggles (IDLE_LLM_ENABLED, NARRATE_EVENTS) | Tooling | Done |
+| Future-date scraping fix (year/month cap) | Tooling | Done |
+| Activity log parser traceback filtering | Tooling | Done |
+| Website design polish (Sable session) | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -253,12 +257,16 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — In Progress (Clean Slate Rebuild):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
-- Current stats: 473 issues, 1000 features (927 named, 73 Anonymous), 386 cross-references (138 YES), 106 dossiers (18 confirmed, 88 rejected)
+- Current stats: ~480 issues, ~1686 features, ~476 cross-references (157 YES), ~123 dossiers (5 HIGH, 19 MEDIUM)
 - Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
-- Total API cost: ~$55 (Courier $11, Editor $31, Researcher $5, Detective + others ~$8)
+- Total API cost: ~$94 (Miranda $70 at 74%, Courier $11, Researcher $5, Detective + others ~$8)
 - Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified
 - Episodic memory cap increased 2K → 10K to prevent oldest memories from being trimmed
 - Agent error fixes: Casey NoneType crash, Arthur slice error, traceback logging added
+- Cost control toggles added: `IDLE_LLM_ENABLED` and `NARRATE_EVENTS` for reducing LLM spend
+- Future-date scraping fix: pipeline no longer tries to scrape issues beyond current month
+- Miranda strategic assessment interval relaxed from 3min to 10min
+- 33% cross-reference hit rate (157 YES out of 476 checked)
 
 **Ongoing — Scale the Pipeline:**
 - Continue orchestrator run to process remaining issues and cross-reference all names

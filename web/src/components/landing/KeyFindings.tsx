@@ -12,7 +12,7 @@ export function KeyFindings({ stats }: KeyFindingsProps) {
 
   return (
     <section className="bg-[#1A1A1A] py-20" id="findings">
-      <div className="w-full px-6 lg:px-[100px]">
+      <div className="mx-auto w-full" style={{ maxWidth: "var(--grid-max-width)", paddingLeft: "var(--grid-margin)", paddingRight: "var(--grid-margin)" }}>
         <div className="flex items-baseline justify-between">
           <div>
             <h2 className="font-serif text-3xl font-bold text-white">

@@ -6,6 +6,7 @@ import {
   getMostConnectedHubs,
   getEpsteinSubgraph,
   getFullGraph,
+  getConfirmedNetwork,
   searchNodes,
 } from "@/lib/graph-queries";
 
@@ -61,6 +62,11 @@ export async function GET(request: NextRequest) {
 
       case "full": {
         const data = await getFullGraph();
+        return NextResponse.json(data);
+      }
+
+      case "confirmed": {
+        const data = await getConfirmedNetwork();
         return NextResponse.json(data);
       }
 

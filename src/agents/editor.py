@@ -99,8 +99,11 @@ QC_FIELDS = ["homeowner_name", "designer_name", "location_city",
 
 # Timing intervals
 PLAN_INTERVAL = 30       # seconds between planning cycles
-STRATEGIC_INTERVAL = 180  # seconds between LLM assessments (3 min)
+STRATEGIC_INTERVAL = 600  # seconds between LLM assessments (10 min — was 3 min)
 MAX_TASK_FAILURES = 3     # before giving up on an identifier/name
+
+# Cost control — toggle Miranda's narration (Haiku calls per task result)
+NARRATE_EVENTS = True     # Set False to disable Miranda's per-event speech bubbles
 
 # Per-model pricing (cost per 1M tokens)
 MODEL_PRICING = {
@@ -730,10 +733,14 @@ class EditorAgent(Agent):
 
         # Cascade: enqueue Courier scrape tasks for AD Archive issues immediately
         if "courier" in self.workers:
+            from datetime import datetime as _dt
+            _now = _dt.now()
+            _cur_year, _cur_month = _now.year, _now.month
             ad_issues = [
                 i for i in found
                 if i.get("year") and i["year"] >= MIN_YEAR and i.get("identifier")
                 and "ad_archive" in i.get("source", "")
+                and (i["year"] < _cur_year or (i["year"] == _cur_year and i.get("month", 13) <= _cur_month))
             ]
             for issue in ad_issues:
                 ident = issue["identifier"]
@@ -1599,10 +1606,14 @@ Respond with JSON only:
             self._plan.enqueue("scout", task)
             # Don't return — let discovery tasks enqueue too (priority system handles ordering)
 
-        # Priority 2: Discover missing issues
+        # Priority 2: Discover missing issues (cap at current month)
+        from datetime import datetime as _dt
+        _now = _dt.now()
+        _cur_year, _cur_month = _now.year, _now.month
         missing_months = []
         for year in range(MIN_YEAR, MAX_YEAR + 1):
-            for month in range(1, 13):
+            max_m = _cur_month if year == _cur_year else 12
+            for month in range(1, max_m + 1):
                 if (year, month) not in confirmed:
                     month_key = f"{year}-{month:02d}"
                     # Check ledger — skip if exhausted
@@ -1669,10 +1680,16 @@ Respond with JSON only:
         except Exception:
             return
 
+        # Filter out future issues (not yet published)
+        from datetime import datetime as _dt
+        _now = _dt.now()
+        _cur_year, _cur_month = _now.year, _now.month
+
         scrapeable = [
             i for i in issues
             if i.get("month") and i.get("year")
             and i.get("source_url")
+            and (i["year"] < _cur_year or (i["year"] == _cur_year and i["month"] <= _cur_month))
             and self.ledger.should_retry(i["identifier"], "scrape_features", max_failures=MAX_TASK_FAILURES)
         ]
 
@@ -1780,11 +1797,11 @@ Respond with JSON only:
         if not unchecked and not doj_retry:
             return
 
-        # Batch up to 30 names (deduplicated, with all feature_ids per name)
+        # Batch up to 50 names (deduplicated, with all feature_ids per name)
         seen_names = set()
         names = []
         feature_ids = {}  # name → list of feature IDs
-        for feat in unchecked[:30]:
+        for feat in unchecked[:50]:
             name = (feat.get("homeowner_name") or "").strip()
             if not name:
                 continue
@@ -2724,7 +2741,12 @@ Analyze and provide your assessment."""
         """Give Miranda facts, let her write the inbox message in her own voice.
 
         Uses a fast Haiku call (~$0.0005). Falls back to raw facts on error.
+        Toggle with NARRATE_EVENTS constant.
         """
+        if not NARRATE_EVENTS:
+            # Silent mode — just log the facts, skip LLM call
+            self.log(facts)
+            return
         try:
             # Include recent messages so Miranda doesn't repeat herself
             recent_context = ""

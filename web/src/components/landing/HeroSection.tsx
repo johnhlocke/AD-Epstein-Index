@@ -7,9 +7,16 @@ interface HeroSectionProps {
 export function HeroSection({ stats }: HeroSectionProps) {
   return (
     <section className="relative flex min-h-[70vh] items-center border-b border-border bg-background py-24">
-      {/* Grid-aligned: pl-[100px] matches our 100px margin, content spans columns 1–6 */}
-      <div className="w-full px-6 lg:pl-[100px] lg:pr-[100px]">
-        <div className="max-w-[50%]">
+      <div
+        className="mx-auto w-full"
+        style={{
+          maxWidth: "var(--grid-max-width)",
+          paddingLeft: "var(--grid-margin)",
+          paddingRight: "var(--grid-margin)",
+        }}
+      >
+        {/* Desktop: left 3 slices (612px). Mobile/tablet: full width */}
+        <div className="w-full lg:max-w-[612px]">
           <h1 className="font-serif text-5xl font-bold leading-[1.05] tracking-tight md:text-6xl lg:text-7xl">
             Where They Live
           </h1>

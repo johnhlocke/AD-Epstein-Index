@@ -386,8 +386,10 @@ def _read_log_lines():
 
 def read_activity_log_from_lines(lines, max_lines=20):
     """Parse recent log entries from pre-read lines."""
+    # Pre-filter to pipe-delimited lines only (skip multiline tracebacks)
+    valid_lines = [l for l in lines if l.count("|") >= 3]
     entries = []
-    for line in lines[-max_lines:]:
+    for line in valid_lines[-max_lines:]:
         parts = line.strip().split("|", 3)
         if len(parts) == 4:
             timestamp, agent, level, message = parts

@@ -24,7 +24,7 @@ const steps = [
 
 export function MethodologySection() {
   return (
-    <SectionContainer width="text" className="py-20" id="methodology">
+    <SectionContainer width="narrow" className="py-20" id="methodology">
       <h2 className="font-serif text-3xl font-bold">Methodology</h2>
       <p className="mt-2 mb-8 text-muted-foreground">
         How the data was collected, cross-referenced, and verified.

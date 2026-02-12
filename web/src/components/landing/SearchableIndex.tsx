@@ -96,7 +96,7 @@ export function SearchableIndex() {
   }
 
   return (
-    <SectionContainer width="viz" className="py-20" id="index">
+    <SectionContainer width="medium" className="py-20" id="index">
       <h2 className="font-serif text-3xl font-bold">Searchable Index</h2>
       <p className="mt-2 mb-6 text-muted-foreground">
         Browse all extracted features. Search by homeowner, designer, or article title.

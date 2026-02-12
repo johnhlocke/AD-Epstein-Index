@@ -15,7 +15,7 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
-      <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between px-6">
+      <div className="mx-auto flex h-14 items-center justify-between" style={{ maxWidth: "var(--grid-max-width)", paddingLeft: "var(--grid-margin)", paddingRight: "var(--grid-margin)" }}>
         <Link href="/" className="flex items-center gap-2">
           <span className="font-serif text-lg font-bold tracking-tight">
             AD-Epstein Index

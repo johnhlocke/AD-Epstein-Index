@@ -101,25 +101,72 @@ Sable: This is starting to look like a real publication
 
 ## Grid System
 
-The site uses a **12-column editorial grid** with fixed margins. This is the backbone — everything aligns to it.
+The site uses a **6-slice proportional grid** derived from a single base unit. This is the backbone — every value is on-grid.
 
-- **Margins:** 100px left and right (`px-6 lg:px-[100px]`). All section content starts at this edge.
-- **Columns:** 12 equal columns between the margins. On a 1440px viewport, each column is ~103px.
-- **Grid overlay:** Dev-only tool at `web/src/components/dev/GridOverlay.tsx`. Toggle with **Ctrl+G** (columns) and **Ctrl+Shift+G** (8px baseline). Magenta = margin guides, cyan = column grid.
+### The Proportional System
 
-### Column Assignments
+**Base unit: 24px** (3 × 8px baseline). Everything derives from this.
 
-| Section | Columns | Notes |
-|---|---|---|
-| Hero text (title, quote, description, stats) | 1–6 | `max-w-[50%]` inside `px-[100px]` container. Right half is intentional negative space. |
-| Key Findings heading | 1–12 | Left-aligned on column 1, "Live from pipeline" right-aligned on column 12 |
-| Key Findings buckets | 1–4, 5–8, 9–12 | Three equal buckets: Pipeline, Investigation, Archive |
-| Section headings (Coverage Map, etc.) | Start at column 1 | All section headings share the same left edge |
+```
+Baseline:         8px     (the atom)
+Gutter:          24px     (1 unit)  — constant across all breakpoints
+Mobile margin:   24px     (1 unit)  — matches gutter
+Tablet margin:   48px     (2 units) — 2× gutter
+Desktop margin:  96px     (4 units) — 4× gutter
+Max-width:     1440px     — content centers beyond this
+```
+
+**Margin progression: 1u → 2u → 4u** (geometric ratio of 2). 96px, not 100px, because 96 = 12 × 8 = 4 × 24 — it's part of the system.
+
+### Desktop Layout (at 1440px reference)
+
+```
+| 96px | S1:188 | 24 | S2:188 | 24 | S3:188 | 24 | S4:188 | 24 | S5:188 | 24 | S6:188 | 96px |
+|      |   Col A (400px)      |   Col B (400px)      |   Col C (400px)      |      |
+|      |   Half Left (612px)             |   Half Right (612px)            |      |
+```
+
+### Content Width Tiers
+
+| Tier | Slices | Width @ 1440 | Use |
+|------|--------|-------------|-----|
+| `narrow` | 3 (half) | 612px | Body text, methodology, prose |
+| `medium` | 4 (⅔) | 824px | Charts with legends, tables, search index |
+| `wide` | 6 (full) | 1248px | Heatmaps, hero, full-bleed data viz |
+
+### Responsive Breakpoints
+
+| Breakpoint | Viewport | Margin | Slices | Columns |
+|-----------|----------|--------|--------|---------|
+| mobile | < 768px | 24px (1u) | 2 | 1 |
+| tablet | 768–1023px | 48px (2u) | 4 | 2 |
+| desktop | ≥ 1024px | 96px (4u) | 6 | 3 |
+
+Gutters stay at 24px always. Only margins and slice count change.
+
+### CSS Custom Properties
+
+```css
+--grid-margin     /* Responsive: 24px → 48px → 96px */
+--grid-slices     /* Responsive: 2 → 4 → 6 */
+--grid-columns    /* Responsive: 1 → 2 → 3 */
+--grid-gutter     /* Constant: 24px */
+--grid-max-width  /* Constant: 1440px */
+```
+
+### Grid Overlay
+
+Dev tool at `web/src/components/dev/GridOverlay.tsx`. Toggle with **Ctrl+G** (columns) and **Ctrl+Shift+G** (8px baseline). Reads from CSS custom properties — auto-adapts to breakpoint.
+
+- Magenta = margin guides
+- Cyan = slice grid
+- Amber = major column boundaries + gutters
 
 ### Layout Rules
 
-- **Consistent left edge:** Every section heading starts at the 100px left margin. This vertical line runs the full page. Non-negotiable.
-- **No arbitrary max-widths:** Don't use `max-w-[720px]` or `max-w-lg` — size content to column boundaries using `max-w-[50%]` (6 cols) or `max-w-[33%]` (4 cols) or full width.
+- **Consistent left edge:** Every section heading starts at the margin line. This vertical line runs the full page. Non-negotiable.
+- **No arbitrary max-widths:** Use `narrow`, `medium`, or `wide` tiers via `SectionContainer`. No `max-w-[720px]` or `max-w-lg`.
+- **No arbitrary margins:** Use `var(--grid-margin)` for padding, never `px-6 lg:px-[100px]`.
 - **Generous white space** — let content breathe, but keep spacing tight *within* sections.
 - **Clear visual hierarchy:** headline → summary → visualization → detail.
 

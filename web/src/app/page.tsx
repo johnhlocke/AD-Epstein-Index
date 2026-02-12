@@ -12,7 +12,7 @@ import { VerdictBreakdown } from "@/components/charts/VerdictBreakdown";
 import { SearchableIndex } from "@/components/landing/SearchableIndex";
 import { Skeleton } from "@/components/ui/skeleton";
 
-export const revalidate = 300; // Revalidate every 5 minutes
+export const dynamic = "force-dynamic"; // Render on-demand, not at build time
 
 export default async function Home() {
   const stats = await getStats();
@@ -27,15 +27,15 @@ export default async function Home() {
 
       {/* 2.5 Knowledge Graph Preview */}
       <section className="bg-[#1A1A1A] pb-20" id="graph">
-        <div className="w-full px-6 lg:px-[100px]">
+        <div className="mx-auto w-full" style={{ maxWidth: "var(--grid-max-width)", paddingLeft: "var(--grid-margin)", paddingRight: "var(--grid-margin)" }}>
           <div className="mb-6 flex items-baseline justify-between">
             <div>
               <h2 className="font-serif text-3xl font-bold text-white">
                 Connection Graph
               </h2>
               <p className="mt-2 text-sm text-white/40">
-                Interactive knowledge graph of people, designers, locations, and
-                Epstein connections. Drag to explore.
+                Confirmed connections and their networks — designers, locations,
+                and Epstein source links. Drag to explore.
               </p>
             </div>
           </div>
@@ -59,7 +59,7 @@ export default async function Home() {
       <VerdictBreakdown dossiers={stats.dossiers} />
 
       {/* 9. Searchable Index */}
-      <Suspense fallback={<div className="py-20 px-6"><Skeleton className="h-96 w-full" /></div>}>
+      <Suspense fallback={<div className="py-20" style={{ paddingLeft: "var(--grid-margin)", paddingRight: "var(--grid-margin)" }}><Skeleton className="h-96 w-full" /></div>}>
         <SearchableIndex />
       </Suspense>
 

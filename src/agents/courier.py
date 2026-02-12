@@ -531,8 +531,8 @@ class CourierAgent(Agent):
         url = (issue.get("source_url")
                or f"https://archive.architecturaldigest.com/issue/{year}{month:02d}01")
 
-        # Get or initialize progress
-        progress = issue.get("ad_archive_progress", {})
+        # Get or initialize progress (value may be explicitly None)
+        progress = issue.get("ad_archive_progress") or {}
         batches_done = progress.get("batches_downloaded", [])
         total_pages = progress.get("total_pages")
 
@@ -766,7 +766,7 @@ If the download FAILED, respond:
 
     async def _combine_and_finalize(self, issue):
         """Combine all PDF batches into a single file using pdfunite."""
-        progress = issue.get("ad_archive_progress", {})
+        progress = issue.get("ad_archive_progress") or {}
         batch_dir = progress.get("batch_dir")
 
         if not batch_dir or not os.path.isdir(batch_dir):

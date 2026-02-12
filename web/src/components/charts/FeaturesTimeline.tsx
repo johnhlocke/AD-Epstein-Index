@@ -22,7 +22,7 @@ export function FeaturesTimeline({ data }: FeaturesTimelineProps) {
   if (!data.length) return null;
 
   return (
-    <SectionContainer width="viz" className="py-20" id="timeline">
+    <SectionContainer width="wide" className="py-20" id="timeline">
       <h2 className="font-serif text-3xl font-bold">Features by Year</h2>
       <p className="mt-2 mb-8 text-muted-foreground">
         Number of featured homes extracted per year.

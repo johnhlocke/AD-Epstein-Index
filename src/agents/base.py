@@ -27,6 +27,9 @@ SKILLS_DIR = os.path.join(os.path.dirname(__file__), "skills")
 LOG_PATH = os.path.join(DATA_DIR, "agent_activity.log")
 COSTS_DIR = os.path.join(DATA_DIR, "costs")
 
+# Cost control — toggle idle LLM tasks across all agents
+IDLE_LLM_ENABLED = True  # Set False to disable reflect/curiosity/improve/idle_chatter
+
 # Per-model pricing (cost per 1M tokens): (input, output)
 MODEL_PRICING = {
     "opus": (15.00, 75.00),
@@ -266,27 +269,28 @@ class Agent(ABC):
                     if did_work:
                         self.log(f"Work cycle completed (cycle #{self._cycles})", level="DEBUG")
                     else:
-                        # No work — use idle time intelligently (priority order)
-                        # 1. Reflect on recent episodes (every 10 min)
-                        try:
-                            await asyncio.to_thread(self.reflect)
-                        except Exception:
-                            pass
-                        # 2. Explore cross-agent patterns (every 15 min)
-                        try:
-                            await asyncio.to_thread(self.curious_explore)
-                        except Exception:
-                            pass
-                        # 3. Propose methodology improvements (every 30 min)
-                        try:
-                            await asyncio.to_thread(self.propose_improvement)
-                        except Exception:
-                            pass
-                        # 4. Personality-driven idle chatter (every 2 min)
-                        try:
-                            await asyncio.to_thread(self.idle_chatter)
-                        except Exception:
-                            pass
+                        # No work — use idle time intelligently (if enabled)
+                        if IDLE_LLM_ENABLED:
+                            # 1. Reflect on recent episodes (every 10 min)
+                            try:
+                                await asyncio.to_thread(self.reflect)
+                            except Exception:
+                                pass
+                            # 2. Explore cross-agent patterns (every 15 min)
+                            try:
+                                await asyncio.to_thread(self.curious_explore)
+                            except Exception:
+                                pass
+                            # 3. Propose methodology improvements (every 30 min)
+                            try:
+                                await asyncio.to_thread(self.propose_improvement)
+                            except Exception:
+                                pass
+                            # 4. Personality-driven idle chatter (every 2 min)
+                            try:
+                                await asyncio.to_thread(self.idle_chatter)
+                            except Exception:
+                                pass
                 except Exception as e:
                     self._errors += 1
                     self._last_error = str(e)
@@ -484,7 +488,12 @@ class Agent(ABC):
 
         Uses Haiku for a fast, cheap call (~$0.0005). Falls back to raw facts on error.
         The result is stored in self._speech for the dashboard to read.
+        Toggle with IDLE_LLM_ENABLED constant.
         """
+        if not IDLE_LLM_ENABLED:
+            self._speech = facts[:200]
+            self._speech_time = _time.time()
+            return facts
         personality = self._load_personality()
         if not personality:
             self._speech = facts

@@ -6,6 +6,29 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-12 (Session 24)
+
+### Added — Cost Control Toggles
+- **`src/agents/base.py`** — New `IDLE_LLM_ENABLED` toggle (default True). When False, disables `reflect()`, `curious_explore()`, `propose_improvement()`, and `idle_chatter()` for ALL agents. `narrate()` short-circuits to raw facts (no Haiku call) when disabled.
+- **`src/agents/editor.py`** — New `NARRATE_EVENTS` toggle (default True). When False, Miranda skips per-event Haiku narration calls, saving ~$0.001 per pipeline event. Strategic assessment interval increased from 180s to 600s (3min → 10min).
+
+### Changed — Detective Batch Size
+- **`src/agents/editor.py`** — Increased detective batch size from 30 to 50 names per batch in `_fill_detective_queue()`. Reduces overhead from batch initialization.
+
+### Fixed — Courier NoneType Error
+- **`src/agents/courier.py`** — Lines 535 and 769: `issue.get("ad_archive_progress", {})` returns None when key exists but value is None. Fixed with `issue.get("ad_archive_progress") or {}` pattern.
+
+### Fixed — Activity Log Parser Traceback Pollution
+- **`src/agent_status.py`** — `read_activity_log_from_lines()` was slicing last 20 lines before filtering, causing multiline Python tracebacks to fill the entire window with garbage. Now pre-filters to pipe-delimited lines (`l.count("|") >= 3`) before slicing.
+
+### Fixed — Future-Date Scraping
+- **`src/agents/editor.py`** — Casey was attempting to scrape September 2026 issues that don't exist yet. Added current year/month cap in three places: `_fill_scrape_queue()`, `_commit_discovered_issues()` cascade, and `_fill_scout_queue()` gap analysis. Issues beyond the current month are now excluded from scrape and discovery queues.
+
+### Changed — Website Design Polish (Sable Session)
+- **`web/src/`** — Comprehensive design pass across landing page components: refined typography hierarchy, section spacing, chart styling, color consistency, header/footer updates, and responsive layout improvements. Updated `design-tokens.ts`, `globals.css`, and most landing page components.
+
+---
+
 ## 2026-02-12 (Session 23)
 
 ### Added — Agent Done Sprite State

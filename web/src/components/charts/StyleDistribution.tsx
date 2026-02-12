@@ -31,7 +31,7 @@ export function StyleDistribution({ data }: StyleDistributionProps) {
   }));
 
   return (
-    <SectionContainer width="viz" className="py-20" id="styles">
+    <SectionContainer width="wide" className="py-20" id="styles">
       <h2 className="font-serif text-3xl font-bold">Design Styles</h2>
       <p className="mt-2 mb-8 text-muted-foreground">
         Most frequently identified design styles across all featured homes.

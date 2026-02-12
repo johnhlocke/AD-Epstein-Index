@@ -26,7 +26,7 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
     : "Unknown issue";
 
   return (
-    <SectionContainer width="text" className="py-12">
+    <SectionContainer width="narrow" className="py-12">
       <Link
         href="/#verdicts"
         className="text-sm text-muted-foreground hover:text-foreground transition-colors"

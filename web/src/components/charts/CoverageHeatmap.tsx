@@ -30,7 +30,7 @@ interface CoverageHeatmapProps {
 
 export function CoverageHeatmap({ coverage }: CoverageHeatmapProps) {
   return (
-    <SectionContainer width="viz" className="py-20" id="coverage">
+    <SectionContainer width="wide" className="py-20" id="coverage">
       <h2 className="font-serif text-3xl font-bold">Coverage Map</h2>
       <p className="mt-2 mb-8 text-muted-foreground">
         How much of Architectural Digest have we scanned? Each cell is one
@@ -59,15 +59,15 @@ export function CoverageHeatmap({ coverage }: CoverageHeatmapProps) {
 
       {/* Heatmap grid */}
       <div className="overflow-x-auto">
-        <div className="inline-grid gap-[2px]" style={{
-          gridTemplateColumns: `auto repeat(12, 1fr)`,
+        <div className="grid gap-[2px]" style={{
+          gridTemplateColumns: `auto repeat(12, minmax(24px, 1fr))`,
         }}>
           {/* Month header row */}
           <div />
           {MONTHS.map((m, i) => (
             <div
               key={i}
-              className="flex h-6 w-8 items-center justify-center text-[10px] font-medium text-muted-foreground"
+              className="flex h-6 items-center justify-center text-[10px] font-medium text-muted-foreground"
             >
               {m}
             </div>
@@ -83,7 +83,7 @@ export function CoverageHeatmap({ coverage }: CoverageHeatmapProps) {
                 <Tooltip key={`${row.year}-${mi}`}>
                   <TooltipTrigger asChild>
                     <div
-                      className={`h-6 w-8 rounded-[2px] border border-border/50 ${
+                      className={`h-6 rounded-[2px] border border-border/50 ${
                         status ? statusColors[status] ?? "bg-[#F0F0F0]" : "bg-[#F0F0F0]"
                       }`}
                     />

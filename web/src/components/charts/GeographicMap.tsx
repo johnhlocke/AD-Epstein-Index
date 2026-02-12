@@ -63,7 +63,7 @@ export function GeographicMap({ data }: GeographicMapProps) {
   }));
 
   return (
-    <SectionContainer width="viz" className="py-20" id="geography">
+    <SectionContainer width="wide" className="py-20" id="geography">
       <h2 className="font-serif text-3xl font-bold">Locations</h2>
       <p className="mt-2 mb-8 text-muted-foreground">
         Where the featured homes are located. Larger areas represent more

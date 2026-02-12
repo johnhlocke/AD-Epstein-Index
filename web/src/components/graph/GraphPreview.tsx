@@ -56,7 +56,7 @@ export function GraphPreview() {
     if (!mounted) return;
     (async () => {
       try {
-        const res = await fetch("/api/graph?preset=full");
+        const res = await fetch("/api/graph?preset=confirmed");
         if (!res.ok) return;
         const data: GraphData = await res.json();
         setGraphData(data);

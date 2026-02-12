@@ -13,7 +13,7 @@ import { useMounted } from "@/lib/use-mounted";
 
 const VERDICT_COLORS = {
   Confirmed: "#2D6A4F",
-  Rejected: "#9B2226",
+  Rejected: "#A3A3A3",
   "Pending Review": "#B8860B",
 };
 
@@ -38,13 +38,13 @@ export function VerdictBreakdown({ dossiers }: VerdictBreakdownProps) {
   ].filter((d) => d.value > 0);
 
   return (
-    <SectionContainer width="viz" className="py-20" id="verdicts">
+    <SectionContainer width="wide" className="py-20" id="verdicts">
       <h2 className="font-serif text-3xl font-bold">Epstein Connections</h2>
       <p className="mt-2 mb-8 text-muted-foreground">
         Breakdown of cross-reference investigations by Editor verdict.
       </p>
-      <div className="flex flex-col items-center gap-8 md:flex-row md:items-start md:justify-center">
-        <div className="h-[300px] w-[300px]">
+      <div className="grid gap-6 md:grid-cols-3">
+        <div className="flex h-[300px] items-center justify-center md:col-span-2">
           {mounted && (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
@@ -86,10 +86,10 @@ export function VerdictBreakdown({ dossiers }: VerdictBreakdownProps) {
           )}
         </div>
         <div className="flex flex-col gap-3">
-          <p className="text-center font-mono text-4xl font-bold md:text-left">
+          <p className="font-mono text-4xl font-bold">
             {dossiers.total}
           </p>
-          <p className="text-center text-sm text-muted-foreground md:text-left">
+          <p className="text-sm text-muted-foreground">
             Total dossiers investigated
           </p>
           <div className="mt-4 space-y-2 text-sm">

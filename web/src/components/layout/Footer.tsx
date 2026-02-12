@@ -3,9 +3,9 @@ import { Separator } from "@/components/ui/separator";
 export function Footer() {
   return (
     <footer className="border-t border-border bg-background">
-      <div className="mx-auto max-w-[1400px] px-6 py-12">
+      <div className="mx-auto py-12" style={{ maxWidth: "var(--grid-max-width)", paddingLeft: "var(--grid-margin)", paddingRight: "var(--grid-margin)" }}>
         <div className="flex flex-col gap-6 md:flex-row md:justify-between">
-          <div className="max-w-md">
+          <div className="max-w-[612px]">
             <h3 className="font-serif text-lg font-semibold">AD-Epstein Index</h3>
             <p className="mt-2 text-sm text-muted-foreground leading-relaxed">
               A data-driven research project cataloging every featured home in

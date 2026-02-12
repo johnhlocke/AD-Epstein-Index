@@ -60,6 +60,15 @@
 
 :root {
   --radius: 0.625rem;
+  /* ── Proportional grid system ──
+   * Base unit: 24px. Margin progression: 1u → 2u → 4u.
+   * Gutters: 24px constant. Max-width: 1440px.
+   */
+  --grid-gutter: 24px;
+  --grid-max-width: 1440px;
+  --grid-margin: 24px;
+  --grid-slices: 2;
+  --grid-columns: 1;
   --background: #FAFAFA;
   --foreground: #1A1A1A;
   --card: #FFFFFF;
@@ -91,6 +100,22 @@
   --sidebar-accent-foreground: #1A1A1A;
   --sidebar-border: #E5E5E5;
   --sidebar-ring: #B87333;
+}
+
+@media (min-width: 768px) {
+  :root {
+    --grid-margin: 48px;
+    --grid-slices: 4;
+    --grid-columns: 2;
+  }
+}
+
+@media (min-width: 1024px) {
+  :root {
+    --grid-margin: 96px;
+    --grid-slices: 6;
+    --grid-columns: 3;
+  }
 }
 
 @layer base {

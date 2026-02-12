@@ -231,6 +231,18 @@ export async function getFullGraph(): Promise<GraphData> {
   );
 }
 
+/** 6b. Confirmed-only network: persons with CONFIRMED editor verdict + their connections */
+export async function getConfirmedNetwork(): Promise<GraphData> {
+  return runGraphQuery(
+    `MATCH (p:Person)
+     WHERE p.editor_verdict = 'CONFIRMED'
+     WITH p
+     MATCH path = (p)-[]-(connected)
+     RETURN path
+     LIMIT 500`
+  );
+}
+
 /** 7. Autocomplete search for person names */
 export async function searchNodes(
   query: string
