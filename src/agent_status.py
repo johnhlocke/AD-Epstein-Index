@@ -36,6 +36,8 @@ DOSSIERS_DIR = os.path.join(DATA_DIR, "dossiers")
 DESIGNER_TRAINING_LOG_PATH = os.path.join(DATA_DIR, "designer_training", "training_log.json")
 DESIGNER_MODE_PATH = os.path.join(DATA_DIR, "designer_mode.json")
 OUTPUT_PATH = os.path.join(BASE_DIR, "tools", "agent-office", "status.json")
+SKILLS_PATH = os.path.join(BASE_DIR, "tools", "agent-office", "skills.json")
+SKILLS_DIR = os.path.join(BASE_DIR, "src", "agents", "skills")
 
 # ── TTL Cache ──────────────────────────────────────────────────────────────
 # Module-level cache: { key: (expire_time, value) }
@@ -1482,6 +1484,46 @@ def generate_status():
     }
 
     return status
+
+
+def write_skills_json():
+    """Write skills.json alongside status.json for static dashboard access.
+
+    Reads all agent skill .md files and writes them as a JSON bundle.
+    Only rewrites if any skill file is newer than the existing skills.json.
+    """
+    if not os.path.exists(SKILLS_DIR):
+        return
+
+    # Check if any skill file is newer than skills.json (skip if not)
+    if os.path.exists(SKILLS_PATH):
+        skills_mtime = os.path.getmtime(SKILLS_PATH)
+        any_newer = False
+        for fname in os.listdir(SKILLS_DIR):
+            if fname.endswith(".md"):
+                if os.path.getmtime(os.path.join(SKILLS_DIR, fname)) > skills_mtime:
+                    any_newer = True
+                    break
+        if not any_newer:
+            return
+
+    skills_list = []
+    content_map = {}
+    for fname in sorted(os.listdir(SKILLS_DIR)):
+        if not fname.endswith(".md"):
+            continue
+        agent_name = fname[:-3]
+        skills_list.append({"agent": agent_name, "file": fname})
+        try:
+            with open(os.path.join(SKILLS_DIR, fname)) as f:
+                content_map[agent_name] = f.read()
+        except IOError:
+            content_map[agent_name] = "(failed to read)"
+
+    data = {"skills": skills_list, "content": content_map}
+    os.makedirs(os.path.dirname(SKILLS_PATH), exist_ok=True)
+    with open(SKILLS_PATH, "w") as f:
+        json.dump(data, f)
 
 
 def main():

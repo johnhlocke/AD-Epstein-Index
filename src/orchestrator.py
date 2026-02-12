@@ -89,8 +89,9 @@ def create_agents(agent_names, include_editor=True):
 async def write_status(agents):
     """Generate and write status.json, merging live agent data with existing status generation."""
     try:
-        from agent_status import generate_status
+        from agent_status import generate_status, write_skills_json
         status = generate_status()
+        write_skills_json()  # Static skills.json for dashboard (skips if unchanged)
     except Exception:
         status = {
             "title": "AD-EPSTEIN INDEX — AGENT OFFICE",

@@ -3516,6 +3516,7 @@ async function handleAgentControl(command) {
 // ══════════════════════════════════════
 let skillsCurrentAgent = null;
 let skillsEditMode = false;
+let skillsCache = null; // Cached skills.json data
 
 function initSkillsModal() {
   document.getElementById('skills-modal-close').addEventListener('click', () => {
@@ -3576,7 +3577,10 @@ function initSkillsModal() {
       showToast(`${skillsCurrentAgent.toUpperCase()} SKILLS SAVED`, 'success');
       setTimeout(() => { status.style.display = 'none'; }, 2000);
     } catch (e) {
-      status.textContent = `ERROR: ${e.message}`;
+      const errMsg = e.message.includes('Failed to fetch') || e.message.includes('NetworkError')
+        ? 'Save requires dashboard server: python3 src/dashboard_server.py'
+        : `ERROR: ${e.message}`;
+      status.textContent = errMsg;
       status.style.color = '#e74c3c';
       status.style.display = '';
       showToast(`SAVE FAILED — ${e.message}`, 'error');
@@ -3598,6 +3602,29 @@ function exitSkillsEditMode() {
   skillsEditMode = false;
 }
 
+async function loadSkillsData() {
+  // Try static skills.json first (works without dashboard server)
+  if (skillsCache) return skillsCache;
+  try {
+    const resp = await fetch('skills.json');
+    if (resp.ok) {
+      skillsCache = await resp.json();
+      return skillsCache;
+    }
+  } catch (e) { /* fall through */ }
+  // Fallback: dashboard server API
+  try {
+    const resp = await fetch('/api/skills');
+    if (resp.ok) {
+      const data = await resp.json();
+      // Normalize to same format as skills.json
+      skillsCache = { skills: data.skills, content: {} };
+      return skillsCache;
+    }
+  } catch (e) { /* fall through */ }
+  return null;
+}
+
 async function openSkillsModal(agentId) {
   const modal = document.getElementById('skills-modal');
   const tabs = document.getElementById('skills-tabs');
@@ -3606,42 +3633,51 @@ async function openSkillsModal(agentId) {
   modal.classList.add('visible');
   content.textContent = 'Loading skills...';
 
-  // Fetch available skills
-  try {
-    const resp = await fetch('/api/skills');
-    if (!resp.ok) throw new Error('API not available');
-    const data = await resp.json();
-
-    tabs.innerHTML = data.skills.map(s => {
-      const active = s.agent === agentId ? ' active' : '';
-      return `<button class="modal-tab${active}" data-agent="${s.agent}">${(AGENT_NAMES[s.agent] || s.agent).toUpperCase()}</button>`;
-    }).join('');
-
-    tabs.querySelectorAll('.modal-tab').forEach(tab => {
-      tab.addEventListener('click', () => {
-        tabs.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
-        tab.classList.add('active');
-        loadSkillContent(tab.dataset.agent);
-      });
-    });
-
-    await loadSkillContent(agentId);
-  } catch (e) {
-    // Fallback if API is not available
+  const data = await loadSkillsData();
+  if (!data || !data.skills || !data.skills.length) {
     tabs.innerHTML = '';
-    content.textContent = 'Skills API not available. Start the dashboard server:\npython3 src/dashboard_server.py';
+    content.textContent = 'No skills data available. Ensure the pipeline is running\n(skills.json is generated alongside status.json).';
+    return;
   }
+
+  tabs.innerHTML = data.skills.map(s => {
+    const active = s.agent === agentId ? ' active' : '';
+    return `<button class="modal-tab${active}" data-agent="${s.agent}">${(AGENT_NAMES[s.agent] || s.agent).toUpperCase()}</button>`;
+  }).join('');
+
+  tabs.querySelectorAll('.modal-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.querySelectorAll('.modal-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      loadSkillContent(tab.dataset.agent);
+    });
+  });
+
+  await loadSkillContent(agentId);
 }
 
 async function loadSkillContent(agentId) {
   exitSkillsEditMode();
   skillsCurrentAgent = agentId;
   const content = document.getElementById('skills-content');
+
+  // Try cached static data first
+  if (skillsCache && skillsCache.content && skillsCache.content[agentId]) {
+    content.textContent = skillsCache.content[agentId];
+    return;
+  }
+
+  // Fallback: dashboard server API for individual skill
   try {
     const resp = await fetch(`/api/skills/${agentId}`);
     if (!resp.ok) throw new Error('Not found');
     const data = await resp.json();
     content.textContent = data.content || '(empty)';
+    // Cache it
+    if (skillsCache) {
+      if (!skillsCache.content) skillsCache.content = {};
+      skillsCache.content[agentId] = data.content;
+    }
   } catch (e) {
     content.textContent = `Failed to load skills for ${agentId}`;
   }
