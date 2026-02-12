@@ -2783,7 +2783,7 @@ Analyze and provide your assessment."""
             return
 
         now = _time.time()
-        tracker = self._agent_tracker.get(agent_name, {})
+        tracker = self._agent_tracker.setdefault(agent_name, {"successes": 0, "failures": 0, "streak": 0, "last_note_at": 0})
         last_note = tracker.get("last_note_at", 0)
         if now - last_note < MGMT_NOTE_COOLDOWN:
             return
