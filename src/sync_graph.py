@@ -61,8 +61,14 @@ def fetch_all_data():
     print(f"  {len(issues)} issues")
 
     print("Fetching features...")
-    features_result = sb.table("features").select("*").execute()
-    features = features_result.data or []
+    features = []
+    offset = 0
+    while True:
+        batch = sb.table("features").select("*").range(offset, offset + 999).execute()
+        features.extend(batch.data or [])
+        if len(batch.data or []) < 1000:
+            break
+        offset += 1000
     print(f"  {len(features)} features")
 
     print("Fetching cross-references...")
