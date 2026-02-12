@@ -250,7 +250,7 @@ class CourierAgent(Agent):
 
     def _find_next_archive_org_issue(self):
         """Find the next archive.org issue that needs downloading."""
-        issues = list_issues(status="discovered")
+        issues = list_issues(status="discovered") or []
         # Filter to archive.org source with month/year
         downloadable = [
             i for i in issues
@@ -275,7 +275,7 @@ class CourierAgent(Agent):
 
     def _find_next_ad_archive_issue(self):
         """Find the next AD Archive issue — prioritize partial downloads, then new ones."""
-        all_issues = list_issues(source="ad_archive")
+        all_issues = list_issues(source="ad_archive") or []
 
         # First: resume partial downloads (batches already started)
         for issue in all_issues:

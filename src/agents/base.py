@@ -16,6 +16,7 @@ import asyncio
 import fcntl
 import json
 import os
+import traceback
 import time as _time
 from abc import ABC, abstractmethod
 from datetime import datetime
@@ -290,7 +291,7 @@ class Agent(ABC):
                     self._errors += 1
                     self._last_error = str(e)
                     self._last_error_time = datetime.now()
-                    self.log(f"Error in work cycle: {e}", level="ERROR")
+                    self.log(f"Error in work cycle: {e}\n{traceback.format_exc()}", level="ERROR")
                 finally:
                     self._active = False
 

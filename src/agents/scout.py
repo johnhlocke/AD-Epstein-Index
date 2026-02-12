@@ -142,6 +142,8 @@ class ScoutAgent(Agent):
         """Write knowledge base with dedup and cap per category."""
         for category in ("successful_sources", "failed_strategies", "source_notes", "insights"):
             entries = kb.get(category, [])
+            if not isinstance(entries, list):
+                entries = []  # Fix corrupted dict → list
             # Dedup by content (use 'source'+'query' for sources, 'strategy' for failures, 'text'/'note' for others)
             seen = set()
             deduped = []
@@ -174,17 +176,21 @@ class ScoutAgent(Agent):
         kb = self._load_knowledge()
         lines = []
 
+        # Helper: ensure value is a list (on-disk data may have been corrupted to dict)
+        def _as_list(val):
+            return val if isinstance(val, list) else []
+
         # Last 5 successful sources
-        for entry in kb.get("successful_sources", [])[-5:]:
+        for entry in _as_list(kb.get("successful_sources", []))[-5:]:
             lines.append(f"[SUCCESS] {entry.get('source', '?')}: found {entry.get('found_count', '?')} issues "
                          f"(years {entry.get('year_range', '?')})")
 
         # Last 5 failed strategies
-        for entry in kb.get("failed_strategies", [])[-5:]:
+        for entry in _as_list(kb.get("failed_strategies", []))[-5:]:
             lines.append(f"[FAILED] {entry.get('strategy', '?')}: {entry.get('reason', '?')}")
 
         # Last 5 source notes
-        for entry in kb.get("source_notes", [])[-5:]:
+        for entry in _as_list(kb.get("source_notes", []))[-5:]:
             lines.append(f"[NOTE] {entry.get('source', '?')}: {entry.get('note', '?')}")
 
         # Last 5 insights
