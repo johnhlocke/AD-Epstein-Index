@@ -87,6 +87,13 @@ This file should be automatically updated when necessary to answer three key que
 | Episodic memory cap increase (2K → 10K) | Tooling | Done |
 | Fix KeyError 'successes' in Editor tracker | Tooling | Done |
 | Fix Supabase 1000-row pagination | Tooling | Done |
+| Agent done sprite state (extended idle detection) | Tooling | Done |
+| Skills modal fallback (no dashboard server) | Tooling | Done |
+| Non-home feature cleanup (457 deleted) | Phase 1 | Done |
+| Sync graph pagination fix | Tooling | Done |
+| Speech bubble persistence fix | Tooling | Done |
+| Agent work cycle error fixes (Casey, Arthur) | Tooling | Done |
+| Traceback logging in agent error handler | Tooling | Done |
 
 ## 2. What's Been Accomplished
 
@@ -246,10 +253,12 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — In Progress (Clean Slate Rebuild):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
-- Current stats (~12 hours in): ~473 issues discovered, ~2180 features extracted, ~300+ names cross-referenced, ~60 dossiers built, ~14 confirmed Epstein connections
+- Current stats: 473 issues, 1000 features (927 named, 73 Anonymous), 386 cross-references (138 YES), 106 dossiers (18 confirmed, 88 rejected)
+- Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
 - Total API cost: ~$55 (Courier $11, Editor $31, Researcher $5, Detective + others ~$8)
-- Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified, Anonymous rate 44% → 32%
+- Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified
 - Episodic memory cap increased 2K → 10K to prevent oldest memories from being trimmed
+- Agent error fixes: Casey NoneType crash, Arthur slice error, traceback logging added
 
 **Ongoing — Scale the Pipeline:**
 - Continue orchestrator run to process remaining issues and cross-reference all names

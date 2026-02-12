@@ -6,6 +6,30 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-12 (Session 23)
+
+### Added — Agent Done Sprite State
+- **`src/agents/base.py`** — New `done` sprite state for agents that complete all available work and enter extended idle. After 5 consecutive idle cycles with no work, agents switch from `waiting` to `done` sprite. Resets on next work cycle. Dashboard shows front-facing "done" pose distinct from normal waiting.
+
+### Changed — Non-Home Feature Cleanup
+- **`src/reextract_anonymous.py`** — Added `--delete-non-homes` mode that removes features flagged as non-home content (columns, editorials, museums, designer profiles, hotels) from Supabase. 457 non-home features deleted, reducing total from ~1457 to ~1000 real features.
+
+### Fixed — Skills Modal Without Dashboard Server
+- **`tools/agent-office/agent-office.html`** — Skills modal (Edit Skills button) now works without the dashboard HTTP server running. Falls back gracefully when `localhost:8766` is unavailable instead of showing a blank modal.
+
+### Fixed — Speech Bubble Persistence
+- **`tools/agent-office/agent-office.html`** — Speech bubbles were auto-hiding after 8 seconds due to a `setTimeout` that cleared them. Removed the auto-hide timer — bubbles now persist until the next status poll updates them. All active agents (Arthur, Elias, Silas, Elena, Miranda) show persistent speech.
+
+### Fixed — Sync Graph Pagination
+- **`src/sync_graph.py`** — Incremental sync was hitting Supabase's 1000-row limit on feature queries. Added pagination loop matching the fix in `agent_status.py`.
+
+### Fixed — Agent Work Cycle Errors
+- **`src/agents/base.py`** — Added `traceback.format_exc()` to error logging in the agent work cycle outer exception handler. Previously only logged the exception message, losing the stack trace.
+- **`src/agents/courier.py`** — Added `or []` defensive guards on `list_issues()` calls (lines 253, 278) to prevent NoneType errors when Supabase returns None.
+- **`src/agents/scout.py`** — Fixed `KeyError: slice(-5, None, None)` in `_get_knowledge_summary()`. `scout_knowledge.json` had `"successful_sources": {}` (dict) instead of `[]` (list). Added `_as_list()` helper and type check in `_save_knowledge()`.
+
+---
+
 ## 2026-02-12 (Session 22)
 
 ### Added — Sonnet Re-extraction of Anonymous Features
