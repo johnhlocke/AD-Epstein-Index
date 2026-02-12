@@ -2226,6 +2226,9 @@ function updateAgent(agentData) {
     }
 
     updateSpeechBubble('editor', mirandaCurrentSpeech, '#f5c842');
+    // Keep Miranda's bubble visible (override auto-hide)
+    const editorBubble = document.getElementById('bubble-editor');
+    if (editorBubble && editorBubble.dataset.fullText) editorBubble.classList.add('visible');
     return;
   }
 
@@ -2338,9 +2341,12 @@ function updateAgent(agentData) {
       charEl.classList.add('hub-waiting', 'show-front', 'anim-idle');
       updateSpeechBubble(aid, waitText);
     }
-    // Keep waiting bubble persistently visible (override auto-hide)
-    const waitBubble = document.getElementById(`bubble-${aid}`);
-    if (waitBubble) waitBubble.classList.add('visible');
+  }
+
+  // Keep bubble persistently visible as long as it has content (override auto-hide)
+  const persistBubble = document.getElementById(`bubble-${aid}`);
+  if (persistBubble && persistBubble.dataset.fullText) {
+    persistBubble.classList.add('visible');
   }
 
   const dot = document.getElementById(`dot-${agentData.id}`);
