@@ -49,7 +49,8 @@ This file should be automatically updated when necessary to answer three key que
 | Cross-references → Supabase (full xref data, not just binary) | Tooling | Done |
 | AD Archive direct HTTP scraper (JWT + Anthropic API) | Phase 1 | Done |
 | AD Archive issue discovery (100% coverage: 456/456) | Phase 1 | Done |
-| Data reset + pipeline rebuild from scratch | Tooling | Done (Run 3) |
+| Data reset + pipeline rebuild from scratch | Tooling | Done (Run 4) |
+| Researcher jumping sprite (confirmed match celebration) | Tooling | Done |
 | Scout three-tier discovery (AD Archive → archive.org → CLI) | Phase 1 | Done |
 | Editor Sonnet/Opus model split (cost optimization) | Tooling | Done |
 | Bug fixes: db retry, xref atomicity, cost tracking, cascade | Tooling | Done |
@@ -239,15 +240,14 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 ## 3. What's Next
 
-**Immediate — Rebuild Pipeline from Clean Slate:**
-- All Supabase tables and local data intentionally reset (Feb 10)
-- Pipeline verified end-to-end: Scout discovers → Editor commits → Courier scrapes → Editor loads features → Detective queued
-- Run 2 verified all fixes: 351 issues, 419 features, 57 xrefs, 13 YES verdicts, 8 dossiers in 54 minutes
-- Data wiped for Run 3 with all bug fixes applied (verdict pipeline, Miranda inbox, Opus gate)
-- Run `python3 src/orchestrator.py --daemon` to rebuild full database
+**Immediate — Run 4 (Clean Slate):**
+- All Supabase tables, Neo4j graph, local data, agent memory, and cost counters wiped (Feb 12)
+- Run 3 results before wipe: 345 issues, 960 features, 194 xrefs, 62 YES verdicts, 28 dossiers (1 HIGH, 2 MEDIUM), $10.74 total cost
+- All infrastructure upgrades in place: graph analytics, dynamic Cypher, emotional speech, jumping sprite, vocal Miranda
+- Run `python3 src/orchestrator.py --daemon` to rebuild full database from scratch
 
 **Ongoing — Scale the Pipeline:**
-- Run the multi-agent orchestrator to rediscover and process all 456 issues (1988-2025)
+- Run the multi-agent orchestrator to rediscover and process all 456 issues (1988-2026)
 - AD Archive issues (~300+) processed via JWT scraping (~4s each)
 - archive.org issues (~50) processed via PDF download + Reader extraction
 - Review Researcher dossiers and manually confirm/reject matches

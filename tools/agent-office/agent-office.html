@@ -1968,7 +1968,7 @@ const ASSETS = {
     courier:   { front: 'courier_front_trans.png',   back: 'courier_back_trans.png',   waiting: 'courier_front_waiting_trans.png', done: 'courier_front_done_trans.png' },
     reader:    { front: 'reader_front_trans.png',    back: 'reader_back_trans.png',    waiting: 'reader_front_waiting_trans.png' },
     detective: { front: 'detective_front_trans.png',  back: 'detective_back_trans.png', waiting: 'detective_front_waiting_trans.png' },
-    researcher: { front: 'researcher_front_trans.png', back: 'researcher_back_trans.png', waiting: 'researcher_front_waiting_trans.png' },
+    researcher: { front: 'researcher_front_trans.png', back: 'researcher_back_trans.png', waiting: 'researcher_front_waiting_trans.png', jumping: 'researcher_front_jumping_trans.png' },
   },
 };
 
@@ -2245,6 +2245,16 @@ function updateAgent(agentData) {
   if (charEl.classList.contains('editor-engage')) {
     // During Editor engagement, keep front-facing + yellow glow, just update animation
     charEl.classList.add('anim-idle');
+  } else if (aid === 'researcher' && agentData.researcher_state === 'jumping') {
+    // Elena found a confirmed match — show jumping sprite for 30s
+    charEl.classList.add('show-front', 'anim-idle');
+    const charImg = charEl.querySelector('.char-img');
+    if (charImg && ASSETS.chars.researcher?.jumping) {
+      charImg.src = ASSETS.chars.researcher.jumping;
+    }
+    updateSpeechBubble(aid, speechText);
+    agentWaitCycles[aid] = 0;
+    delete agentBoredThreshold[aid];
   } else if (isWorking) {
     // Working: face away (back view), pulsing colored outline
     charEl.classList.add('hub-working', 'anim-working');
@@ -2366,9 +2376,8 @@ function updateSpeechBubble(agentId, text, bgColor) {
 
   // Apply agent-colored background or reset to default
   if (bgColor) {
-    const tint = hexToRgba(bgColor, 0.35);
-    bubble.style.background = tint;
-    bubble.style.setProperty('--bubble-bg', tint);
+    bubble.style.background = bgColor;
+    bubble.style.setProperty('--bubble-bg', bgColor);
   } else {
     bubble.style.background = '';
     bubble.style.setProperty('--bubble-bg', '#fff');

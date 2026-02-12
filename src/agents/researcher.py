@@ -70,6 +70,7 @@ class ResearcherAgent(Agent):
         self._investigated = 0
         self._dossiers_built = 0
         self._client = None
+        self._jumping_until = 0  # Timed sprite state: jumping when confirmed match found
 
     def _get_client(self):
         """Lazy-init the Anthropic client."""
@@ -145,6 +146,7 @@ class ResearcherAgent(Agent):
 
             # Post bulletin for significant findings
             if strength in ("HIGH", "MEDIUM"):
+                self._jumping_until = time.time() + 30  # Confirmed match — jump!
                 try:
                     self.post_bulletin(
                         f"Investigation complete: {name} — {strength} connection strength",
@@ -274,6 +276,7 @@ class ResearcherAgent(Agent):
 
             # Post bulletin for significant findings
             if strength in ("HIGH", "MEDIUM"):
+                self._jumping_until = time.time() + 30  # Confirmed match — jump!
                 try:
                     self.post_bulletin(
                         f"Dossier complete: {name} — {strength} connection strength. "
@@ -1722,6 +1725,13 @@ Produce the complete dossier with final connection_strength."""
             json.dump(log, f, indent=2)
 
     # ── Progress ────────────────────────────────────────────────
+
+    def get_dashboard_status(self):
+        """Override to expose jumping sprite state on confirmed match."""
+        base = super().get_dashboard_status()
+        if time.time() < self._jumping_until:
+            base["researcher_state"] = "jumping"
+        return base
 
     def get_progress(self):
         """Progress: investigated leads / total leads."""

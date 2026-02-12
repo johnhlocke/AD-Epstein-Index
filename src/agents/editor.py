@@ -171,7 +171,7 @@ AGENT_PROFILES = {
     },
 }
 
-MGMT_NOTE_COOLDOWN = 15  # seconds — Miranda is very vocal
+MGMT_NOTE_COOLDOWN = 60  # seconds between management notes per agent
 
 
 class EditorAgent(Agent):

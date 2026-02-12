@@ -6,6 +6,25 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-12 (Session 21)
+
+### Added — Researcher Jumping Sprite
+- **`src/agents/researcher.py`** — New `_jumping_until` timed sprite state (30s). Triggers when Elena completes a dossier with HIGH or MEDIUM connection strength. `get_dashboard_status()` override exposes `researcher_state: "jumping"` to dashboard.
+- **Dashboard** — `researcher_front_jumping_trans.png` sprite added to ASSETS. Dashboard checks `researcher_state === 'jumping'` and switches to jumping sprite, overriding normal working/idle state.
+
+### Changed — Speech Bubble Opacity
+- Watercooler sprite speech bubbles now use full solid agent color (no transparency). Previously 35% opacity tint.
+- Miranda management note cooldown restored to 60s (was 15s).
+
+### Data — Full Reset (Run 4)
+- All Supabase tables wiped: 356 issues, 979 features, 194 cross-references, 30 dossiers
+- Neo4j knowledge graph wiped (all nodes and relationships)
+- All local data cleared: costs, agent memory (1,127 episodes), editor memory, ledger, watercooler, bulletin board, detective verdicts, researcher logs, designer training
+- Reference data preserved: Black Book PDF/text, epstein_db SQLite
+- Run 3 results before wipe: 345 issues, 960 features, 194 xrefs, 62 YES verdicts, 28 dossiers (1 HIGH, 2 MEDIUM, 2 LOW, 23 COINCIDENCE), $10.74 total cost over ~3.5 hours
+
+---
+
 ## 2026-02-11 (Session 20)
 
 ### Changed — Emotionally Reactive Agent Speech
