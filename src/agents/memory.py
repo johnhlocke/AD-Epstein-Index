@@ -45,7 +45,7 @@ _init_lock = threading.Lock()
 
 MEMORY_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "data", "agent_memory")
 STORE_FILE = "episodes.json"
-MAX_EPISODES = 2000  # Cap to prevent unbounded growth
+MAX_EPISODES = 10000  # Cap to prevent unbounded growth (~5MB at capacity)
 
 
 class EmbeddingModel:

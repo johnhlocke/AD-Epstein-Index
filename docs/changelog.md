@@ -6,6 +6,24 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-12 (Session 22)
+
+### Added — Sonnet Re-extraction of Anonymous Features
+- **`src/reextract_anonymous.py`** — New standalone script that re-processes Anonymous features using Claude Sonnet vision instead of Haiku. Queries Supabase for features where `homeowner_name = 'Anonymous'` from AD Archive deep scrape, re-fetches page images from Azure Blob Storage, and runs Sonnet extraction with enhanced prompt (detects non-home content, designer-as-homeowner patterns).
+- Features: resume support (saves progress to `data/reextract_anonymous_results.json`), dry-run mode, `--apply` for Supabase updates, `--skip-non-homes` to re-classify editorial content, `--stats` for breakdown, numeric field sanitization (handles "4,600-square-foot" → 4600).
+- **Results**: 956 Anonymous features processed across two passes. 237 homeowner names recovered, 497 non-home content classified (columns, editorials, museums, designer profiles, hotels), ~250 genuinely anonymous. Anonymous rate reduced from 44% to 32%. Total cost: ~$8.77 (Sonnet).
+
+### Changed — Episodic Memory Cap
+- **`src/agents/memory.py`** — `MAX_EPISODES` increased from 2,000 to 10,000. Agents were losing oldest memories at the 2K cap. 10K capacity supports ~5MB JSON file.
+
+### Fixed — KeyError 'successes' in Editor
+- **`src/agents/editor.py`** — Line 2786: `_management_note()` used `.get(agent_name, {})` which created partial tracker entries (missing `successes/failures/streak` keys) when called during task assignment before `_process_results()` initialized the full schema. Fixed by using `setdefault()` with complete schema dict. Eliminated 273+ cascading errors per session.
+
+### Fixed — Supabase 1000-Row Pagination
+- **`src/agent_status.py`** — `read_pipeline_stats()` and `_read_extractions_from_db()` both hit Supabase's default 1000-row limit. Dashboard showed "1000 features from 283 issues" instead of true counts. Fixed by adding pagination loops with `.range(offset, offset+999)`.
+
+---
+
 ## 2026-02-12 (Session 21)
 
 ### Added — Researcher Jumping Sprite

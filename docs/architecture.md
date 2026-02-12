@@ -237,7 +237,7 @@ reflect() ─── periodic self-assessment ───────┘
 ```
 
 - **Embeddings:** all-MiniLM-L6-v2 via ONNX (22M params, 384-dim, local, no API calls)
-- **Storage:** JSON file (`data/agent_memory/episodes.json`), capped at 2,000 episodes
+- **Storage:** JSON file (`data/agent_memory/episodes.json`), capped at 10,000 episodes
 - **Recall:** Cosine similarity on pre-computed embeddings + metadata filters (agent, task_type, outcome)
 - **Integration:** `problem_solve()` queries memory before deciding; `run()` commits after every task; `reflect()` generates compound insights every 10 min
 - **Cost:** Embeddings are free (local). Reflections ~$0.001/call (Haiku, every 10 min per agent)

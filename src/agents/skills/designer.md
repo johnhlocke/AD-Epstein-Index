@@ -99,3 +99,9 @@ When switched to creation mode, the Designer will:
 2. Read back designs via Figma MCP to evaluate quality
 3. Iterate until designs match the project's aesthetic
 4. Generate production code (Next.js + Tailwind) from approved designs
+
+
+## Update — 2026-02-11 19:39
+
+## Bug Fix: Pattern Storage
+When storing new patterns, use `self.patterns.extend(new_patterns)` instead of `self.patterns.append(new_patterns)`. The `.extend()` method adds items individually; `.append()` would nest the entire list as a single element.

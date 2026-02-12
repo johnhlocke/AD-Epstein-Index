@@ -83,6 +83,10 @@ This file should be automatically updated when necessary to answer three key que
 | Miranda sprite state expansion (6 states) | Tooling | Done |
 | Miranda vocal management (barking orders + encouragement) | Tooling | Done |
 | Graph export optimization (lead-only subgraph) | Tooling | Done |
+| Sonnet re-extraction of Anonymous features | Phase 1 | Done |
+| Episodic memory cap increase (2K → 10K) | Tooling | Done |
+| Fix KeyError 'successes' in Editor tracker | Tooling | Done |
+| Fix Supabase 1000-row pagination | Tooling | Done |
 
 ## 2. What's Been Accomplished
 
@@ -240,26 +244,27 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 ## 3. What's Next
 
-**Immediate — Run 4 (Clean Slate):**
-- All Supabase tables, Neo4j graph, local data, agent memory, and cost counters wiped (Feb 12)
-- Run 3 results before wipe: 345 issues, 960 features, 194 xrefs, 62 YES verdicts, 28 dossiers (1 HIGH, 2 MEDIUM), $10.74 total cost
-- All infrastructure upgrades in place: graph analytics, dynamic Cypher, emotional speech, jumping sprite, vocal Miranda
-- Run `python3 src/orchestrator.py --daemon` to rebuild full database from scratch
+**Run 4 — In Progress (Clean Slate Rebuild):**
+- All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
+- Current stats (~12 hours in): ~473 issues discovered, ~2180 features extracted, ~300+ names cross-referenced, ~60 dossiers built, ~14 confirmed Epstein connections
+- Total API cost: ~$55 (Courier $11, Editor $31, Researcher $5, Detective + others ~$8)
+- Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified, Anonymous rate 44% → 32%
+- Episodic memory cap increased 2K → 10K to prevent oldest memories from being trimmed
 
 **Ongoing — Scale the Pipeline:**
-- Run the multi-agent orchestrator to rediscover and process all 456 issues (1988-2026)
-- AD Archive issues (~300+) processed via JWT scraping (~4s each)
+- Continue orchestrator run to process remaining issues and cross-reference all names
+- AD Archive issues (~400+) processed via JWT scraping (~4s each)
 - archive.org issues (~50) processed via PDF download + Reader extraction
 - Review Researcher dossiers and manually confirm/reject matches
 
 **Phase 1 — Complete the AD Database:**
-- ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456 issues)
+- ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456+ issues)
+- ~~Re-extract Anonymous features with Sonnet~~ **Done** (237 names recovered, 497 non-homes classified)
 - Quality review: validate extracted data, fill in missing fields
-- Re-extract older issues to populate `article_author` field
 
 **Phase 2 — Cross-Reference at Scale:**
 - ~~Store cross-reference data in Supabase~~ **Done** (`cross_references` table)
-- Complete dossier building for all flagged leads (21 dossiers so far)
+- Complete dossier building for all flagged leads (~60 dossiers so far, ~14 confirmed)
 - Manual review of HIGH and MEDIUM connection strength dossiers
 
 **Phase 3 — Interactive Website:**
