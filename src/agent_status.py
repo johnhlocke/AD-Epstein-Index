@@ -88,10 +88,18 @@ def read_pipeline_stats():
             counts.setdefault("no_pdf", 0)
 
             sb = get_supabase()
-            feat_result = sb.table("features").select("id,homeowner_name,issue_id", count="exact").execute()
-            total_features = feat_result.count or len(feat_result.data)
-            with_name = sum(1 for r in feat_result.data if r.get("homeowner_name"))
-            distinct_issues = len(set(r["issue_id"] for r in feat_result.data if r.get("issue_id")))
+            # Paginate — Supabase default limit is 1000 rows
+            feat_rows = []
+            offset = 0
+            while True:
+                batch = sb.table("features").select("id,homeowner_name,issue_id").range(offset, offset + 999).execute()
+                feat_rows.extend(batch.data or [])
+                if len(batch.data or []) < 1000:
+                    break
+                offset += 1000
+            total_features = len(feat_rows)
+            with_name = sum(1 for r in feat_rows if r.get("homeowner_name"))
+            distinct_issues = len(set(r["issue_id"] for r in feat_rows if r.get("issue_id")))
 
             return {
                 "total": total,
@@ -122,8 +130,15 @@ def _read_extractions_from_db():
     try:
         sb = get_supabase()
         cols = "homeowner_name,designer_name,location_city,location_state,location_country,design_style,year_built,square_footage,issue_id"
-        result = sb.table("features").select(cols).execute()
-        rows = result.data or []
+        # Paginate — Supabase default limit is 1000 rows
+        rows = []
+        offset = 0
+        while True:
+            batch = sb.table("features").select(cols).range(offset, offset + 999).execute()
+            rows.extend(batch.data or [])
+            if len(batch.data or []) < 1000:
+                break
+            offset += 1000
 
         features = len(rows)
         nulls = sum(1 for r in rows if not r.get("homeowner_name"))
