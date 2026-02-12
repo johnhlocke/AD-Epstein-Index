@@ -2303,7 +2303,7 @@ function updateAgent(agentData) {
       updateSpeechBubble(aid, waitText);
     }
   } else {
-    // Waiting/Idle/Done (no done or rest sprite): increment wait counter
+    // Waiting/Idle/Done (no rest sprite): increment wait counter
     agentWaitCycles[aid] = (agentWaitCycles[aid] || 0) + 1;
     // Randomized threshold per agent (3-6 cycles = 15-30s) — set once per wait period
     if (!agentBoredThreshold[aid]) {
@@ -2315,7 +2315,12 @@ function updateAgent(agentData) {
     // Use last personality speech — agents generate their own idle chatter
     const waitText = agentData.speech || '';
 
-    if (cycles >= threshold) {
+    // Extended idle: switch to done sprite if available (e.g. Casey relaxing)
+    const DONE_THRESHOLD = 8; // ~40s of idle → switch to done/relaxing pose
+    if (cycles >= DONE_THRESHOLD && ASSETS.chars[aid]?.done) {
+      charEl.classList.add('hub-done', 'anim-done');
+      updateSpeechBubble(aid, waitText);
+    } else if (cycles >= threshold) {
       // Alternate between front and bored every 2-3 cycles
       const togglePeriod = 2 + (threshold % 2); // varies per agent
       const showBored = Math.floor((cycles - threshold) / togglePeriod) % 2 === 0;
