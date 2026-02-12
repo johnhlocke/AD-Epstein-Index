@@ -743,8 +743,8 @@ class ResearcherAgent(Agent):
         if fn:
             lines.append(f"\nFlagged persons within 3 hops: {len(fn)}")
             for r in fn[:5]:
-                path = " → ".join(r.get("path_names", []))
-                lines.append(f"    - {r['person']} ({r['hops']} hops: {path})")
+                path = " → ".join(str(x) for x in r.get("path_names", []) if x)
+                lines.append(f"    - {r.get('person', '?')} ({r.get('hops', '?')} hops: {path})")
 
         # Designer's full client list
         dc = graph_inv.get("designer_clients", [])
@@ -1210,13 +1210,14 @@ Correlations for {context['name']}: {json.dumps(pattern_context['correlations_fo
                 sim_strs = []
                 for s in similar[:3]:
                     flag = " [FLAGGED]" if s.get("detective_verdict") == "YES" else ""
-                    shared = ", ".join(s.get("shared_connections", [])[:3])
+                    shared = ", ".join(str(x) for x in s.get("shared_connections", [])[:3] if x)
                     sim_strs.append(f"{s['name']}{flag} (Jaccard={s['jaccard_score']:.2f}, shared: {shared})")
                 graph_lines.append(f"Most similar persons: {'; '.join(sim_strs)}")
 
             prox = graph_context.get("epstein_proximity")
             if prox:
-                graph_lines.append(f"Nearest Epstein-linked person: {prox['target']} ({prox['hops']} hops via {' → '.join(prox['path'])})")
+                path_str = ' → '.join(str(x) for x in prox.get('path', []) if x)
+                graph_lines.append(f"Nearest Epstein-linked person: {prox.get('target', '?')} ({prox.get('hops', '?')} hops via {path_str})")
 
             designers = graph_context.get("designers", [])
             if designers:
@@ -1618,7 +1619,12 @@ Produce the complete dossier with final connection_strength."""
             "queued_time": datetime.now().isoformat(),
             "applied": False,
         }
-        update_json_locked(verdicts_path, lambda data: data.append(override), default=[])
+        def _append_override(data):
+            if not isinstance(data, list):
+                data = []
+            data.append(override)
+            return data
+        update_json_locked(verdicts_path, _append_override, default=[])
         self.log(f"Dismissed {name} as no_match (COINCIDENCE)")
 
     def _maybe_escalate_findings(self, name, dossier):

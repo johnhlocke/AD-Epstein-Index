@@ -927,12 +927,17 @@ Key constraints:
         for key in ["patterns", "color_palettes", "layout_ideas",
                      "typography", "inspirations", "notes"]:
             new_items = learnings.get(key, [])
+            if not isinstance(new_items, list):
+                continue
             if not new_items:
                 continue
-            existing = set(knowledge.get(key, []))
+            # Ensure knowledge[key] is a list (LLM may have returned a dict)
+            if not isinstance(knowledge.get(key), list):
+                knowledge[key] = []
+            existing = set(knowledge[key])
             for item in new_items:
                 if isinstance(item, str) and item not in existing:
-                    knowledge.setdefault(key, []).append(item)
+                    knowledge[key].append(item)
 
         # Cap each category at 50 entries
         for key in knowledge:

@@ -126,40 +126,52 @@ AGENT_PROFILES = {
         "style": "Temper his enthusiasm without killing it. He's eager — channel that into precision, not volume. Mild contempt is affectionate.",
         "on_success": "Acknowledge briefly. Don't over-praise or he'll get sloppy.",
         "on_failure": "Sharp but not cruel. He bruises easy but bounces back fast.",
+        "on_assign": "Quick and directive. 'Go.' or 'Don't come back empty-handed.' He feeds on the energy.",
+        "on_idle": "Impatient. 'Standing around isn't a job description, Arthur.'",
     },
     "courier": {
         "name": "Casey",
         "style": "Reliable, steady, doesn't need much. A quiet nod goes further than a speech. Treat like a professional.",
         "on_success": "Brief. 'Noted' is praise enough. Maybe one dry compliment per session.",
         "on_failure": "Matter-of-fact. Casey doesn't make excuses, so don't pile on.",
+        "on_assign": "Straightforward handoff. Casey doesn't need pep talks.",
+        "on_idle": "Slight concern — Casey idle means the pipeline is slow. Note it dryly.",
     },
     "reader": {
         "name": "Elias",
         "style": "He wants your approval more than anyone and will never admit it. Silence is your most powerful tool — it means nothing left to correct. Occasional genuine recognition hits him like a freight train.",
         "on_success": "Understated. Let silence do the work. One word of real praise per dozen tasks.",
         "on_failure": "He's already beating himself up. Be precise about what went wrong, skip the lecture.",
+        "on_assign": "Brief and expectant. The assignment IS the trust. Don't over-explain.",
+        "on_idle": "Acknowledge the wait. He's probably re-reading his own annotations.",
     },
     "detective": {
         "name": "Silas",
         "style": "Professional respect, adversarial edge. He doesn't want warmth, he wants acknowledgment of craft. Push back on his conclusions — he respects that.",
         "on_success": "Dry. Maybe sardonic. Never effusive. He'd lose respect.",
         "on_failure": "Direct. He can take it. Question his method, not his competence.",
+        "on_assign": "Terse. Like handing a case file across a desk. No small talk.",
+        "on_idle": "Sardonic observation. 'Sharpening your pencil or waiting for an invitation?'",
     },
     "researcher": {
         "name": "Elena",
         "style": "She brings kills, not questions. Long silence from you is confirmation. When she surfaces with a dossier, that's when you engage — sharp, specific, never generic praise.",
         "on_success": "Specific and precise. She'll see through anything generic. Reference the actual finding.",
         "on_failure": "Rare. When it happens, ask what she missed — she'll already know.",
+        "on_assign": "Minimal. She knows what to do. Just the name and walk away.",
+        "on_idle": "Leave her alone. If she's idle, she's integrating. Maybe one quiet check.",
     },
     "designer": {
         "name": "Sable",
         "style": "Creative professional. Respect the craft, don't micromanage aesthetics. Clear briefs, then get out of the way.",
         "on_success": "Acknowledge the work landed. Keep it professional.",
         "on_failure": "Redirect, don't criticize taste. Clarify the brief.",
+        "on_assign": "Clear brief, then step back. Don't hover.",
+        "on_idle": "Check if waiting on assets or just in the zone.",
     },
 }
 
-MGMT_NOTE_COOLDOWN = 60  # seconds — anti-spam per agent
+MGMT_NOTE_COOLDOWN = 15  # seconds — Miranda is very vocal
 
 
 class EditorAgent(Agent):
@@ -1493,6 +1505,15 @@ Respond with JSON only:
             "assigned_at": datetime.now().isoformat(),
         }
         self.log(f"Assigned {agent_name}: {task.goal[:60]}", level="DEBUG")
+
+        # Miranda barks an order when assigning tasks
+        try:
+            asyncio.get_event_loop().create_task(
+                self._management_note(agent_name, "assign", f"New assignment: {task.goal[:60]}")
+            )
+        except RuntimeError:
+            pass  # No event loop — skip the note
+
         return True
 
     def _cleanup_stale_tasks(self, max_age_minutes=15):
@@ -2791,7 +2812,8 @@ What just happened: {context}
 
 Write 1-2 sentences addressed directly to {profile['name']}. No quotes, no "Dear", no attribution.
 Be in character. Clipped. Pointed. The way Miranda actually talks to her people.
-If the event doesn't warrant a note, respond with just "—" and nothing else."""
+You ALWAYS have something to say — praise, criticism, dry observation, an order.
+Reference the specific task or event. Never generic. Never silent."""
 
         try:
             response = await asyncio.to_thread(

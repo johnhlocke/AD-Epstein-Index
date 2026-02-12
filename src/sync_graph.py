@@ -417,78 +417,92 @@ def export_graph_json(output_path=None):
         "EpsteinSource": "#E05A47",
     }
 
+    def _make_node(labels, props):
+        """Build a node dict from Neo4j labels + properties. Returns (node_id, node) or (None, None)."""
+        label = labels[0] if labels else "Unknown"
+        name = props.get("name") or props.get("key") or str(props.get("issue_id", ""))
+        if not name:
+            return None, None
+        node_id = f"{label}:{name}"
+        if node_id in node_ids:
+            return node_id, None  # Already added
+        display = props.get("display_name") or name
+        if display.startswith("Anonymous ("):
+            display = "Anonymous"
+        node = {
+            "id": node_id,
+            "label": display,
+            "nodeType": label.lower() if label != "EpsteinSource" else "epstein_source",
+            "color": colors.get(label, "#888"),
+        }
+        if props.get("pagerank") is not None:
+            node["pagerank"] = round(float(props["pagerank"]), 6)
+        if props.get("community_id") is not None:
+            node["communityId"] = int(props["community_id"])
+        if props.get("detective_verdict"):
+            node["detectiveVerdict"] = props["detective_verdict"]
+        if props.get("connection_strength"):
+            node["connectionStrength"] = props["connection_strength"]
+        if props.get("editor_verdict"):
+            node["editorVerdict"] = props["editor_verdict"]
+        return node_id, node
+
     with driver.session() as session:
-        # Export all nodes
+        # Only export the subgraph around xref leads (persons with detective_verdict)
+        # This keeps the agent office panel lightweight while Neo4j retains the full graph.
+        # Step 1: Get lead persons and their 1-hop neighborhood
         result = session.run(
-            "MATCH (n) RETURN labels(n) AS labels, properties(n) AS props"
+            "MATCH (p:Person) WHERE p.connection_strength IS NOT NULL "
+            "OPTIONAL MATCH (p)-[r]-(neighbor) "
+            "RETURN labels(p) AS labels, properties(p) AS props, "
+            "       collect(DISTINCT {labels: labels(neighbor), props: properties(neighbor)}) AS neighbors, "
+            "       collect(DISTINCT {a_label: labels(startNode(r))[0], a_props: properties(startNode(r)), "
+            "                         rel_type: type(r), "
+            "                         b_label: labels(endNode(r))[0], b_props: properties(endNode(r))}) AS rels"
         )
         for record in result:
-            labels = record["labels"]
-            props = dict(record["props"])
-            label = labels[0] if labels else "Unknown"
-            name = props.get("name") or props.get("key") or str(props.get("issue_id", ""))
-            if not name:
-                continue
+            # Add the lead person
+            nid, node = _make_node(record["labels"], dict(record["props"]))
+            if nid and node:
+                node_ids.add(nid)
+                nodes.append(node)
 
-            node_id = f"{label}:{name}"
-            if node_id in node_ids:
-                continue
-            node_ids.add(node_id)
+            # Add neighbors
+            for nb in record["neighbors"]:
+                if not nb["labels"]:
+                    continue
+                nb_id, nb_node = _make_node(nb["labels"], dict(nb["props"]))
+                if nb_id and nb_node:
+                    node_ids.add(nb_id)
+                    nodes.append(nb_node)
 
-            display = props.get("display_name") or name
-            # Skip long anonymous labels in display
-            if display.startswith("Anonymous ("):
-                display = "Anonymous"
+            # Add relationships
+            for rel in record["rels"]:
+                a_name = rel["a_props"].get("name") or rel["a_props"].get("key") or str(rel["a_props"].get("issue_id", ""))
+                b_name = rel["b_props"].get("name") or rel["b_props"].get("key") or str(rel["b_props"].get("issue_id", ""))
+                if not a_name or not b_name:
+                    continue
+                source = f"{rel['a_label']}:{a_name}"
+                target = f"{rel['b_label']}:{b_name}"
+                if source in node_ids and target in node_ids:
+                    links.append({
+                        "source": source,
+                        "target": target,
+                        "relType": rel["rel_type"],
+                    })
 
-            node = {
-                "id": node_id,
-                "label": display,
-                "nodeType": label.lower() if label != "EpsteinSource" else "epstein_source",
-                "color": colors.get(label, "#888"),
-            }
-
-            # Add analytics properties if present
-            if props.get("pagerank") is not None:
-                node["pagerank"] = round(float(props["pagerank"]), 6)
-            if props.get("community_id") is not None:
-                node["communityId"] = int(props["community_id"])
-            if props.get("detective_verdict"):
-                node["detectiveVerdict"] = props["detective_verdict"]
-            if props.get("connection_strength"):
-                node["connectionStrength"] = props["connection_strength"]
-            if props.get("editor_verdict"):
-                node["editorVerdict"] = props["editor_verdict"]
-
-            nodes.append(node)
-
-        # Export all relationships
-        result = session.run(
-            "MATCH (a)-[r]->(b) "
-            "RETURN labels(a)[0] AS a_label, properties(a) AS a_props, "
-            "       type(r) AS rel_type, "
-            "       labels(b)[0] AS b_label, properties(b) AS b_props"
-        )
-        for record in result:
-            a_name = record["a_props"].get("name") or record["a_props"].get("key") or str(record["a_props"].get("issue_id", ""))
-            b_name = record["b_props"].get("name") or record["b_props"].get("key") or str(record["b_props"].get("issue_id", ""))
-            if not a_name or not b_name:
-                continue
-
-            source = f"{record['a_label']}:{a_name}"
-            target = f"{record['b_label']}:{b_name}"
-
-            if source not in node_ids or target not in node_ids:
-                continue
-
-            links.append({
-                "source": source,
-                "target": target,
-                "relType": record["rel_type"],
-            })
+    # Deduplicate links (multiple lead persons can share neighbors)
+    seen_links = set()
+    unique_links = []
+    for link in links:
+        key = (link["source"], link["target"], link["relType"])
+        if key not in seen_links:
+            seen_links.add(key)
+            unique_links.append(link)
 
     graph_data = {
         "nodes": nodes,
-        "links": links,
+        "links": unique_links,
         "exported_at": datetime.now(timezone.utc).isoformat(),
     }
 

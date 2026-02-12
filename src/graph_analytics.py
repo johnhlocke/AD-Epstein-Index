@@ -522,17 +522,26 @@ def get_person_analytics(name):
     return get_person_context(G, person_nodes, name, communities, centrality, similarity)
 
 
-def update_person_verdict(name, editor_verdict):
-    """Update a Person node's editor_verdict in Neo4j.
+def update_person_verdict(name, editor_verdict, connection_strength=None):
+    """Update a Person node's editor_verdict (and optionally connection_strength) in Neo4j.
 
     Called by the Editor after confirming/rejecting a dossier so the graph
-    reflects the new verdict immediately.
+    reflects the new verdict immediately. Uses MERGE to create the Person node
+    if it doesn't exist yet (e.g., incremental sync hasn't run). Setting
+    connection_strength ensures the node appears in the dashboard graph export.
     """
     try:
-        run_write(
-            "MATCH (p:Person {name: $name}) SET p.editor_verdict = $verdict",
-            {"name": name.strip().title(), "verdict": editor_verdict},
-        )
+        if connection_strength:
+            run_write(
+                "MERGE (p:Person {name: $name}) "
+                "SET p.editor_verdict = $verdict, p.connection_strength = $strength",
+                {"name": name.strip().title(), "verdict": editor_verdict, "strength": connection_strength},
+            )
+        else:
+            run_write(
+                "MERGE (p:Person {name: $name}) SET p.editor_verdict = $verdict",
+                {"name": name.strip().title(), "verdict": editor_verdict},
+            )
     except Exception:
         pass  # Graph unavailable — not critical
 

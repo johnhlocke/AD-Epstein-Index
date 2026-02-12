@@ -39,6 +39,9 @@ GOOD_PAIRINGS = [
     ("reader", "courier"),         # Elias & Casey — drama meets calm
     ("researcher", "detective"),   # Elena & Silas — professional handoff dynamic
     ("scout", "reader"),           # Arthur & Elias — two different kinds of intensity
+    ("editor", "scout"),           # Miranda & Arthur — demanding boss, eager puppy
+    ("editor", "detective"),       # Miranda & Silas — mutual respect, professional tension
+    ("editor", "courier"),         # Miranda & Casey — steady worker gets clipped feedback
 ]
 
 

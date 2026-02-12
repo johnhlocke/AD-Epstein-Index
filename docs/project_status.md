@@ -80,6 +80,8 @@ This file should be automatically updated when necessary to answer three key que
 | Fix Miranda inbox reply threading | Tooling | Done |
 | Emotionally reactive agent speech (LLM-driven) | Tooling | Done |
 | Miranda sprite state expansion (6 states) | Tooling | Done |
+| Miranda vocal management (barking orders + encouragement) | Tooling | Done |
+| Graph export optimization (lead-only subgraph) | Tooling | Done |
 
 ## 2. What's Been Accomplished
 

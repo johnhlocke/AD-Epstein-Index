@@ -30,6 +30,18 @@ Format: entries are grouped by date, with the most recent at the top.
 - Watercooler panel lines also get 12% opacity background tint matching speaker
 - Bubbles auto-reset to white when conversation line expires
 
+### Changed — Miranda Vocal Management (Barking Orders & Encouragement)
+- **`src/agents/editor.py`** — `MGMT_NOTE_COOLDOWN` reduced 60s → 15s for much more frequent Miranda speech. `AGENT_PROFILES` expanded with `on_assign` and `on_idle` guidance for all 6 agents. Miranda now fires `_management_note()` on every task assignment (not just success/failure). Prompt changed: Miranda ALWAYS speaks — removed "respond with — if not worth noting" suppression.
+- **`src/agents/watercooler.py`** — 3 more Miranda watercooler pairings added (editor+scout, editor+detective, editor+courier) — Miranda appears in 6 of 16 possible pairings.
+
+### Changed — Graph Export Optimization
+- **`src/sync_graph.py`** — `export_graph_json()` rewritten: only exports lead subgraph (persons with `connection_strength` + 1-hop neighbors) instead of full graph. Keeps agent office panel lightweight while Neo4j retains full graph. Extracted `_make_node()` helper, added link deduplication.
+- **`src/graph_analytics.py`** — `update_person_verdict()` now uses `MERGE` instead of `MATCH` (creates Person node if it doesn't exist yet during incremental sync), accepts optional `connection_strength` parameter.
+
+### Fixed — Agent Robustness
+- **`src/agents/designer.py`** — Fixed crash when LLM returns dict instead of list for knowledge categories. Added `isinstance` guard before set conversion.
+- **`src/agents/researcher.py`** — Safe string conversion for graph query results (`path_names`, `shared_connections`, `prox.path`). Safe `.get()` access for potentially missing dict keys. Fixed `update_json_locked` lambda → named function for verdict overrides.
+
 ### Fixed — Miranda Inbox (Reply Threading)
 - **`read_combined_inbox()`** rewritten: fixed sender override bug (human messages in editor_messages.json lost their `sender: "human"` field), added deduplication, conversation messages (human + replies) always included regardless of cap
 - **`src/agents/editor.py`** — `MAX_MESSAGES` increased from 50 to 100 to prevent human messages from being evicted
