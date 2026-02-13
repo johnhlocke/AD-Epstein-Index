@@ -91,6 +91,33 @@ export function GraphPreview() {
     }
   }, [graphData]);
 
+  // Ambient breathing — displace nodes from equilibrium, then reheat
+  // the simulation so d3 animates them settling back. Creates a gentle
+  // "pulse" every few seconds without permanent drift.
+  useEffect(() => {
+    if (graphData.nodes.length === 0) return;
+
+    let intervalId: ReturnType<typeof setInterval>;
+
+    const timer = setTimeout(() => {
+      intervalId = setInterval(() => {
+        // Displace each node's POSITION (not velocity) so the
+        // reheat has somewhere to animate FROM → equilibrium
+        for (const node of graphData.nodes) {
+          const n = node as FGNode;
+          if (n.x != null) n.x += (Math.random() - 0.5) * 2;
+          if (n.y != null) n.y += (Math.random() - 0.5) * 2;
+        }
+        graphRef.current?.d3ReheatSimulation?.();
+      }, 6000);
+    }, 5000);
+
+    return () => {
+      clearTimeout(timer);
+      clearInterval(intervalId);
+    };
+  }, [graphData]);
+
   // ── Grid background — drawn before each frame ──
 
   const handleRenderFramePre = useCallback(
@@ -278,49 +305,6 @@ export function GraphPreview() {
           sit, the stronger their relationship in the network.
         </p>
 
-        {/* Legend — integrated into text column */}
-        {loaded && (
-          <div className="mt-8">
-            <p
-              className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
-              style={{ fontFamily: "futura-pt, sans-serif" }}
-            >
-              Node Types
-            </p>
-            <div className="mt-2 space-y-1.5">
-              {(
-                [
-                  ["person", "Person"],
-                  ["designer", "Designer"],
-                  ["location", "Location"],
-                  ["epstein_source", "Epstein Source"],
-                ] as const
-              ).map(([type, label]) => (
-                <div
-                  key={type}
-                  className="flex items-center gap-2 text-[11px] text-muted-foreground"
-                >
-                  <span
-                    className="inline-block h-2 w-2 rounded-full"
-                    style={{ backgroundColor: nodeColors[type] }}
-                  />
-                  <span>{label}</span>
-                </div>
-              ))}
-              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
-                <span
-                  className="inline-block h-2 w-2 rounded-full"
-                  style={{
-                    backgroundColor: "transparent",
-                    border: `1.5px solid ${uncertaintyColor}`,
-                  }}
-                />
-                <span>Epstein Connection</span>
-              </div>
-            </div>
-          </div>
-        )}
-
         {/* Stats — Feltron-style big numbers */}
         {loaded && (
           <div className="mt-8 border-t border-border pt-4">
@@ -393,6 +377,52 @@ export function GraphPreview() {
             enableNodeDrag={true}
           />
         </div>
+
+        {/* Legend overlay — top right */}
+        {loaded && (
+          <div
+            className="pointer-events-none absolute right-3 top-3 z-20 rounded border border-border/60 bg-background/90 backdrop-blur-sm"
+            style={{ padding: "10px 14px" }}
+          >
+            <p
+              className="text-[8px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              Node Types
+            </p>
+            <div className="mt-1.5 space-y-1">
+              {(
+                [
+                  ["person", "Person"],
+                  ["designer", "Designer"],
+                  ["location", "Location"],
+                  ["epstein_source", "Epstein Source"],
+                ] as const
+              ).map(([type, label]) => (
+                <div
+                  key={type}
+                  className="flex items-center gap-2 text-[10px] text-muted-foreground"
+                >
+                  <span
+                    className="inline-block h-[6px] w-[6px] rounded-full"
+                    style={{ backgroundColor: nodeColors[type] }}
+                  />
+                  <span>{label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
+                <span
+                  className="inline-block h-[6px] w-[6px] rounded-full"
+                  style={{
+                    backgroundColor: "transparent",
+                    border: `1.5px solid ${uncertaintyColor}`,
+                  }}
+                />
+                <span>Epstein Connection</span>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Hover tooltip — light theme */}
         <div
