@@ -185,10 +185,10 @@ export function drawGrid(
 /** Node size formula — uses pagerank when available, falls back to degree */
 export function nodeSize(degree: number, pagerank?: number | null): number {
   if (pagerank != null && pagerank > 0) {
-    // PageRank-based: scale into 2-8 node radius
-    return Math.max(2, Math.min(8, 2 + pagerank * 400));
+    // PageRank-based: scale into 4-16 node radius
+    return Math.max(4, Math.min(16, 4 + pagerank * 800));
   }
-  return Math.max(2, Math.min(7, 2 + degree * 0.35));
+  return Math.max(4, Math.min(14, 4 + degree * 0.7));
 }
 
 /** Nodes with degree >= this always show labels at any zoom */
