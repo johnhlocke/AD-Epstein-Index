@@ -56,6 +56,19 @@ CREATE TABLE features (
   detective_verdict TEXT DEFAULT NULL
     CHECK (detective_verdict IN ('YES', 'NO')),
   detective_checked_at TIMESTAMPTZ DEFAULT NULL,
+  -- 6-dimension aesthetic taxonomy (JSONB)
+  -- Structure: {
+  --   "envelope": "Classical/Neoclassical",       -- Architectural Envelope (single-select)
+  --   "atmosphere": "Formal/Antiquarian",          -- Interior Atmosphere (single-select)
+  --   "materiality": "Stone & Marble",             -- Dominant Texture (single-select)
+  --   "power_status": "Institutional/Monumental",  -- Power & Status Signal (single-select)
+  --   "cultural_orientation": "Euro-Centric/Old World",  -- Cultural Orientation (single-select)
+  --   "art_collection": ["Old Masters", "Sculpture"],    -- Art & Collection (multi-select)
+  --   "named_artists": ["Caravaggio", "Brancusi"],       -- Specific artists mentioned (free-text)
+  --   "source": "deep_extract" | "batch_tag",            -- How it was classified
+  --   "extracted_at": "2026-02-13T..."                    -- When classified
+  -- }
+  aesthetic_profile JSONB DEFAULT NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

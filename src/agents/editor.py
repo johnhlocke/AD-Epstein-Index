@@ -655,6 +655,8 @@ class EditorAgent(Agent):
                 self._commit_investigation(data)
             elif task_type == "scrape_features":
                 self._commit_extraction(data)
+            elif task_type == "deep_extract":
+                self._commit_deep_extract(data)
             else:
                 self.log(f"Unknown task type '{task_type}' from {agent_name}", level="WARN")
         finally:
@@ -1263,6 +1265,10 @@ class EditorAgent(Agent):
         self.ledger.save()
         self._request_status_refresh()
 
+        # ── Queue deep aesthetic extraction for confirmed names ──
+        if verdict == "CONFIRMED":
+            self._queue_deep_extract(name)
+
         # Management note to Elena about the dossier verdict
         try:
             loop = asyncio.get_event_loop()
@@ -1272,6 +1278,110 @@ class EditorAgent(Agent):
             )
         except Exception:
             pass
+
+    # ── Deep Extract (Aesthetic Taxonomy) ───────────────────
+
+    def _queue_deep_extract(self, name):
+        """Queue deep aesthetic extraction for all features matching a confirmed name."""
+        try:
+            sb = get_supabase()
+            features = (
+                sb.table("features")
+                .select("id, aesthetic_profile")
+                .ilike("homeowner_name", f"%{name}%")
+                .execute()
+            )
+            queued = 0
+            for f in (features.data or []):
+                if f.get("aesthetic_profile"):
+                    continue  # Already has profile
+                fid = f["id"]
+                task = Task(
+                    type="deep_extract",
+                    goal=f"Deep extract aesthetic profile: {name} (feature {fid})",
+                    params={"feature_id": fid, "name": name},
+                    priority=1,
+                )
+                self._plan.enqueue("courier", task, source="deep_extract")
+                queued += 1
+            if queued:
+                self.log(f"Queued {queued} deep_extract tasks for {name}")
+                self._dispatch_next("courier")
+        except Exception as e:
+            self.log(f"Failed to queue deep_extract for {name}: {e}", level="WARN")
+
+    def _commit_deep_extract(self, data):
+        """Commit Courier's deep extraction result — aesthetic profile + enriched fields."""
+        import json as _json
+
+        feature_id = data.get("feature_id")
+        name = data.get("name", "?")
+
+        if data.get("skipped"):
+            self.log(f"Deep extract skipped (already done): {name}")
+            return
+
+        profile = data.get("aesthetic_profile")
+        enriched = data.get("enriched_fields", {})
+        social = data.get("social_data", {})
+
+        if not profile:
+            self.log(f"Deep extract for {name}: no aesthetic profile returned", level="WARN")
+            return
+
+        # Build update dict
+        update = {"aesthetic_profile": _json.dumps(profile) if isinstance(profile, dict) else profile}
+
+        # Fill NULL structural fields from enriched data
+        try:
+            sb = get_supabase()
+            current = sb.table("features").select("*").eq("id", feature_id).execute()
+            if current.data:
+                cur = current.data[0]
+                for col in ["location_city", "location_state", "location_country",
+                            "design_style", "designer_name", "architecture_firm"]:
+                    if cur.get(col) is None and enriched.get(col):
+                        val = enriched[col]
+                        if str(val).lower() not in ("null", "none", "n/a"):
+                            update[col] = val
+
+                if cur.get("year_built") is None and enriched.get("year_built"):
+                    val = enriched["year_built"]
+                    if isinstance(val, (int, float)):
+                        update["year_built"] = int(val)
+
+                if cur.get("square_footage") is None and enriched.get("square_footage"):
+                    val = enriched["square_footage"]
+                    if isinstance(val, (int, float)):
+                        update["square_footage"] = int(val)
+
+                if cur.get("cost") is None and enriched.get("cost"):
+                    val = str(enriched["cost"])
+                    if val.lower() not in ("null", "none"):
+                        update["cost"] = val
+
+                # Merge social data into notes
+                if social:
+                    existing_notes = cur.get("notes")
+                    try:
+                        notes_obj = _json.loads(existing_notes) if isinstance(existing_notes, str) else (existing_notes or {})
+                    except (_json.JSONDecodeError, TypeError):
+                        notes_obj = {}
+                    if not isinstance(notes_obj, dict):
+                        notes_obj = {"original": str(notes_obj)}
+                    notes_obj["deep_extract"] = social
+                    notes_obj["source"] = "deep_extract"
+                    update["notes"] = _json.dumps(notes_obj)
+
+            # Write to Supabase
+            sb.table("features").update(update).eq("id", feature_id).execute()
+            self.log(f"Deep extracted: {name} — {profile.get('envelope', '?')}/{profile.get('atmosphere', '?')}")
+            # Graph sync happens periodically via strategic assessment, not per-feature
+
+        except Exception as e:
+            self.log(f"Failed to commit deep extract for {name}: {e}", level="ERROR")
+
+        self._request_status_refresh()
 
     def _review_dossier(self, name, proposed_strength, dossier):
         """LLM review of a Researcher dossier. Uses Sonnet (~$0.005/review).

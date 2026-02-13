@@ -101,6 +101,9 @@ This file should be automatically updated when necessary to answer three key que
 | Hero section redesign (Futura PT, epigraph, stats grid) | Phase 3 | Done |
 | Figma design system sync (hero, header, grid alignment) | Phase 3 | Done |
 | Logo exploration (They Live Wayfarer concept) | Phase 3 | In Progress |
+| 6-dimension aesthetic taxonomy (all features tagged) | Phase 2 | Done |
+| Aesthetic comparison: Epstein orbit vs general AD | Phase 2 | Done |
+| Deep extract confirmed names (Vision + taxonomy) | Phase 2 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -260,7 +263,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — In Progress (Clean Slate Rebuild):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
-- Current stats: ~480 issues, ~1686 features, ~476 cross-references (157 YES), ~123 dossiers (5 HIGH, 19 MEDIUM)
+- Current stats: ~480 issues, ~1648 features, ~476 cross-references (157 YES), ~165 dossiers, 27 confirmed connections
 - Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
 - Total API cost: ~$94 (Miranda $70 at 74%, Courier $11, Researcher $5, Detective + others ~$8)
 - Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified
@@ -284,8 +287,10 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Phase 2 — Cross-Reference at Scale:**
 - ~~Store cross-reference data in Supabase~~ **Done** (`cross_references` table)
-- Complete dossier building for all flagged leads (~60 dossiers so far, ~14 confirmed)
+- Complete dossier building for all flagged leads (~165 dossiers, 27 confirmed)
 - Manual review of HIGH and MEDIUM connection strength dossiers
+- ~~6-dimension aesthetic taxonomy for all features~~ **Done** (1,622 features tagged, $2.90 cost)
+- ~~Statistical comparison: Epstein aesthetic vs general AD population~~ **Done** (strong signals found)
 
 **Phase 3 — Interactive Website:**
 - ~~Design and build public-facing visualization website~~ **Done**

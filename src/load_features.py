@@ -26,7 +26,11 @@ FEATURE_FIELDS = [
     "article_title", "article_author", "homeowner_name", "designer_name", "architecture_firm",
     "year_built", "square_footage", "cost", "location_city",
     "location_state", "location_country", "design_style", "page_number", "notes",
+    "aesthetic_profile",
 ]
+
+# Fields that should be stored as JSONB (not strings)
+JSONB_FIELDS = {"aesthetic_profile"}
 
 # Fields that must be integers in Supabase (Claude sometimes returns "35,000" or "3500 sq ft")
 INTEGER_FIELDS = {"year_built", "square_footage", "page_number"}
@@ -90,6 +94,8 @@ def load_extraction(extraction_path):
                     value = _sanitize_integer(value)
                     if value is None:
                         continue
+                if field in JSONB_FIELDS and isinstance(value, dict):
+                    value = json.dumps(value)
                 row[field] = value
 
         insert_feature(issue_id, row)

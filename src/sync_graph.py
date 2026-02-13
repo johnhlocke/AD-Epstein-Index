@@ -165,6 +165,29 @@ def build_feature_batch(features, issues, xrefs, dossiers):
             connection_strength = dossier.get("connection_strength")
             editor_verdict = dossier.get("editor_verdict")
 
+        # Parse aesthetic_profile JSONB
+        raw_profile = f.get("aesthetic_profile") or {}
+        if isinstance(raw_profile, str):
+            try:
+                raw_profile = json.loads(raw_profile)
+            except (json.JSONDecodeError, TypeError):
+                raw_profile = {}
+        if not isinstance(raw_profile, dict):
+            raw_profile = {}
+
+        # Validate single-select dimensions are strings (LLM may return arrays)
+        for dim in ["envelope", "atmosphere", "materiality", "power_status", "cultural_orientation"]:
+            val = raw_profile.get(dim)
+            if val and not isinstance(val, str):
+                raw_profile[dim] = None
+
+        # Validate art_categories is a list of non-empty strings
+        art_cats = raw_profile.get("art_collection", [])
+        if isinstance(art_cats, list):
+            art_cats = [c for c in art_cats if c and isinstance(c, str) and c.lower() not in ("null", "none", "")]
+        else:
+            art_cats = []
+
         batch.append({
             "person_name": person_name,
             "homeowner_display": homeowner_display,
@@ -189,6 +212,13 @@ def build_feature_batch(features, issues, xrefs, dossiers):
             "bb_confidence": bb_confidence,
             "doj_match": doj_match,
             "feature_id": f["id"],
+            # Aesthetic taxonomy dimensions
+            "envelope": raw_profile.get("envelope"),
+            "atmosphere": raw_profile.get("atmosphere"),
+            "materiality": raw_profile.get("materiality"),
+            "power_status": raw_profile.get("power_status"),
+            "cultural_orientation": raw_profile.get("cultural_orientation"),
+            "art_categories": art_cats,
         })
 
     return batch
@@ -275,6 +305,39 @@ def sync_batch(batch):
     FOREACH (_ IN CASE WHEN row.doj_match THEN [1] ELSE [] END |
         MERGE (doj:EpsteinSource {name: 'DOJ Library'})
         MERGE (p)-[:APPEARS_IN]->(doj)
+    )
+
+    // Aesthetic taxonomy — dimensional Style nodes
+    FOREACH (_ IN CASE WHEN row.envelope IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (s:Style {name: row.envelope})
+        ON CREATE SET s.dimension = 'envelope'
+        MERGE (p)-[:HAS_STYLE {dimension: 'envelope'}]->(s)
+    )
+    FOREACH (_ IN CASE WHEN row.atmosphere IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (s:Style {name: row.atmosphere})
+        ON CREATE SET s.dimension = 'atmosphere'
+        MERGE (p)-[:HAS_STYLE {dimension: 'atmosphere'}]->(s)
+    )
+    FOREACH (_ IN CASE WHEN row.materiality IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (s:Style {name: row.materiality})
+        ON CREATE SET s.dimension = 'materiality'
+        MERGE (p)-[:HAS_STYLE {dimension: 'materiality'}]->(s)
+    )
+    FOREACH (_ IN CASE WHEN row.power_status IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (s:Style {name: row.power_status})
+        ON CREATE SET s.dimension = 'power_status'
+        MERGE (p)-[:HAS_STYLE {dimension: 'power_status'}]->(s)
+    )
+    FOREACH (_ IN CASE WHEN row.cultural_orientation IS NOT NULL THEN [1] ELSE [] END |
+        MERGE (s:Style {name: row.cultural_orientation})
+        ON CREATE SET s.dimension = 'cultural_orientation'
+        MERGE (p)-[:HAS_STYLE {dimension: 'cultural_orientation'}]->(s)
+    )
+
+    // Art collection — ArtCategory nodes (multi-value)
+    FOREACH (art IN row.art_categories |
+        MERGE (ac:ArtCategory {name: art})
+        MERGE (p)-[:DISPLAYS]->(ac)
     )
     """
 

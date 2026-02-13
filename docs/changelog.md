@@ -6,6 +6,48 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-13 (Session 26)
+
+### Added — 6-Dimension Aesthetic Taxonomy
+- **`src/aesthetic_taxonomy.py`** — NEW: Shared taxonomy module with 36 values across 6 dimensions (Envelope, Atmosphere, Materiality, Power/Status, Cultural Orientation, Art Collection). Includes `build_vision_prompt()` for Claude Vision extraction, `build_text_prompt()` for Haiku text-only batch tagging, `parse_aesthetic_response()` with fuzzy matching to controlled vocabulary, `validate_profile()`, and `extract_structural_and_social()` helper.
+- **`src/batch_tag_aesthetics.py`** — NEW: Standalone batch script that tags all features using text-only Haiku (~$0.001/feature). Processes ~1,628 features for ~$2.90 total. Flags: `--dry-run`, `--limit N`, `--skip-done`, `--confirmed-only`.
+
+### Changed — Courier Deep Extract Handler
+- **`src/agents/courier.py`** — Added `deep_extract` task type: fetches ALL article page images (no 3-page limit), sends through 6-dimension taxonomy Vision prompt, returns aesthetic_profile + enriched structural fields + social network data. Batches images in groups of 6 for token limits.
+
+### Changed — Editor Triggers Deep Extract on CONFIRMED
+- **`src/agents/editor.py`** — Added `_queue_deep_extract(name)` that auto-enqueues `deep_extract` tasks for Courier when a dossier is confirmed. Added `_commit_deep_extract()` to write aesthetic_profile JSONB + fill NULL structural fields.
+
+### Changed — Graph Sync with Aesthetic Dimensions
+- **`src/sync_graph.py`** — Parses `aesthetic_profile` JSONB from features, creates dimensional Style nodes with `dimension` property (envelope, atmosphere, materiality, power_status, cultural_orientation) and dimension-tagged HAS_STYLE relationships. ArtCategory nodes (multi-value) with DISPLAYS relationships. Type validation filters bad LLM output.
+- **`src/graph_db.py`** — Added `ArtCategory` uniqueness constraint.
+
+### Changed — Schema & Loader Updates
+- **`docs/schema.sql`** — Added `aesthetic_profile JSONB DEFAULT NULL` column to features table with full JSONB structure documentation.
+- **`src/load_features.py`** — Added `aesthetic_profile` to FEATURE_FIELDS, JSONB serialization for dict values.
+
+### Changed — Deep Extract Uses Taxonomy
+- **`src/deep_extract_confirmed.py`** — Refactored to use `aesthetic_taxonomy.build_vision_prompt()` instead of hardcoded prompt. All 23 confirmed names re-extracted with 6-dimension profiles.
+
+### Database
+- Added `aesthetic_profile` JSONB column to Supabase `features` table
+- 1,622 features tagged with aesthetic taxonomy (1,583 batch + 39 resume run)
+- 23 confirmed names deep-extracted with Vision (rich profiles + social data)
+- Neo4j graph rebuilt: 570 Style nodes, 10 ArtCategory nodes, 8,737 HAS_STYLE relationships, 2,548 DISPLAYS relationships
+
+### Research Findings — "The Epstein Aesthetic"
+Statistical comparison of 27 confirmed Epstein connections vs 1,567 general AD features:
+- **Classical/Neoclassical**: 39% Epstein vs 11% general (+28pt, 3.4x over)
+- **Formal/Antiquarian**: 48% vs 20% (+28pt, 2.4x over)
+- **Minimalist/Reductive**: 0% vs 21% (ZERO in Epstein orbit)
+- **Glass & Steel**: 4% vs 26% (-22pt, 7x under)
+- **Wood & Warmth**: 59% vs 40% (+20pt)
+- **Institutional/Monumental**: 25% vs 9% (+16pt, 2.7x over)
+- **Euro-Centric/Old World**: 57% vs 38% (+19pt)
+- **Placeless/Globalist**: 7% vs 30% (-22pt, 4.2x under)
+
+---
+
 ## 2026-02-12 (Session 25)
 
 ### Changed — Hero Section Redesign

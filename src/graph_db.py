@@ -98,6 +98,7 @@ def create_constraints():
         ("Issue", "issue_id"),
         ("Author", "name"),
         ("EpsteinSource", "name"),
+        ("ArtCategory", "name"),
     ]
 
     driver = get_driver()

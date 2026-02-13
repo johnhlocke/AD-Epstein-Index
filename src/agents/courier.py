@@ -34,6 +34,7 @@ DELAY_SECONDS = 2
 AD_ARCHIVE_BATCH_SIZE = 20
 AD_ARCHIVE_BLOB_BASE = "https://architecturaldigest.blob.core.windows.net/architecturaldigest{date}thumbnails/Pages/0x600/{page}.jpg"
 AD_ARCHIVE_MAX_PAGES_PER_ARTICLE = 3  # First 3 pages capture article opening
+MAX_IMAGES_PER_CALL = 6  # Max images per Vision API call (stay within token limits)
 
 # Failure tracking & escalation
 COURIER_LOG_PATH = os.path.join(DATA_DIR, "courier_log.json")
@@ -62,6 +63,9 @@ class CourierAgent(Agent):
         """Execute a download or scrape task from the Editor. Returns a TaskResult."""
         if task.type == "scrape_features":
             return await self._scrape_ad_archive(task)
+
+        if task.type == "deep_extract":
+            return await self._deep_extract_feature(task)
 
         if task.type != "download_pdf":
             return TaskResult(
@@ -827,6 +831,263 @@ If the download FAILED, respond:
         self.log(f"Combined {len(batch_files)} batches → {dest} ({total} pages)")
         self._current_task = f"Combined: {year}-{month:02d} ({len(batch_files)} batches, {total}pp)"
         return True
+
+    # ── Deep Extract (Aesthetic Taxonomy) ───────────────────
+
+    async def _deep_extract_feature(self, task):
+        """Deep-extract aesthetic profile + enriched data for a single confirmed feature.
+
+        Uses ALL page images (not just first 3) with the 6-dimension taxonomy prompt.
+        Returns structural fields, social data, and aesthetic_profile JSONB.
+        """
+        from aesthetic_taxonomy import (
+            build_vision_prompt, parse_aesthetic_response, extract_structural_and_social,
+        )
+
+        feature_id = task.params.get("feature_id")
+        name = task.params.get("name", "Unknown")
+        self._current_task = f"Deep extracting: {name}"
+
+        # Load .env for API keys
+        from dotenv import load_dotenv
+        load_dotenv(os.path.join(BASE_DIR, ".env"))
+
+        sb = None
+        try:
+            from db import get_supabase
+            sb = get_supabase()
+        except Exception as e:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error=f"DB connect failed: {e}",
+                agent=self.name,
+            )
+
+        # Fetch feature + issue details
+        feat_result = sb.table("features").select("*").eq("id", feature_id).execute()
+        if not feat_result.data:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error="Feature not found",
+                agent=self.name,
+            )
+        feature = feat_result.data[0]
+
+        # Check if already done (idempotent)
+        if feature.get("aesthetic_profile"):
+            self.log(f"Skipping {name} (feature {feature_id}) — already has aesthetic_profile")
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="success",
+                result={"feature_id": feature_id, "skipped": True},
+                agent=self.name,
+            )
+
+        # Get issue for source_url
+        issue_result = sb.table("issues").select("*").eq("id", feature["issue_id"]).execute()
+        if not issue_result.data:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error="Issue not found",
+                agent=self.name,
+            )
+        issue = issue_result.data[0]
+        source_url = issue.get("source_url")
+        year = issue.get("year")
+        month = issue.get("month")
+
+        if not source_url or "architecturaldigest.com" not in (source_url or ""):
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error="No AD archive URL for this issue",
+                agent=self.name,
+            )
+
+        # Fetch JWT TOC to find article's full page range
+        try:
+            toc_articles = await asyncio.to_thread(self._fetch_issue_toc, source_url)
+        except Exception as e:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error=f"TOC fetch failed: {e}",
+                agent=self.name,
+            )
+
+        if not toc_articles:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error="No articles in JWT TOC",
+                agent=self.name,
+            )
+
+        # Find matching article by name
+        import re as re_mod
+        clean_name = name.split(" (")[0].replace("Mrs. ", "")
+        search_terms = []
+        for part in re_mod.split(r"\s+(?:and|&)\s+", clean_name):
+            last = part.strip().split()[-1]
+            if len(last) >= 4:
+                search_terms.append(last.upper())
+
+        article_meta = None
+        full_page_range = None
+        for art in toc_articles:
+            title_upper = (art.get("title") or "").upper()
+            teaser_upper = (art.get("teaser") or "").upper()
+            for term in search_terms:
+                if term in title_upper or term in teaser_upper:
+                    article_meta = {
+                        "Title": art.get("title"),
+                        "Section": art.get("section"),
+                        "CreatorString": art.get("author"),
+                        "Teaser": art.get("teaser"),
+                    }
+                    pr = art.get("page_range", "")
+                    full_page_range = [int(p.strip()) for p in pr.split(",") if p.strip().isdigit()]
+                    break
+            if article_meta:
+                break
+
+        if not full_page_range:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error=f"Article for '{name}' not found in TOC",
+                agent=self.name,
+            )
+
+        self.log(f"Deep extract {name}: {len(full_page_range)} pages")
+
+        # Fetch ALL page images (no 3-page limit)
+        date_str = f"{year}{month:02d}01"
+        page_images = await asyncio.to_thread(
+            self._fetch_deep_extract_pages, date_str, full_page_range
+        )
+
+        if not page_images:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error="No page images available",
+                agent=self.name,
+            )
+
+        # Build taxonomy-aware Vision prompt
+        prompt = build_vision_prompt(name, article_meta, year, month)
+
+        # Send to Claude Haiku Vision (batch if >6 images)
+        try:
+            raw_result = await asyncio.to_thread(
+                self._vision_extract_with_taxonomy, prompt, page_images
+            )
+        except Exception as e:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error=f"Vision API error: {e}",
+                agent=self.name,
+            )
+
+        if not raw_result:
+            return TaskResult(
+                task_id=task.id, task_type=task.type, status="failure",
+                result={"feature_id": feature_id}, error="Vision extraction returned nothing",
+                agent=self.name,
+            )
+
+        # Parse aesthetic profile
+        profile = parse_aesthetic_response(json.dumps(raw_result), source="deep_extract")
+        enriched, social = extract_structural_and_social(raw_result)
+
+        self.log(f"Deep extracted {name}: {profile.get('envelope', '?')}/{profile.get('atmosphere', '?')}")
+
+        return TaskResult(
+            task_id=task.id, task_type=task.type, status="success",
+            result={
+                "feature_id": feature_id,
+                "name": name,
+                "aesthetic_profile": profile,
+                "enriched_fields": enriched,
+                "social_data": social,
+            },
+            agent=self.name,
+        )
+
+    def _fetch_deep_extract_pages(self, date_str, pages):
+        """Download page images for deep extract — ALL pages, no limit."""
+        import requests as req
+
+        HEADERS_LOCAL = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
+        fetched = []
+
+        for page_num in pages:
+            url = AD_ARCHIVE_BLOB_BASE.format(date=date_str, page=page_num)
+            try:
+                resp = req.get(url, headers=HEADERS_LOCAL, timeout=15)
+                if resp.status_code == 200 and len(resp.content) > 1000:
+                    fetched.append((page_num, resp.content))
+            except Exception as e:
+                self.log(f"Page {page_num} fetch error: {e}", level="WARN")
+
+        return fetched
+
+    def _vision_extract_with_taxonomy(self, prompt, page_images):
+        """Send page images to Claude Haiku Vision, batching if needed. Returns merged dict."""
+        import base64
+
+        api_key = os.environ.get("ANTHROPIC_API_KEY")
+        if not api_key:
+            return None
+
+        try:
+            import anthropic
+        except ImportError:
+            return None
+
+        client = anthropic.Anthropic(api_key=api_key)
+        all_results = []
+
+        for batch_start in range(0, len(page_images), MAX_IMAGES_PER_CALL):
+            batch = page_images[batch_start:batch_start + MAX_IMAGES_PER_CALL]
+
+            content = []
+            for page_num, img_bytes in batch:
+                b64 = base64.b64encode(img_bytes).decode("utf-8")
+                content.append({
+                    "type": "image",
+                    "source": {"type": "base64", "media_type": "image/jpeg", "data": b64},
+                })
+            content.append({"type": "text", "text": prompt})
+
+            try:
+                model_id = "claude-haiku-4-5-20251001"
+                message = client.messages.create(
+                    model=model_id,
+                    max_tokens=2048,
+                    messages=[{"role": "user", "content": content}],
+                )
+                self._track_api_cost(message, model_id)
+                result_text = message.content[0].text
+
+                json_match = __import__("re").search(r"\{[\s\S]*\}", result_text)
+                if json_match:
+                    parsed = json.loads(json_match.group())
+                    all_results.append(parsed)
+            except Exception as e:
+                self.log(f"Vision batch error: {e}", level="ERROR")
+
+        # Merge batch results
+        if not all_results:
+            return None
+
+        merged = all_results[0]
+        for result in all_results[1:]:
+            for key, val in result.items():
+                existing = merged.get(key)
+                if existing is None and val is not None:
+                    merged[key] = val
+                elif isinstance(existing, list) and isinstance(val, list):
+                    merged[key] = list(set(existing + val))
+                elif isinstance(existing, str) and isinstance(val, str) and val not in existing:
+                    merged[key] = f"{existing}; {val}"
+
+        return merged
 
     # ── AD Archive Direct HTTP Scraping ─────────────────────
 
