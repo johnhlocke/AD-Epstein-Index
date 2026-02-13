@@ -131,11 +131,14 @@ export function GraphPreview() {
 
   const handleNodeCanvas = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const size = nodeSize(node.degree ?? 0, node.pagerank);
+      const confidence = getConfidenceLevel(node);
+      const isEpstein =
+        node.nodeType === "epstein_source" || confidence !== null;
+      const baseSize = nodeSize(node.degree ?? 0, node.pagerank);
+      const size = isEpstein ? baseSize : baseSize * 0.5;
       const x = node.x ?? 0;
       const y = node.y ?? 0;
       const color = nodeColors[node.nodeType] ?? "#888";
-      const confidence = getConfidenceLevel(node);
       const isHovered = hoveredNodeRef.current?.id === node.id;
 
       ctx.save();
@@ -210,7 +213,11 @@ export function GraphPreview() {
 
   const handlePointerArea = useCallback(
     (node: FGNode, color: string, ctx: CanvasRenderingContext2D) => {
-      const size = nodeSize(node.degree ?? 0, node.pagerank);
+      const confidence = getConfidenceLevel(node);
+      const isEpstein =
+        node.nodeType === "epstein_source" || confidence !== null;
+      const baseSize = nodeSize(node.degree ?? 0, node.pagerank);
+      const size = isEpstein ? baseSize : baseSize * 0.5;
       ctx.beginPath();
       ctx.arc(node.x ?? 0, node.y ?? 0, size + 8, 0, 2 * Math.PI);
       ctx.fillStyle = color;
