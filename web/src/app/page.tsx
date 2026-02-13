@@ -26,19 +26,8 @@ export default async function Home() {
       <KeyFindings stats={stats} />
 
       {/* 2.5 Knowledge Graph Preview */}
-      <section className="bg-[#1A1A1A] pb-20" id="graph">
+      <section className="border-b border-border bg-background pb-20 pt-16" id="graph">
         <div className="mx-auto w-full" style={{ maxWidth: "var(--grid-max-width)", paddingLeft: "var(--grid-margin)", paddingRight: "var(--grid-margin)" }}>
-          <div className="mb-6 flex items-baseline justify-between">
-            <div>
-              <h2 className="font-serif text-3xl font-bold text-white">
-                Connection Graph
-              </h2>
-              <p className="mt-2 text-sm text-white/40">
-                Confirmed connections and their networks — designers, locations,
-                and Epstein source links. Drag to explore.
-              </p>
-            </div>
-          </div>
           <GraphPreview />
         </div>
       </section>

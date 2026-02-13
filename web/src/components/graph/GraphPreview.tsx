@@ -4,6 +4,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useMounted } from "@/lib/use-mounted";
+import { Separator } from "@/components/ui/separator";
 import type { GraphData, GraphNode } from "@/lib/graph-types";
 import {
   nodeColors,
@@ -13,6 +14,7 @@ import {
   graphBg,
   nodeSize,
   getConfidenceLevel,
+  drawGrid,
   LABEL_DEGREE_THRESHOLD,
 } from "@/lib/graph-types";
 
@@ -34,8 +36,10 @@ interface FGLink {
 }
 
 /**
- * Compact, read-only graph preview for the landing page.
- * Uses refs (not state) for hover to avoid React re-render storms.
+ * Landing-page graph preview — "Graph Paper" Swiss editorial style.
+ *
+ * Two-column layout: editorial text in slice 1, graph in slices 2-6.
+ * White background with subtle grid lines, restrained color palette.
  */
 export function GraphPreview() {
   const mounted = useMounted();
@@ -87,7 +91,16 @@ export function GraphPreview() {
     }
   }, [graphData]);
 
-  // ── Canvas rendering — stable callback, reads hover from ref ──
+  // ── Grid background — drawn before each frame ──
+
+  const handleRenderFramePre = useCallback(
+    (ctx: CanvasRenderingContext2D, globalScale: number) => {
+      drawGrid(ctx, globalScale);
+    },
+    []
+  );
+
+  // ── Canvas rendering — Swiss minimal style ──
 
   const handleNodeCanvas = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -100,73 +113,72 @@ export function GraphPreview() {
 
       ctx.save();
 
-      // Uncertainty ring
+      // Uncertainty ring (copper, no glow — just clean strokes)
       if (confidence !== null) {
         const uc = uncertaintyConfig[confidence];
+
+        // Ring
         ctx.beginPath();
         ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
         ctx.strokeStyle = uncertaintyColor;
         ctx.lineWidth = uc.ringWidth / globalScale;
         ctx.globalAlpha = uc.ringOpacity;
         ctx.stroke();
-        if (uc.fillOpacity > 0.05) {
+
+        // Subtle fill
+        if (uc.fillOpacity > 0.03) {
           ctx.beginPath();
           ctx.arc(x, y, size + 3, 0, 2 * Math.PI);
           ctx.fillStyle = uncertaintyColor;
-          ctx.globalAlpha = uc.fillOpacity * 0.3;
+          ctx.globalAlpha = uc.fillOpacity;
           ctx.fill();
         }
       }
 
       // Hover ring
       if (isHovered) {
+        ctx.globalAlpha = 1;
         ctx.beginPath();
         ctx.arc(x, y, size + 5, 0, 2 * Math.PI);
-        ctx.strokeStyle = "rgba(255,255,255,0.35)";
+        ctx.strokeStyle = "#333";
         ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
       }
 
-      // Node body — opacity glow instead of shadowBlur
-      ctx.globalAlpha = isHovered ? 0.25 : 0.12;
+      // Node body — solid fill + thin stroke, no glow
+      ctx.globalAlpha = 1;
+
+      // Fill
       ctx.beginPath();
-      ctx.arc(x, y, size + 2, 0, 2 * Math.PI);
+      ctx.arc(x, y, size, 0, 2 * Math.PI);
       ctx.fillStyle = color;
+      ctx.globalAlpha = isHovered ? 1.0 : 0.85;
       ctx.fill();
 
-      ctx.globalAlpha = 1;
+      // Stroke
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       ctx.strokeStyle = color;
-      ctx.lineWidth = 1.5 / globalScale;
+      ctx.lineWidth = 1 / globalScale;
+      ctx.globalAlpha = 1;
       ctx.stroke();
-
-      ctx.beginPath();
-      ctx.arc(x, y, size * 0.55, 0, 2 * Math.PI);
-      ctx.fillStyle = color;
-      ctx.globalAlpha = isHovered ? 0.9 : 0.7;
-      ctx.fill();
 
       ctx.restore();
 
-      // Labels for hub nodes
+      // Labels for hub nodes — dark text on light bg
       const showLabel =
         isHovered || (node.degree ?? 0) >= LABEL_DEGREE_THRESHOLD;
 
       if (showLabel) {
         const fontSize = Math.max(10 / globalScale, 1.8);
-        ctx.font = `${fontSize}px Inter, sans-serif`;
+        ctx.font = `500 ${fontSize}px Inter, sans-serif`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillStyle = "rgba(0,0,0,0.85)";
-        ctx.fillText(node.label, x + 0.5, y + size + 3 + 0.5);
-        ctx.fillStyle = isHovered
-          ? "rgba(255,255,255,0.95)"
-          : "rgba(255,255,255,0.6)";
+        ctx.fillStyle = isHovered ? "#1A1A1A" : "#555555";
         ctx.fillText(node.label, x, y + size + 3);
       }
     },
-    [] // stable — no dependencies, reads hover from ref
+    []
   );
 
   const handlePointerArea = useCallback(
@@ -184,7 +196,6 @@ export function GraphPreview() {
   const handleNodeHover = useCallback((node: FGNode | null) => {
     hoveredNodeRef.current = node;
 
-    // Update tooltip via DOM (bypasses React)
     const tip = tooltipRef.current;
     if (tip) {
       if (node && graphRef.current?.graph2ScreenCoords) {
@@ -198,7 +209,7 @@ export function GraphPreview() {
         tip.innerHTML = `
           <div style="display:flex;align-items:center;gap:8px">
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${nodeColors[node.nodeType]}"></span>
-            <span style="font-size:12px;font-weight:500;color:#e5e5e5">${node.label}</span>
+            <span style="font-size:12px;font-weight:500;color:#1A1A1A">${node.label}</span>
           </div>
           <div style="margin-top:4px;display:flex;gap:12px;font-size:10px;color:#737373">
             <span>${node.nodeType.replace("_", " ")}</span>
@@ -210,136 +221,190 @@ export function GraphPreview() {
       }
     }
 
-    // Request a repaint from the graph (cheap — just redraws canvas)
     graphRef.current?.refresh?.();
   }, []);
 
   const handleLinkColor = useCallback((link: FGLink) => {
-    return (linkColors[link.relType ?? ""] ?? "#444") + "AA";
+    const base = linkColors[link.relType ?? ""] ?? "#DDDDDD";
+    // Epstein links get more opacity, structural links stay subtle
+    if (link.relType === "APPEARS_IN") return base + "CC";
+    return base + "66";
   }, []);
 
   const handleLinkWidth = useCallback((link: FGLink) => {
-    if (link.relType === "APPEARS_IN") return 4;
-    if (link.relType === "HIRED") return 3;
-    return 2.5;
+    if (link.relType === "APPEARS_IN") return 2;
+    if (link.relType === "HIRED") return 1.5;
+    return 0.8;
   }, []);
 
   if (!mounted) {
     return (
-      <div
-        className="flex h-[500px] items-center justify-center rounded-lg"
-        style={{ backgroundColor: graphBg }}
-      >
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-800 border-t-amber-600" />
-          <p className="font-mono text-xs text-neutral-600">
-            Loading graph...
-          </p>
+      <div className="grid gap-6 md:grid-cols-[188px_1fr]">
+        <div />
+        <div
+          className="flex h-[650px] items-center justify-center rounded border border-border"
+          style={{ backgroundColor: graphBg }}
+        >
+          <div className="flex flex-col items-center gap-3">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-[#B87333]" />
+            <p className="text-xs text-muted-foreground">Loading graph...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div
-      ref={containerRef}
-      className="relative h-[500px] overflow-hidden rounded-lg border border-white/[0.08]"
-      style={{ backgroundColor: graphBg }}
-    >
-      {/* Graph canvas */}
-      <div className="absolute inset-0" style={{ zIndex: 0 }}>
-        <ForceGraph2D
-          ref={graphRef}
-          graphData={graphData}
-          nodeId="id"
-          nodeCanvasObject={handleNodeCanvas}
-          nodePointerAreaPaint={handlePointerArea}
-          onNodeHover={handleNodeHover}
-          linkColor={handleLinkColor}
-          linkWidth={handleLinkWidth}
-          linkCurvature={0.15}
-          d3AlphaDecay={0.02}
-          d3VelocityDecay={0.3}
-          cooldownTime={3000}
-          warmupTicks={30}
-          backgroundColor={graphBg}
-          enableZoomInteraction={true}
-          enablePanInteraction={true}
-          enableNodeDrag={true}
-        />
-      </div>
-
-      {/* Hover tooltip — managed via DOM ref, not React state */}
-      <div
-        ref={tooltipRef}
-        className="pointer-events-none absolute z-30 rounded"
-        style={{
-          display: "none",
-          backgroundColor: "rgba(12,12,12,0.95)",
-          border: "1px solid #2A2A2A",
-          padding: "8px 12px",
-          maxWidth: 240,
-        }}
-      />
-
-      {/* Stats + CTA overlay */}
-      <div className="absolute bottom-0 left-0 right-0 z-20 flex items-end justify-between p-4">
-        <div
-          className="rounded px-3 py-1.5 font-mono text-xs"
-          style={{
-            backgroundColor: "rgba(12,12,12,0.9)",
-            border: "1px solid #333",
-            color: "#666",
-          }}
+    <div className="grid gap-6 md:grid-cols-[188px_1fr]">
+      {/* ── Column 1: Editorial text ── */}
+      <div className="flex flex-col pt-1">
+        <p
+          className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
+          style={{ fontFamily: "futura-pt, sans-serif" }}
         >
-          {graphData.nodes.length} nodes &middot; {graphData.links.length} edges
-        </div>
+          Network Analysis
+        </p>
 
+        <Separator className="mt-2 mb-5" />
+
+        <p className="font-serif text-[15px] leading-[1.75] text-foreground/60">
+          Each node represents a person, designer, location, or Epstein source
+          document. Connections emerge from 28 years of Architectural Digest
+          features cross-referenced against the DOJ&rsquo;s Epstein library.
+        </p>
+
+        <p className="mt-4 font-serif text-[15px] leading-[1.75] text-foreground/60">
+          Copper rings mark confirmed Epstein connections. The closer two nodes
+          sit, the stronger their relationship in the network.
+        </p>
+
+        {/* Legend — integrated into text column */}
+        {loaded && (
+          <div className="mt-8">
+            <p
+              className="text-[9px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              Node Types
+            </p>
+            <div className="mt-2 space-y-1.5">
+              {(
+                [
+                  ["person", "Person"],
+                  ["designer", "Designer"],
+                  ["location", "Location"],
+                  ["epstein_source", "Epstein Source"],
+                ] as const
+              ).map(([type, label]) => (
+                <div
+                  key={type}
+                  className="flex items-center gap-2 text-[11px] text-muted-foreground"
+                >
+                  <span
+                    className="inline-block h-2 w-2 rounded-full"
+                    style={{ backgroundColor: nodeColors[type] }}
+                  />
+                  <span>{label}</span>
+                </div>
+              ))}
+              <div className="flex items-center gap-2 text-[11px] text-muted-foreground">
+                <span
+                  className="inline-block h-2 w-2 rounded-full"
+                  style={{
+                    backgroundColor: "transparent",
+                    border: `1.5px solid ${uncertaintyColor}`,
+                  }}
+                />
+                <span>Epstein Connection</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Stats — Feltron-style big numbers */}
+        {loaded && (
+          <div className="mt-8 border-t border-border pt-4">
+            <p
+              className="text-[28px] font-bold leading-none tracking-tight"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              {graphData.nodes.length}
+            </p>
+            <p
+              className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              Nodes
+            </p>
+            <p
+              className="mt-4 text-[28px] font-bold leading-none tracking-tight"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              {graphData.links.length}
+            </p>
+            <p
+              className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              Edges
+            </p>
+          </div>
+        )}
+
+        {/* CTA */}
         <Link
           href="/explorer"
-          className="rounded px-4 py-2 text-sm font-medium transition-colors"
+          className="mt-auto inline-flex items-center gap-1 pt-6 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors hover:text-foreground"
           style={{
-            backgroundColor: "rgba(184,115,51,0.15)",
-            border: "1px solid rgba(184,115,51,0.3)",
-            color: "#D4A574",
+            fontFamily: "futura-pt, sans-serif",
+            color: "#B87333",
           }}
         >
           Explore Full Graph &rarr;
         </Link>
       </div>
 
-      {/* Compact legend (top-right) */}
-      {loaded && (
-        <div
-          className="absolute right-3 top-3 z-20 rounded p-2.5"
-          style={{
-            backgroundColor: "rgba(12,12,12,0.88)",
-            border: "1px solid #2A2A2A",
-          }}
-        >
-          <div className="space-y-0.5">
-            {(
-              [
-                ["person", "Person"],
-                ["designer", "Designer"],
-                ["location", "Location"],
-                ["style", "Style"],
-              ] as const
-            ).map(([type, label]) => (
-              <div
-                key={type}
-                className="flex items-center gap-1.5 text-[9px] text-neutral-500"
-              >
-                <span
-                  className="inline-block h-2 w-2 rounded-full"
-                  style={{ backgroundColor: nodeColors[type] }}
-                />
-                <span>{label}</span>
-              </div>
-            ))}
-          </div>
+      {/* ── Columns 2-6: Graph canvas ── */}
+      <div
+        ref={containerRef}
+        className="relative h-[650px] overflow-hidden rounded border border-border"
+        style={{ backgroundColor: graphBg }}
+      >
+        {/* Graph canvas */}
+        <div className="absolute inset-0" style={{ zIndex: 0 }}>
+          <ForceGraph2D
+            ref={graphRef}
+            graphData={graphData}
+            nodeId="id"
+            nodeCanvasObject={handleNodeCanvas}
+            nodePointerAreaPaint={handlePointerArea}
+            onNodeHover={handleNodeHover}
+            onRenderFramePre={handleRenderFramePre}
+            linkColor={handleLinkColor}
+            linkWidth={handleLinkWidth}
+            linkCurvature={0.15}
+            d3AlphaDecay={0.02}
+            d3VelocityDecay={0.3}
+            cooldownTime={3000}
+            warmupTicks={30}
+            backgroundColor={graphBg}
+            enableZoomInteraction={true}
+            enablePanInteraction={true}
+            enableNodeDrag={true}
+          />
         </div>
-      )}
+
+        {/* Hover tooltip — light theme */}
+        <div
+          ref={tooltipRef}
+          className="pointer-events-none absolute z-30 rounded border border-border bg-background shadow-sm"
+          style={{
+            display: "none",
+            padding: "8px 12px",
+            maxWidth: 240,
+          }}
+        />
+      </div>
     </div>
   );
 }

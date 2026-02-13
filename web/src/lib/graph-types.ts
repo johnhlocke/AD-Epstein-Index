@@ -83,46 +83,102 @@ export function getConfidenceLevel(node: GraphNode): ConfidenceLevel | null {
   return null; // No Epstein connection data
 }
 
-/** Uncertainty ring rendering config — blur increases as confidence drops */
+/** Uncertainty ring rendering config — no blur on light bg, uses opacity + stroke */
 export const uncertaintyConfig: Record<
   ConfidenceLevel,
   { blur: number; fillOpacity: number; ringOpacity: number; ringWidth: number }
 > = {
-  high: { blur: 2, fillOpacity: 0.85, ringOpacity: 1.0, ringWidth: 2.0 },
-  good: { blur: 6, fillOpacity: 0.6, ringOpacity: 0.9, ringWidth: 1.8 },
-  medium: { blur: 12, fillOpacity: 0.35, ringOpacity: 0.8, ringWidth: 1.5 },
-  low: { blur: 18, fillOpacity: 0.15, ringOpacity: 0.7, ringWidth: 1.2 },
-  very_low: { blur: 24, fillOpacity: 0.05, ringOpacity: 0.6, ringWidth: 1.0 },
+  high: { blur: 0, fillOpacity: 0.25, ringOpacity: 1.0, ringWidth: 2.0 },
+  good: { blur: 0, fillOpacity: 0.18, ringOpacity: 0.85, ringWidth: 1.8 },
+  medium: { blur: 0, fillOpacity: 0.12, ringOpacity: 0.7, ringWidth: 1.5 },
+  low: { blur: 0, fillOpacity: 0.06, ringOpacity: 0.5, ringWidth: 1.2 },
+  very_low: { blur: 0, fillOpacity: 0.02, ringOpacity: 0.35, ringWidth: 1.0 },
 };
 
 // ── Colors ──────────────────────────────────────────────────
 
-/** Node type colors — reference-inspired palette on dark background */
+/** Node type colors — restrained palette on light background (Swiss/editorial) */
 export const nodeColors: Record<GraphNode["nodeType"], string> = {
-  person: "#4A8FE7", // Bright blue
-  designer: "#5CB3CC", // Teal
-  location: "#E07A5F", // Warm coral
-  style: "#6BAF7B", // Muted green
-  issue: "#C4A882", // Warm tan
-  author: "#8B7D6B", // Muted brown
-  epstein_source: "#E05A47", // Signal red
+  person: "#333333", // Dark charcoal — most nodes, understated
+  designer: "#2D6A4F", // Forest green — from design system
+  location: "#4A7C8F", // Slate blue — from design system
+  style: "#999999", // Medium gray — background detail
+  issue: "#BBBBBB", // Light gray — structural
+  author: "#888888", // Gray — structural
+  epstein_source: "#B87333", // Copper — THE accent, the story
 };
 
 /** Link colors by relationship type */
 export const linkColors: Record<string, string> = {
-  FEATURED_IN: "#C27C4E", // Copper
-  HIRED: "#5CB3CC", // Teal
-  LIVES_IN: "#E07A5F", // Coral
-  HAS_STYLE: "#6BAF7B", // Green
-  PROFILED_BY: "#8B7D6B", // Brown
-  APPEARS_IN: "#E05A47", // Red
+  FEATURED_IN: "#CCCCCC", // Subtle gray — structural
+  HIRED: "#2D6A4F", // Green — designer connection
+  LIVES_IN: "#4A7C8F", // Slate — location
+  HAS_STYLE: "#DDDDDD", // Very subtle — background
+  PROFILED_BY: "#CCCCCC", // Subtle — structural
+  APPEARS_IN: "#9B2226", // Red — Epstein connection, the signal
 };
 
-/** Uncertainty ring color (gold/amber) */
-export const uncertaintyColor = "#D4A04A";
+/** Uncertainty ring color (copper/amber) */
+export const uncertaintyColor = "#B87333";
 
 /** Graph background */
-export const graphBg = "#0A0A0A";
+export const graphBg = "#FAFAFA";
+
+// ── Grid Drawing ────────────────────────────────────────────
+
+/** Draw graph-paper grid on canvas before nodes render */
+export function drawGrid(
+  ctx: CanvasRenderingContext2D,
+  globalScale: number
+): void {
+  const transform = ctx.getTransform();
+  const canvas = ctx.canvas;
+
+  // Visible area in world coordinates
+  const left = -transform.e / transform.a;
+  const top = -transform.f / transform.d;
+  const right = (canvas.width - transform.e) / transform.a;
+  const bottom = (canvas.height - transform.f) / transform.d;
+
+  // Adaptive grid: spacing adjusts with zoom for constant screen density
+  const baseSpacing = 50;
+  const minorSpacing = baseSpacing / Math.max(0.3, Math.min(globalScale, 3));
+  const majorSpacing = minorSpacing * 4;
+
+  // Minor grid
+  ctx.strokeStyle = "#ECECEC";
+  ctx.lineWidth = 0.5 / globalScale;
+  ctx.beginPath();
+
+  let x = Math.floor(left / minorSpacing) * minorSpacing;
+  for (; x <= right; x += minorSpacing) {
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+  }
+  let y = Math.floor(top / minorSpacing) * minorSpacing;
+  for (; y <= bottom; y += minorSpacing) {
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+  }
+  ctx.stroke();
+
+  // Major grid
+  ctx.strokeStyle = "#DCDCDC";
+  ctx.lineWidth = 1 / globalScale;
+  ctx.beginPath();
+
+  x = Math.floor(left / majorSpacing) * majorSpacing;
+  for (; x <= right; x += majorSpacing) {
+    ctx.moveTo(x, top);
+    ctx.lineTo(x, bottom);
+  }
+  y = Math.floor(top / majorSpacing) * majorSpacing;
+  for (; y <= bottom; y += majorSpacing) {
+    ctx.moveTo(left, y);
+    ctx.lineTo(right, y);
+  }
+  ctx.stroke();
+}
 
 // ── Sizing & Thresholds ─────────────────────────────────────
 
