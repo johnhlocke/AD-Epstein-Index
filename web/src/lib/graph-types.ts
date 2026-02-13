@@ -97,24 +97,24 @@ export const uncertaintyConfig: Record<
 
 // ── Colors ──────────────────────────────────────────────────
 
-/** Node type colors — restrained palette on light background (Swiss/editorial) */
+/** Node type colors — near-monochrome with copper as sole accent */
 export const nodeColors: Record<GraphNode["nodeType"], string> = {
-  person: "#333333", // Dark charcoal — most nodes, understated
-  designer: "#2D6A4F", // Forest green — from design system
-  location: "#4A7C8F", // Slate blue — from design system
-  style: "#999999", // Medium gray — background detail
-  issue: "#BBBBBB", // Light gray — structural
-  author: "#888888", // Gray — structural
+  person: "#AAAAAA", // Light gray — background
+  designer: "#999999", // Medium gray — background
+  location: "#BBBBBB", // Lighter gray — background
+  style: "#CCCCCC", // Very light — structural
+  issue: "#CCCCCC", // Very light — structural
+  author: "#BBBBBB", // Light — structural
   epstein_source: "#B87333", // Copper — THE accent, the story
 };
 
-/** Link colors by relationship type */
+/** Link colors by relationship type — gray for structural, red for Epstein */
 export const linkColors: Record<string, string> = {
-  FEATURED_IN: "#CCCCCC", // Subtle gray — structural
-  HIRED: "#2D6A4F", // Green — designer connection
-  LIVES_IN: "#4A7C8F", // Slate — location
-  HAS_STYLE: "#DDDDDD", // Very subtle — background
-  PROFILED_BY: "#CCCCCC", // Subtle — structural
+  FEATURED_IN: "#D5D5D5", // Gray — structural
+  HIRED: "#C5C5C5", // Gray — structural
+  LIVES_IN: "#D0D0D0", // Gray — structural
+  HAS_STYLE: "#DCDCDC", // Gray — structural
+  PROFILED_BY: "#D5D5D5", // Gray — structural
   APPEARS_IN: "#9B2226", // Red — Epstein connection, the signal
 };
 
