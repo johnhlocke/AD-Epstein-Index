@@ -16,10 +16,11 @@ import {
   LABEL_DEGREE_THRESHOLD,
 } from "@/lib/graph-types";
 
+// react-force-graph-2d has no TS types and must be dynamically imported (Canvas).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
+const ForceGraph2D: any = dynamic(() => import("react-force-graph-2d"), {
   ssr: false,
-}) as any;
+});
 
 interface FGNode extends GraphNode {
   x?: number;

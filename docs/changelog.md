@@ -6,6 +6,26 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-12 (Session 25)
+
+### Changed — Hero Section Redesign
+- **`web/src/components/landing/HeroSection.tsx`** — Complete hero overhaul: Futura PT Black headline ("Where They Live"), Playfair Display italic epigraph (Thoreau quote), 3-column serif introduction body text, 6-column stats grid with copper-highlighted "Confirmed Connections" anchor stat.
+- **`web/src/components/layout/Header.tsx`** — Updated header layout with grid-aligned navigation spanning rightmost 2 grid slices (400px = 2×188 + 24 gutter).
+- **`web/src/app/layout.tsx`** — Added Adobe Typekit stylesheet for Futura PT font family.
+- **`web/src/lib/queries.ts`** — Added cross-references count to stats query for hero display.
+- **`web/src/lib/types.ts`** — Added `crossReferences` field to `StatsResponse` interface.
+
+### Added — Figma Design System Sync
+- Synced hero section to Figma via Console MCP (Desktop Bridge plugin): epigraph, headline, 3-col intro, 6-stat grid aligned to 6-slice design grid (188px slices, 24px gutters).
+- Header synced with nav aligned to grid slices 5-6.
+- Logo exploration: "They Live" Wayfarer sunglasses concept — left lens dark (facade), right lens reveals house (truth). Vector path Wayfarer frame with thick brow bar, keyhole bridge, organic trapezoidal silhouette.
+
+### Fixed — Graph Component Lint Errors
+- **`web/src/components/graph/GraphPreview.tsx`** — Fixed `any` type annotation to satisfy ESLint (moved from `as any` cast to typed variable declaration).
+- **`web/src/components/graph/ConnectionExplorer.tsx`** — Same lint fix for react-force-graph-2d dynamic import.
+
+---
+
 ## 2026-02-12 (Session 24)
 
 ### Added — Cost Control Toggles

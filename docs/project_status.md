@@ -98,6 +98,9 @@ This file should be automatically updated when necessary to answer three key que
 | Future-date scraping fix (year/month cap) | Tooling | Done |
 | Activity log parser traceback filtering | Tooling | Done |
 | Website design polish (Sable session) | Phase 3 | Done |
+| Hero section redesign (Futura PT, epigraph, stats grid) | Phase 3 | Done |
+| Figma design system sync (hero, header, grid alignment) | Phase 3 | Done |
+| Logo exploration (They Live Wayfarer concept) | Phase 3 | In Progress |
 
 ## 2. What's Been Accomplished
 

@@ -20,9 +20,9 @@ import { NodeDetails } from "./NodeDetails";
 
 // react-force-graph-2d must be dynamically imported (no SSR — uses Canvas).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-const ForceGraph2D = dynamic(() => import("react-force-graph-2d"), {
+const ForceGraph2D: any = dynamic(() => import("react-force-graph-2d"), {
   ssr: false,
-}) as any;
+});
 
 /** Internal node type after force-graph adds x/y */
 interface FGNode extends GraphNode {
