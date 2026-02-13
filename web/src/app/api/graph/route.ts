@@ -12,6 +12,21 @@ import {
 
 export const runtime = "nodejs";
 
+// In-memory cache for graph queries (5 min TTL)
+const cache = new Map<string, { data: unknown; expires: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+function getCached<T>(key: string): T | null {
+  const entry = cache.get(key);
+  if (entry && entry.expires > Date.now()) return entry.data as T;
+  cache.delete(key);
+  return null;
+}
+
+function setCache(key: string, data: unknown) {
+  cache.set(key, { data, expires: Date.now() + CACHE_TTL });
+}
+
 export async function GET(request: NextRequest) {
   const { searchParams } = request.nextUrl;
   const preset = searchParams.get("preset") ?? "full";
@@ -61,12 +76,18 @@ export async function GET(request: NextRequest) {
       }
 
       case "full": {
+        const cached = getCached("full");
+        if (cached) return NextResponse.json(cached);
         const data = await getFullGraph();
+        setCache("full", data);
         return NextResponse.json(data);
       }
 
       case "confirmed": {
+        const cached = getCached("confirmed");
+        if (cached) return NextResponse.json(cached);
         const data = await getConfirmedNetwork();
+        setCache("confirmed", data);
         return NextResponse.json(data);
       }
 

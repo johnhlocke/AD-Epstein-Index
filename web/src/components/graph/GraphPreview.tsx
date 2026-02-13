@@ -98,12 +98,9 @@ export function GraphPreview() {
 
       ctx.save();
 
-      // Uncertainty ring
+      // Uncertainty ring (no shadow blur — uses opacity + width instead)
       if (confidence !== null) {
         const uc = uncertaintyConfig[confidence];
-        ctx.save();
-        ctx.shadowColor = uncertaintyColor;
-        ctx.shadowBlur = uc.blur;
         ctx.beginPath();
         ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
         ctx.strokeStyle = uncertaintyColor;
@@ -117,7 +114,6 @@ export function GraphPreview() {
           ctx.globalAlpha = uc.fillOpacity * 0.3;
           ctx.fill();
         }
-        ctx.restore();
       }
 
       // Hover ring
@@ -129,15 +125,18 @@ export function GraphPreview() {
         ctx.stroke();
       }
 
-      // Node body
-      ctx.shadowColor = color;
-      ctx.shadowBlur = isHovered ? 10 : 4;
+      // Node body (no shadow blur — uses double-stroke glow instead)
+      ctx.globalAlpha = isHovered ? 0.25 : 0.12;
+      ctx.beginPath();
+      ctx.arc(x, y, size + 2, 0, 2 * Math.PI);
+      ctx.fillStyle = color;
+      ctx.fill();
 
+      ctx.globalAlpha = 1;
       ctx.beginPath();
       ctx.arc(x, y, size, 0, 2 * Math.PI);
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5 / globalScale;
-      ctx.globalAlpha = 1;
       ctx.stroke();
 
       ctx.beginPath();
@@ -233,10 +232,7 @@ export function GraphPreview() {
           onNodeHover={handleNodeHover}
           linkColor={handleLinkColor}
           linkWidth={handleLinkWidth}
-          linkCurvature={0.2}
-          linkDirectionalParticles={2}
-          linkDirectionalParticleWidth={1.5}
-          linkDirectionalParticleSpeed={0.004}
+          linkCurvature={0.15}
           d3AlphaDecay={0.02}
           d3VelocityDecay={0.3}
           cooldownTime={3000}

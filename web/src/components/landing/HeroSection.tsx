@@ -41,7 +41,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
           </p>
           <Separator className="mt-0" />
           <div className="mt-0 grid gap-6 md:grid-cols-3">
-            <p className="text-lg font-bold leading-[1.5] text-muted-foreground">
+            <p className="text-base font-bold leading-[1.5] text-muted-foreground">
               This investigation looks at the last 28 years of Architectural
               Digest (AD) stretching back to 1988. In that time, the magazine
               celebrated the homes of over 1600 individuals. Many of those
@@ -52,7 +52,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
               connected homeowners and documents the nature of those
               connections.
             </p>
-            <p className="text-lg font-bold leading-[1.5] text-muted-foreground">
+            <p className="text-base font-bold leading-[1.5] text-muted-foreground">
               Architectural Digest is considered the preeminent arbiter of
               mainstream taste in interior design. If there is a high
               correlation between AD features and Epstein&rsquo;s network, it
@@ -63,7 +63,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
               power and design? Is there a demonstrable &ldquo;Epstein
               aesthetic&rdquo; that can be seen consistently across these homes?
             </p>
-            <p className="text-lg font-bold leading-[1.5] text-muted-foreground">
+            <p className="text-base font-bold leading-[1.5] text-muted-foreground">
               This is not a claim of guilt. Appearing in a contact book or a
               legal document does not imply criminal conduct. What it does
               establish is proximity — that a meaningful number of individuals

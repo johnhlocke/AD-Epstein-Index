@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { getSupabase } from "./supabase";
 import type {
   StatsResponse,
@@ -10,7 +11,9 @@ import type {
 
 // ── Stats ──────────────────────────────────────────────────
 
-export async function getStats(): Promise<StatsResponse> {
+// Cache stats for 5 minutes server-side — avoids hitting Supabase on every page load
+// while keeping force-dynamic on the page (no build-time generation)
+export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
   const sb = getSupabase();
 
   // Fetch all issues (lightweight — id, status, month, year)
@@ -126,7 +129,7 @@ export async function getStats(): Promise<StatsResponse> {
     },
     coverage,
   };
-}
+}, ["stats"], { revalidate: 300 });
 
 // ── Features ───────────────────────────────────────────────
 
