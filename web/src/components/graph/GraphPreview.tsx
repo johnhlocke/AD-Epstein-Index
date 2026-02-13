@@ -34,8 +34,7 @@ interface FGLink {
 
 /**
  * Compact, read-only graph preview for the landing page.
- * Loads the full graph overview, supports hover + drag, and
- * links through to the full Connection Explorer.
+ * Uses refs (not state) for hover to avoid React re-render storms.
  */
 export function GraphPreview() {
   const mounted = useMounted();
@@ -47,11 +46,13 @@ export function GraphPreview() {
     nodes: [],
     links: [],
   });
-  const [hoveredNode, setHoveredNode] = useState<FGNode | null>(null);
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [loaded, setLoaded] = useState(false);
 
-  // Fetch full graph on mount
+  // Hover state lives in refs — no React re-renders on mouse move
+  const hoveredNodeRef = useRef<FGNode | null>(null);
+  const tooltipRef = useRef<HTMLDivElement>(null);
+
+  // Fetch graph on mount
   useEffect(() => {
     if (!mounted) return;
     (async () => {
@@ -85,7 +86,7 @@ export function GraphPreview() {
     }
   }, [graphData]);
 
-  // ── Canvas rendering (simplified from ConnectionExplorer) ──
+  // ── Canvas rendering — stable callback, reads hover from ref ──
 
   const handleNodeCanvas = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -94,11 +95,11 @@ export function GraphPreview() {
       const y = node.y ?? 0;
       const color = nodeColors[node.nodeType] ?? "#888";
       const confidence = getConfidenceLevel(node);
-      const isHovered = hoveredNode?.id === node.id;
+      const isHovered = hoveredNodeRef.current?.id === node.id;
 
       ctx.save();
 
-      // Uncertainty ring (no shadow blur — uses opacity + width instead)
+      // Uncertainty ring
       if (confidence !== null) {
         const uc = uncertaintyConfig[confidence];
         ctx.beginPath();
@@ -125,7 +126,7 @@ export function GraphPreview() {
         ctx.stroke();
       }
 
-      // Node body (no shadow blur — uses double-stroke glow instead)
+      // Node body — opacity glow instead of shadowBlur
       ctx.globalAlpha = isHovered ? 0.25 : 0.12;
       ctx.beginPath();
       ctx.arc(x, y, size + 2, 0, 2 * Math.PI);
@@ -164,7 +165,7 @@ export function GraphPreview() {
         ctx.fillText(node.label, x, y + size + 3);
       }
     },
-    [hoveredNode]
+    [] // stable — no dependencies, reads hover from ref
   );
 
   const handlePointerArea = useCallback(
@@ -178,15 +179,38 @@ export function GraphPreview() {
     []
   );
 
+  // Hover handler — updates ref + tooltip DOM directly, no React state
   const handleNodeHover = useCallback((node: FGNode | null) => {
-    setHoveredNode(node);
-    if (node && graphRef.current?.graph2ScreenCoords) {
-      const coords = graphRef.current.graph2ScreenCoords(
-        node.x ?? 0,
-        node.y ?? 0
-      );
-      setTooltipPos({ x: coords.x, y: coords.y - 12 });
+    hoveredNodeRef.current = node;
+
+    // Update tooltip via DOM (bypasses React)
+    const tip = tooltipRef.current;
+    if (tip) {
+      if (node && graphRef.current?.graph2ScreenCoords) {
+        const coords = graphRef.current.graph2ScreenCoords(
+          node.x ?? 0,
+          node.y ?? 0
+        );
+        tip.style.display = "block";
+        tip.style.left = `${coords.x + 14}px`;
+        tip.style.top = `${coords.y - 56}px`;
+        tip.innerHTML = `
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${nodeColors[node.nodeType]}"></span>
+            <span style="font-size:12px;font-weight:500;color:#e5e5e5">${node.label}</span>
+          </div>
+          <div style="margin-top:4px;display:flex;gap:12px;font-size:10px;color:#737373">
+            <span>${node.nodeType.replace("_", " ")}</span>
+            ${node.degree != null ? `<span>${node.degree} connections</span>` : ""}
+          </div>
+        `;
+      } else {
+        tip.style.display = "none";
+      }
     }
+
+    // Request a repaint from the graph (cheap — just redraws canvas)
+    graphRef.current?.refresh?.();
   }, []);
 
   const handleLinkColor = useCallback((link: FGLink) => {
@@ -221,7 +245,7 @@ export function GraphPreview() {
       className="relative h-[500px] overflow-hidden rounded-lg border border-white/[0.08]"
       style={{ backgroundColor: graphBg }}
     >
-      {/* Graph canvas — pinned to z-0 */}
+      {/* Graph canvas */}
       <div className="absolute inset-0" style={{ zIndex: 0 }}>
         <ForceGraph2D
           ref={graphRef}
@@ -244,36 +268,18 @@ export function GraphPreview() {
         />
       </div>
 
-      {/* Hover tooltip */}
-      {hoveredNode && (
-        <div
-          className="pointer-events-none absolute z-30 rounded shadow-lg"
-          style={{
-            left: tooltipPos.x + 14,
-            top: tooltipPos.y - 44,
-            backgroundColor: "rgba(12,12,12,0.95)",
-            border: "1px solid #2A2A2A",
-            padding: "8px 12px",
-            maxWidth: 240,
-          }}
-        >
-          <div className="flex items-center gap-2">
-            <span
-              className="inline-block h-2 w-2 rounded-full"
-              style={{ backgroundColor: nodeColors[hoveredNode.nodeType] }}
-            />
-            <span className="text-xs font-medium text-neutral-200">
-              {hoveredNode.label}
-            </span>
-          </div>
-          <div className="mt-1 flex gap-3 text-[10px] text-neutral-500">
-            <span>{hoveredNode.nodeType.replace("_", " ")}</span>
-            {hoveredNode.degree != null && (
-              <span>{hoveredNode.degree} connections</span>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Hover tooltip — managed via DOM ref, not React state */}
+      <div
+        ref={tooltipRef}
+        className="pointer-events-none absolute z-30 rounded"
+        style={{
+          display: "none",
+          backgroundColor: "rgba(12,12,12,0.95)",
+          border: "1px solid #2A2A2A",
+          padding: "8px 12px",
+          maxWidth: 240,
+        }}
+      />
 
       {/* Stats + CTA overlay */}
       <div className="absolute bottom-0 left-0 right-0 z-20 flex items-end justify-between p-4">
