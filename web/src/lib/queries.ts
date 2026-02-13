@@ -31,6 +31,11 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .from("dossiers")
     .select("id, editor_verdict");
 
+  // Fetch cross-reference count
+  const { count: xrefCount } = await sb
+    .from("cross_references")
+    .select("id", { count: "exact", head: true });
+
   const allIssues = issues ?? [];
   const allFeatures = features ?? [];
   const allDossiers = dossiers ?? [];
@@ -126,6 +131,9 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
       confirmed,
       rejected,
       pending,
+    },
+    crossReferences: {
+      total: xrefCount ?? 0,
     },
     coverage,
   };

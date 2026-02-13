@@ -113,6 +113,9 @@ export interface StatsResponse {
     rejected: number;
     pending: number;
   };
+  crossReferences: {
+    total: number;
+  };
   coverage: {
     year: number;
     months: (string | null)[];

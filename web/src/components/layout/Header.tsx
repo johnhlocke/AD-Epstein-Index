@@ -21,7 +21,8 @@ export function Header() {
             AD-Epstein Index
           </span>
         </Link>
-        <nav className="flex items-center gap-6 text-sm">
+        {/* Nav — aligned to right 2 columns (400px = slices 5–6 at 1440px) */}
+        <nav className="flex items-center gap-6 text-sm lg:w-[400px] lg:justify-end">
           {navItems.map((item) => (
             <Link
               key={item.href}
