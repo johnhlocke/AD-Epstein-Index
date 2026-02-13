@@ -46,11 +46,10 @@ export function HeroSection({ stats }: HeroSectionProps) {
             Where They Live
           </h1>
           <p
-            className="mt-3 max-w-[600px] text-base font-bold leading-[1.4] text-foreground/80 md:mt-4 md:text-lg lg:text-xl"
+            className="mt-3 text-base font-bold leading-[1.4] text-foreground/80 md:mt-4 md:text-lg lg:text-xl"
             style={{ fontFamily: "futura-pt, sans-serif" }}
           >
-            A Visual Map of the Connections between Architectural Digest and
-            the Epstein Files
+            A Visual Map of the Connections between Architectural Digest and the Epstein Files
           </p>
         </div>
 

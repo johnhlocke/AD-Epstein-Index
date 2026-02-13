@@ -20,6 +20,11 @@ Format: entries are grouped by date, with the most recent at the top.
 - Header synced with nav aligned to grid slices 5-6.
 - Logo exploration: "They Live" Wayfarer sunglasses concept — left lens dark (facade), right lens reveals house (truth). Vector path Wayfarer frame with thick brow bar, keyhole bridge, organic trapezoidal silhouette.
 
+### Changed — Header & Subtitle Polish
+- **`web/src/components/layout/Header.tsx`** — Removed "AD Epstein Index" logo text, centered four nav links (`justify-center`, `gap-8`).
+- **`web/src/components/landing/HeroSection.tsx`** — Removed `max-w-[600px]` from subtitle so "A Visual Map..." runs on one continuous line.
+- Figma synced: header rebuilt with centered nav + bottom stroke border, hero subtitle set to HUG width.
+
 ### Fixed — Graph Component Lint Errors
 - **`web/src/components/graph/GraphPreview.tsx`** — Fixed `any` type annotation to satisfy ESLint (moved from `as any` cast to typed variable declaration).
 - **`web/src/components/graph/ConnectionExplorer.tsx`** — Same lint fix for react-force-graph-2d dynamic import.
