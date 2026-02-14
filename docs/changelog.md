@@ -6,6 +6,21 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-14 (Session 29)
+
+### Added — Aesthetic Radar Chart (Real Data)
+- **`web/src/components/charts/AestheticRadar.tsx`** — Rewrote placeholder radar chart to accept real server data via props. Two variants: `"standalone"` (light bg, editorial text + chart) for page sections, `"embedded"` (dark bg, chart-only) for MethodologySection. 6 composite axes derived from taxonomy data: Classical Grandeur, Old Masters & Antiques, Maximalism, Euro-Centric, Gallery & Institutional, Minimalism.
+- **`web/src/lib/queries.ts`** — Added `getAestheticRadarData()` server query (cached 5 min). Fetches all features with `aesthetic_profile` JSONB, splits by confirmed dossier status, computes 6 composite axis percentages. Replaced Stone & Marble axis (1.0x, no signal) with Gallery & Institutional (1.4x).
+- **`web/src/lib/types.ts`** — Added `RadarAxisData` and `AestheticRadarData` interfaces.
+- **`web/src/components/landing/MethodologySection.tsx`** — Updated `AestheticRadar` usage to pass `variant="embedded"`.
+
+### Fixed — Pipeline Agent Responsiveness
+- **`src/agents/base.py`** — Idle work loop now checks inbox between each idle call (reflect, explore, improve, chatter) and breaks out immediately if a task arrives. Each idle call gets a 30s timeout via `asyncio.wait_for()`. Sleep loop checks inbox every 1s for wake-up.
+- **`src/agents/detective.py`** — Pre-warms DOJ browser before the name-checking loop. Added progress logging showing batch position and verdicts.
+- **`src/agents/editor.py`** — Increased stale task cleanup threshold from 15 min to 60 min. Capped detective batch at 50 names to avoid overflowing LLM name analysis.
+
+---
+
 ## 2026-02-14 (Session 28)
 
 ### Changed — Searchable Index Grid Alignment

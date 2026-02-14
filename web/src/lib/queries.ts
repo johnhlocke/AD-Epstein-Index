@@ -7,6 +7,7 @@ import type {
   DossierWithContext,
   DossierImage,
   PaginatedResponse,
+  AestheticRadarData,
 } from "./types";
 
 // ── Stats ──────────────────────────────────────────────────
@@ -265,6 +266,169 @@ export async function getDossiers(
   const { data } = await query.order("created_at", { ascending: false });
   return (data ?? []) as Dossier[];
 }
+
+// ── Aesthetic Radar ─────────────────────────────────────────
+
+interface AestheticProfile {
+  envelope?: string | null;
+  atmosphere?: string | null;
+  materiality?: string | null;
+  power_status?: string | null;
+  cultural_orientation?: string | null;
+  art_collection?: string[] | null;
+  named_artists?: string[] | null;
+  source?: string;
+}
+
+export const getAestheticRadarData = unstable_cache(
+  async (): Promise<AestheticRadarData> => {
+    const sb = getSupabase();
+
+    // Fetch all features that have aesthetic_profile
+    const { data: features } = await sb
+      .from("features")
+      .select("id, aesthetic_profile")
+      .not("aesthetic_profile", "is", null);
+
+    // Fetch confirmed dossier feature IDs
+    const { data: confirmedDossiers } = await sb
+      .from("dossiers")
+      .select("feature_id")
+      .eq("editor_verdict", "CONFIRMED");
+
+    const confirmedFeatureIds = new Set(
+      (confirmedDossiers ?? [])
+        .map((d: { feature_id: number | null }) => d.feature_id)
+        .filter(Boolean)
+    );
+
+    // Split features into Epstein orbit vs baseline
+    const allFeatures = features ?? [];
+    const epstein: AestheticProfile[] = [];
+    const baseline: AestheticProfile[] = [];
+
+    for (const f of allFeatures) {
+      let profile = f.aesthetic_profile as AestheticProfile | string | null;
+      if (!profile) continue;
+      if (typeof profile === "string") {
+        try {
+          profile = JSON.parse(profile) as AestheticProfile;
+        } catch {
+          continue;
+        }
+      }
+
+      if (confirmedFeatureIds.has(f.id)) {
+        epstein.push(profile);
+      } else {
+        baseline.push(profile);
+      }
+    }
+
+    // Compute the 6 composite axes as percentages
+    function pct(
+      profiles: AestheticProfile[],
+      test: (p: AestheticProfile) => boolean
+    ): number {
+      if (profiles.length === 0) return 0;
+      const count = profiles.filter(test).length;
+      return Math.round((count / profiles.length) * 100);
+    }
+
+    const axes = [
+      {
+        dimension: "Classical Grandeur",
+        epstein: pct(epstein, (p) => {
+          const classicalEnvelope =
+            p.envelope === "Classical/Neoclassical" ||
+            p.envelope === "Historic Revival";
+          const formalAtmosphere = p.atmosphere === "Formal/Antiquarian";
+          return classicalEnvelope && formalAtmosphere;
+        }),
+        baseline: pct(baseline, (p) => {
+          const classicalEnvelope =
+            p.envelope === "Classical/Neoclassical" ||
+            p.envelope === "Historic Revival";
+          const formalAtmosphere = p.atmosphere === "Formal/Antiquarian";
+          return classicalEnvelope && formalAtmosphere;
+        }),
+      },
+      {
+        dimension: "Old Masters\n& Antiques",
+        epstein: pct(epstein, (p) => {
+          const arts = p.art_collection ?? [];
+          return arts.some((a) =>
+            ["Old Masters", "Impressionist/Post-Impressionist", "Decorative/Antique Objects"].includes(a)
+          );
+        }),
+        baseline: pct(baseline, (p) => {
+          const arts = p.art_collection ?? [];
+          return arts.some((a) =>
+            ["Old Masters", "Impressionist/Post-Impressionist", "Decorative/Antique Objects"].includes(a)
+          );
+        }),
+      },
+      {
+        dimension: "Maximalism",
+        epstein: pct(epstein, (p) =>
+          ["Formal/Antiquarian", "Maximalist/Eclectic", "Glamour/Theatrical"].includes(
+            p.atmosphere ?? ""
+          )
+        ),
+        baseline: pct(baseline, (p) =>
+          ["Formal/Antiquarian", "Maximalist/Eclectic", "Glamour/Theatrical"].includes(
+            p.atmosphere ?? ""
+          )
+        ),
+      },
+      {
+        dimension: "Euro-Centric",
+        epstein: pct(
+          epstein,
+          (p) => p.cultural_orientation === "Euro-Centric/Old World"
+        ),
+        baseline: pct(
+          baseline,
+          (p) => p.cultural_orientation === "Euro-Centric/Old World"
+        ),
+      },
+      {
+        dimension: "Gallery &\nInstitutional",
+        epstein: pct(epstein, (p) =>
+          ["Institutional/Monumental", "Gallery/Curatorial"].includes(
+            p.power_status ?? ""
+          )
+        ),
+        baseline: pct(baseline, (p) =>
+          ["Institutional/Monumental", "Gallery/Curatorial"].includes(
+            p.power_status ?? ""
+          )
+        ),
+      },
+      {
+        dimension: "Minimalism",
+        epstein: pct(
+          epstein,
+          (p) => p.atmosphere === "Minimalist/Reductive"
+        ),
+        baseline: pct(
+          baseline,
+          (p) => p.atmosphere === "Minimalist/Reductive"
+        ),
+      },
+    ];
+
+    return {
+      axes,
+      epsteinCount: epstein.length,
+      baselineCount: baseline.length,
+    };
+  },
+  ["aesthetic-radar"],
+  { revalidate: 300 }
+);
+
+// ── Dossier Detail ──────────────────────────────────────────
 
 export async function getDossier(id: number): Promise<DossierWithContext | null> {
   const sb = getSupabase();

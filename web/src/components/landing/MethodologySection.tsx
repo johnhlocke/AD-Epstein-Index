@@ -306,8 +306,8 @@ export function MethodologySection() {
             {phases.map((phase) => (
               <div
                 key={phase.num}
-                className="relative flex flex-col rounded border p-6"
-                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
+                className="flex flex-col rounded p-6 md:min-h-[920px]"
+                style={{ backgroundColor: CARD_BG }}
               >
                 <span
                   className="text-[64px] font-bold leading-none"
@@ -322,7 +322,7 @@ export function MethodologySection() {
                   {phase.title}
                 </p>
                 <p
-                  className="mt-3 flex-1 text-[11px] leading-[1.65]"
+                  className="mt-3 text-[11px] leading-[1.65]"
                   style={{ fontFamily: MONO, color: TEXT_MID }}
                 >
                   {phase.description}
@@ -346,21 +346,14 @@ export function MethodologySection() {
             ))}
           </div>
 
-          {/* Architecture diagrams — full-width below phase cards */}
-          <div className="mt-10 flex flex-col gap-6">
-            {/* Phase 01 — live SVG from Figma */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/pipeline-phase01.svg"
-              alt="Phase 01 Architecture — Hub-and-spoke pipeline showing Scout, Courier, and Reader agents feeding data through the Editor to Supabase"
-              className="w-full rounded"
-              style={{ backgroundColor: CARD_BG }}
-            />
-
-            {/* Phase 02 & 03 — placeholders until designed */}
-            <DiagramPlaceholder label="PHASE 02 ARCHITECTURE" />
-            <DiagramPlaceholder label="PHASE 03 ARCHITECTURE" />
-          </div>
+          {/* Phase 01 Architecture SVG — below phase cards */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/pipeline-phase01.svg"
+            alt="Phase 01 Architecture — Hub-and-spoke pipeline showing Scout, Courier, and Reader agents feeding data through the Editor to Supabase"
+            className="mt-6 w-full rounded"
+            style={{ backgroundColor: CARD_BG }}
+          />
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -425,7 +418,7 @@ export function MethodologySection() {
 
             {/* Center + Right: radar chart spanning 2 columns */}
             <div className="md:col-span-2">
-              <AestheticRadar />
+              <AestheticRadar variant="embedded" />
 
               <div className="mt-4 flex items-center gap-6">
                 <div className="flex items-center gap-2">

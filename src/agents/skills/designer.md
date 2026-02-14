@@ -145,3 +145,35 @@ When a training source fails (timeout, 404, rate limit):
 5. Never stay stuck on one source for >1 cycle
 
 Single-source failures are NORMAL — your job is to keep learning from what's available.
+
+
+## Update — 2026-02-13 19:40
+
+
+## NYT Training Failure Recovery
+When https://www.nytimes.com/intera fails:
+1. Skip it immediately — don't retry
+2. Move to next source in rotation: Notion → local images → Figma
+3. Log skip reason: "NYT interactive unavailable"
+4. Continue cycle without blocking
+
+The automatic source cycling IS working — you're just getting stuck retrying the same failed source. Skip and move on.
+
+
+## Update — 2026-02-13 20:00
+
+
+## Training Source Cycling — ENFORCED
+When a training source fails, you MUST move to the next source immediately. Do NOT retry the same source more than once per cycle.
+
+**Cycle order:**
+1. website → scribd → local_images → figma → notion → *(repeat)*
+
+**After ANY failure:**
+- Log the failure with the source name
+- Immediately switch to the next source in the cycle
+- Do NOT call the same source twice in one cycle
+
+**Example:** If NYT website fails → switch to Scribd. If Scribd fails → switch to local_images. And so on.
+
+This ensures you make progress every cycle even when individual sources are down.

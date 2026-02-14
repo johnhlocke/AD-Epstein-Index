@@ -89,6 +89,12 @@ class DetectiveAgent(Agent):
         # Step 0: Analyze names with LLM — split compounds, flag skips
         name_analysis = await asyncio.to_thread(self._analyze_names, names, briefing)
 
+        # Pre-warm DOJ browser so it's ready for the loop
+        try:
+            await self._ensure_browser()
+        except Exception:
+            self.log("DOJ browser failed to launch — will retry per-name", level="WARN")
+
         for name in names:
             analysis = name_analysis.get(name, {})
             individuals = analysis.get("search_names", [name])
@@ -228,6 +234,13 @@ class DetectiveAgent(Agent):
                 "glance_result": glance_result,
                 "binary_verdict": binary_verdict,
             })
+
+            # Progress logging
+            self.log(
+                f"[{len(checked)}/{len(names)}] {name[:30]} → {binary_verdict} "
+                f"(BB:{best_bb_verdict}, DOJ:{best_doj_verdict})",
+                level="DEBUG",
+            )
 
             await asyncio.sleep(1)  # Rate limiting between names
 

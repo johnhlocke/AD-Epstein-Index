@@ -131,6 +131,20 @@ export interface StatsResponse {
   }[];
 }
 
+/** Aesthetic radar chart axis data */
+export interface RadarAxisData {
+  dimension: string;
+  epstein: number; // percentage 0-100
+  baseline: number; // percentage 0-100
+}
+
+/** Aesthetic radar response with metadata */
+export interface AestheticRadarData {
+  axes: RadarAxisData[];
+  epsteinCount: number;
+  baselineCount: number;
+}
+
 /** Paginated response wrapper */
 export interface PaginatedResponse<T> {
   data: T[];

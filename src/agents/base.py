@@ -270,27 +270,26 @@ class Agent(ABC):
                         self.log(f"Work cycle completed (cycle #{self._cycles})", level="DEBUG")
                     else:
                         # No work — use idle time intelligently (if enabled)
+                        # Break out immediately if a task arrives in the inbox.
                         if IDLE_LLM_ENABLED:
-                            # 1. Reflect on recent episodes (every 10 min)
-                            try:
-                                await asyncio.to_thread(self.reflect)
-                            except Exception:
-                                pass
-                            # 2. Explore cross-agent patterns (every 15 min)
-                            try:
-                                await asyncio.to_thread(self.curious_explore)
-                            except Exception:
-                                pass
-                            # 3. Propose methodology improvements (every 30 min)
-                            try:
-                                await asyncio.to_thread(self.propose_improvement)
-                            except Exception:
-                                pass
-                            # 4. Personality-driven idle chatter (every 2 min)
-                            try:
-                                await asyncio.to_thread(self.idle_chatter)
-                            except Exception:
-                                pass
+                            _IDLE_TIMEOUT = 30  # seconds per call
+                            _idle_fns = [
+                                self.reflect,
+                                self.curious_explore,
+                                self.propose_improvement,
+                                self.idle_chatter,
+                            ]
+                            for _fn in _idle_fns:
+                                # Check inbox before each idle call — skip if task waiting
+                                if not self.inbox.empty():
+                                    break
+                                try:
+                                    await asyncio.wait_for(
+                                        asyncio.to_thread(_fn),
+                                        timeout=_IDLE_TIMEOUT,
+                                    )
+                                except (asyncio.TimeoutError, asyncio.CancelledError, Exception):
+                                    pass
                 except Exception as e:
                     self._errors += 1
                     self._last_error = str(e)
@@ -299,11 +298,14 @@ class Agent(ABC):
                 finally:
                     self._active = False
 
-                # Sleep between cycles (check stop flag periodically)
+                # Sleep between cycles (check stop flag and inbox periodically)
                 elapsed = 0
                 while elapsed < self.interval and not self._stop_requested:
                     await asyncio.sleep(min(1, self.interval - elapsed))
                     elapsed += 1
+                    # Wake up early if a task arrives in the inbox
+                    if not self.inbox.empty():
+                        break
                     # Also wait if paused during sleep
                     if not self._paused.is_set():
                         await self._paused.wait()
@@ -569,7 +571,7 @@ class Agent(ABC):
 
         try:
             import anthropic
-            client = anthropic.Anthropic()
+            client = anthropic.Anthropic(timeout=30.0)
             model_id = "claude-haiku-4-5-20251001"
             response = client.messages.create(
                 model=model_id,

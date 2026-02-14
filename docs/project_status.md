@@ -112,6 +112,8 @@ This file should be automatically updated when necessary to answer three key que
 | Figma ↔ localhost bidirectional sync | Phase 3 | Done |
 | Grid-aligned filter bar (6-col CSS Grid) | Phase 3 | Done |
 | Phase 01 Architecture diagram (Figma → SVG) | Phase 3 | Done |
+| Aesthetic Radar chart (real data, 6 axes) | Phase 3 | Done |
+| Agent idle responsiveness fix (inbox checking) | Tooling | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 
@@ -273,7 +275,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — In Progress (Clean Slate Rebuild):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
-- Current stats: ~480 issues, ~1648 features, ~476 cross-references (157 YES), ~165 dossiers, 27 confirmed connections
+- Current stats: ~480 issues, ~1648 features, ~476 cross-references (157 YES), ~165 dossiers, 30 confirmed connections
 - Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
 - Total API cost: ~$94 (Miranda $70 at 74%, Courier $11, Researcher $5, Detective + others ~$8)
 - Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified

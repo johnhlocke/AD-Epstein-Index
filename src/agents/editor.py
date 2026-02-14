@@ -1633,7 +1633,7 @@ Respond with JSON only:
 
         return True
 
-    def _cleanup_stale_tasks(self, max_age_minutes=15):
+    def _cleanup_stale_tasks(self, max_age_minutes=60):
         """Remove stale entries from _tasks_in_flight.
 
         If an agent crashes mid-task, its entry stays forever. This purges
@@ -1921,7 +1921,10 @@ Respond with JSON only:
             feature_ids.setdefault(name, []).append(feat["id"])
 
         # Add DOJ retry names (reset their xref first so detective re-checks)
+        # Cap total batch at 50 names to avoid overflowing LLM name analysis
         for xr in doj_retry:
+            if len(names) >= 50:
+                break
             name = (xr.get("homeowner_name") or "").strip()
             fid = xr.get("feature_id")
             if not name or name in seen_names:
