@@ -40,7 +40,7 @@ export default async function Home() {
       <Suspense
         fallback={
           <div
-            className="py-20"
+            className="pb-20"
             style={{
               paddingLeft: "var(--grid-margin)",
               paddingRight: "var(--grid-margin)",

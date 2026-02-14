@@ -10,7 +10,7 @@ import { Separator } from "@/components/ui/separator";
 export function KeyFinding() {
   return (
     <section
-      className="bg-background pb-20 pt-14"
+      className="bg-background pb-6 pt-14"
       id="key-finding"
     >
       <div

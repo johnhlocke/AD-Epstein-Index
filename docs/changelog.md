@@ -8,6 +8,11 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ## 2026-02-14 (Session 32)
 
+### Changed — Tighter Spacing Between "Who Are They?" and Searchable Index
+- **`web/src/components/landing/KeyFinding.tsx`** — Reduced bottom padding from `pb-20` (80px) to `pb-6` (24px) so the searchable index flows directly below the editorial text.
+- **`web/src/components/landing/SearchableIndex.tsx`** — Removed top padding (`pt-6` → `pt-0`) for seamless connection with the section above.
+- **`web/src/app/page.tsx`** — Suspense fallback changed from `py-20` to `pb-20` to match tighter spacing.
+
 ### Added — "What's Next" Section + Contact Email
 - **`web/src/components/landing/WhatsNext.tsx`** — NEW: Two-column section between Conclusion and Methodology. Left column: "The Pipeline Is Still Running" (ongoing investigation status, live data). Right column: "Future Directions" (other shelter magazines, open codebase). Contact line centered below with copper mailto link (john.h.locke@gmail.com).
 - **`web/src/app/page.tsx`** — Added `WhatsNext` import and placement between Conclusion and Methodology.

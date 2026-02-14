@@ -102,7 +102,7 @@ export function SearchableIndex() {
   }
 
   return (
-    <SectionContainer width="wide" className="pt-6 pb-20" id="index">
+    <SectionContainer width="wide" className="pt-0 pb-20" id="index">
       {/* Subhead */}
       <p className="mb-6 max-w-[620px] font-serif text-[15px] italic leading-[1.75] text-foreground/45">
         Browse all cataloged homes below. Filter by name, year, style, or
