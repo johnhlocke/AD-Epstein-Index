@@ -224,6 +224,20 @@ export async function getFeatures(
       return { data: [], total: 0, page, pageSize, totalPages: 0 };
     }
   }
+  if (filters.hasDossier) {
+    // Get feature IDs that have any dossier (regardless of verdict)
+    const { data: withDossier } = await sb
+      .from("dossiers")
+      .select("feature_id");
+    const dossierIds = (withDossier ?? [])
+      .map((d: { feature_id: string | null }) => d.feature_id)
+      .filter(Boolean) as string[];
+    if (dossierIds.length > 0) {
+      query = query.in("id", dossierIds);
+    } else {
+      return { data: [], total: 0, page, pageSize, totalPages: 0 };
+    }
+  }
 
   const { data, count } = await query
     .order("created_at", { ascending: false })

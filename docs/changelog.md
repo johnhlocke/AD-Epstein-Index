@@ -6,6 +6,28 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-14 (Session 31)
+
+### Added — Live Radar Chart in "Is There an Epstein Aesthetic?"
+- **`web/src/components/charts/AestheticRadarCard.tsx`** — NEW: Compact radar chart client component matching ConfirmedTimeline diagram styling (#FAFAFA bg, 1px border, subtle drop shadow, 340px height). Copper fill for Epstein orbit, dashed green for AD baseline. Custom tooltip and multi-line axis tick labels.
+- **`web/src/components/landing/EpsteinAesthetic.tsx`** — Rewrote three-column layout: center text column replaced with live `AestheticRadarCard`. Now accepts `radarData` prop from server. Updated body text to match editorial copy.
+- **`web/src/app/page.tsx`** — Added `getAestheticRadarData()` call via `Promise.all` with `getStats()`. Passes `radarData` to both `EpsteinAesthetic` and `MethodologySection`.
+- **`web/src/components/landing/MethodologySection.tsx`** — Now receives `radarData` prop and passes it to embedded `AestheticRadar`, making it live (was previously showing loading state).
+
+### Added — "Full Dossier Created" Filter
+- **`web/src/components/landing/SearchableIndex.tsx`** — Added "Full dossier created" checkbox filter above "Confirmed connections only". Queries dossier table to filter features.
+- **`web/src/app/api/features/route.ts`** — Added `hasDossier` query parameter passthrough.
+- **`web/src/lib/queries.ts`** — Implemented `hasDossier` filter: queries dossiers table for all feature_ids, filters features to those IDs.
+
+### Changed — Body Text Styling
+- All body text across HeroSection, KeyFindingsIntro, Conclusion, ConfirmedTimeline, and GraphPreview changed from opacity-based `text-foreground/XX` to solid `text-[#1A1A1A]` for consistent readability.
+- Section headings in page.tsx (sections C and D) reduced from `text-[36px]` to `text-[28px]` to match design system.
+
+### Figma Sync
+- Updated "E: Is There an Epstein Aesthetic?" frame: center text column replaced with radar chart placeholder, "KEY FINDING 02" label set to copper (#B87333), "Aesthetic Score Distribution" made full width, body text updated to match website copy.
+
+---
+
 ## 2026-02-14 (Session 30)
 
 ### Fixed — Rejected Dossier Audit & Verdict Overrides

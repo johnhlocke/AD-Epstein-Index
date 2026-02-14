@@ -66,7 +66,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
 
           {/* Three-column body — serif for warmth against the geometric headline */}
           <div className="mt-5 grid gap-6 md:grid-cols-3">
-            <p className="font-serif text-[15px] leading-[1.75] text-foreground/65">
+            <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
               This investigation looks at the last 28 years of Architectural
               Digest (AD) stretching back to 1988. In that time, the magazine
               celebrated the homes of over 1600 individuals. Many of those
@@ -77,7 +77,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
               those connected homeowners and documents the nature of those
               connections.
             </p>
-            <p className="font-serif text-[15px] leading-[1.75] text-foreground/65">
+            <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
               Architectural Digest is considered the preeminent arbiter of
               mainstream taste in interior design. If there is a high
               correlation between AD features and Epstein&rsquo;s network, it
@@ -89,7 +89,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
               aesthetic&rdquo; that can be seen consistently across these
               homes?
             </p>
-            <p className="font-serif text-[15px] leading-[1.75] text-foreground/65">
+            <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
               This is not a claim of guilt. Appearing in a contact book or a
               legal document does not imply criminal conduct. What it does
               establish is proximity, that a meaningful number of individuals
@@ -104,7 +104,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
         </div>
 
         {/* ── 6-Column Stats Grid ── */}
-        <div className="mt-12 md:mt-14">
+        <div className="mt-6">
           <div className="grid grid-cols-2 gap-6 pt-8 sm:grid-cols-3 md:grid-cols-6 md:gap-px">
             {/* Stat 1: Years Covered */}
             <div className="flex flex-col py-3 pr-4">

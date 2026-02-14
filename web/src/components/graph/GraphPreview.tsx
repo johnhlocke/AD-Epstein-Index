@@ -4,7 +4,6 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useMounted } from "@/lib/use-mounted";
-import { Separator } from "@/components/ui/separator";
 import type { GraphData, GraphNode } from "@/lib/graph-types";
 import {
   nodeColors,
@@ -292,22 +291,13 @@ export function GraphPreview() {
     <div className="grid gap-6 md:grid-cols-[188px_1fr]">
       {/* ── Column 1: Editorial text ── */}
       <div className="flex flex-col pt-1">
-        <p
-          className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
-          style={{ fontFamily: "futura-pt, sans-serif" }}
-        >
-          Network Analysis
-        </p>
-
-        <Separator className="mt-2 mb-5" />
-
-        <p className="font-serif text-[15px] leading-[1.75] text-foreground/60">
+        <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
           Each node represents a person, designer, location, or Epstein source
           document. Connections emerge from 28 years of Architectural Digest
           features cross-referenced against the DOJ&rsquo;s Epstein library.
         </p>
 
-        <p className="mt-4 font-serif text-[15px] leading-[1.75] text-foreground/60">
+        <p className="mt-4 font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
           Copper rings mark confirmed Epstein connections. The closer two nodes
           sit, the stronger their relationship in the network.
         </p>

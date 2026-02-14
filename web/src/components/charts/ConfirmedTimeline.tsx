@@ -1,7 +1,6 @@
 "use client";
 
 import { useMounted } from "@/lib/use-mounted";
-import { Separator } from "@/components/ui/separator";
 import { USMapDiagram } from "./USMapDiagram";
 import {
   ScatterChart,
@@ -170,21 +169,11 @@ export function ConfirmedTimeline({ data }: ConfirmedTimelineProps) {
 
   return (
     <div>
-      {/* ── Full-width title + separator ── */}
-      <p
-        className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
-        style={{ fontFamily: "futura-pt, sans-serif" }}
-      >
-        Where and When
-      </p>
-
-      <Separator className="mt-2 mb-5" />
-
       {/* ── Three-column content ── */}
       <div className="grid items-start gap-6 md:grid-cols-3">
         {/* ── Left: Editorial text ── */}
         <div className="flex flex-col">
-          <p className="font-serif text-[15px] leading-[1.75] text-foreground/60">
+          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
             Confirmed names span three decades of Architectural Digest. The
             clustering is not random &mdash; it peaks during the late 1990s and
             early 2000s, the years of Epstein&rsquo;s most active social

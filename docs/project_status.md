@@ -114,6 +114,9 @@ This file should be automatically updated when necessary to answer three key que
 | Phase 01 Architecture diagram (Figma → SVG) | Phase 3 | Done |
 | Aesthetic Radar chart (real data, 6 axes) | Phase 3 | Done |
 | Agent idle responsiveness fix (inbox checking) | Tooling | Done |
+| Live radar chart in Epstein Aesthetic section | Phase 3 | Done |
+| "Full Dossier Created" filter in Searchable Index | Phase 3 | Done |
+| Body text solid color + heading size consistency | Phase 3 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 

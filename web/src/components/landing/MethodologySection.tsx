@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { AestheticRadar } from "@/components/charts/AestheticRadar";
+import type { AestheticRadarData } from "@/lib/types";
 
 // ── Shared style constants ──────────────────────────────────────────────────
 const MONO = "JetBrains Mono, monospace";
@@ -24,21 +25,21 @@ const phases = [
     num: "01",
     title: "BUILD THE AD DATABASE",
     description:
-      "An autonomous multi-agent system discovers, downloads, and extracts data from every issue of Architectural Digest available on archive.org (1988\u20132025). A vision AI reads each issue\u2019s table of contents, then extracts homeowner names, designers, locations, styles, and other metrics from each featured home.",
+      "An autonomous multi-agent system discovers, downloads, and extracts every issue of Architectural Digest from 1988 to 2025. A Courier agent scrapes each one, decoding the magazine\u2019s digital article catalog and fetching page images from the archive. A Reader agent then extracts the people featured, their designers, locations, architectural styles, and other details from every home. Where structured data is unavailable, a vision model reads the actual magazine pages to fill gaps.",
     agents: ["Arthur (Scout)", "Casey (Courier)", "Elias (Reader)"],
   },
   {
     num: "02",
     title: "CROSS-REFERENCE EPSTEIN RECORDS",
     description:
-      "Every extracted name is automatically cross-referenced against Epstein\u2019s Little Black Book (~1,500 names) and the DOJ\u2019s Full Epstein Library. A Detective agent searches both sources, and a Researcher agent builds dossiers on potential matches.",
+      "A Detective agent checks every extracted name against two sources: Epstein\u2019s Little Black Book (approximately 1,500 contacts) and the Department of Justice\u2019s Full Epstein Library (millions of pages of released documents). Names that surface as potential matches are handed to a Researcher agent, which builds a dossier for each one \u2014 pulling public records, graph analytics, and documentary evidence to assess the strength of connection.",
     agents: ["Silas (Detective)", "Elena (Researcher)"],
   },
   {
     num: "03",
     title: "REVIEW & VISUALIZE",
     description:
-      "An Editor agent reviews every dossier before confirming or rejecting. All data is served from a Supabase database via server-side queries. No client-side API keys are exposed. The searchable index, charts, and dossier pages are generated from live pipeline data.",
+      "An Editor agent reviews every dossier before confirming or rejecting. All data is served from a Supabase database via server-side queries. No client-side API keys are exposed. The searchable index, charts, and dossier pages are generated from live pipeline data. All of this data is made visible on a publicly accessible website with compelling visuals created in collaboration with a design agent who actively creates in Figma based on instructions from the human user. The Figma design is automatically converted into a website through Vercel.",
     agents: ["Miranda (Editor)", "Sable (Designer)"],
   },
 ];
@@ -219,7 +220,11 @@ function DiagramPlaceholder({ label }: { label: string }) {
  *
  * Clean. Minimal. As it should be. — Sable
  */
-export function MethodologySection() {
+interface MethodologySectionProps {
+  radarData?: AestheticRadarData;
+}
+
+export function MethodologySection({ radarData }: MethodologySectionProps) {
   return (
     <section
       className="relative overflow-hidden"
@@ -266,7 +271,22 @@ export function MethodologySection() {
           className="mt-2 text-sm"
           style={{ fontFamily: MONO, color: TEXT_MID }}
         >
-          An autonomous multi-agent pipeline. No manual data entry.
+          Mapping the Names that Appear in both Architectural Digest and the Epstein Files.
+        </p>
+
+        {/* Methodology intro — synced from Figma node 32:2702 */}
+        <p
+          className="mt-4 max-w-[620px] text-[13px] leading-[1.8]"
+          style={{ fontFamily: MONO, color: TEXT_MID }}
+        >
+          This investigation was conducted entirely by autonomous AI agents
+          &mdash; seven specialized workers coordinated by an editor agent,
+          with zero manual data entry. Every name, date, location, and
+          connection documented on this site was discovered, extracted,
+          cross-referenced, and verified through a three-phase pipeline. The
+          methodology below describes each phase in detail, from initial
+          magazine discovery through Epstein record cross-referencing to final
+          editorial review.
         </p>
 
         <div className="mt-6" style={{ borderTop: `1px solid ${BORDER}` }} />
@@ -346,13 +366,12 @@ export function MethodologySection() {
             ))}
           </div>
 
-          {/* Phase 01 Architecture SVG — below phase cards */}
+          {/* Full 3-phase Architecture SVG — overlaps bottom of phase cards on desktop */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/pipeline-phase01.svg"
-            alt="Phase 01 Architecture — Hub-and-spoke pipeline showing Scout, Courier, and Reader agents feeding data through the Editor to Supabase"
-            className="mt-6 w-full rounded"
-            style={{ backgroundColor: CARD_BG }}
+            src="/pipeline-architecture.svg"
+            alt="System Architecture — Phase 01: Scout, Courier, and Reader agents feeding data through the Editor to Supabase. Phase 02: Detective and Researcher cross-referencing names against DOJ Epstein files and Black Book. Phase 03: Deep aesthetic extraction, Designer agent, Neo4j knowledge graph, and website deployment."
+            className="relative z-10 mt-6 w-full rounded md:-mt-[480px]"
           />
         </div>
 
@@ -418,7 +437,7 @@ export function MethodologySection() {
 
             {/* Center + Right: radar chart spanning 2 columns */}
             <div className="md:col-span-2">
-              <AestheticRadar variant="embedded" />
+              <AestheticRadar variant="embedded" data={radarData} />
 
               <div className="mt-4 flex items-center gap-6">
                 <div className="flex items-center gap-2">

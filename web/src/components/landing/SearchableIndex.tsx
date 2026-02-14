@@ -37,6 +37,7 @@ export function SearchableIndex() {
   const year = searchParams.get("year") ?? "";
   const style = searchParams.get("style") ?? "";
   const location = searchParams.get("location") ?? "";
+  const dossierOnly = searchParams.get("dossier") === "true";
   const confirmedOnly = searchParams.get("confirmed") !== "false";
 
   const fetchData = useCallback(async () => {
@@ -48,6 +49,7 @@ export function SearchableIndex() {
     if (year) params.set("year", year);
     if (style) params.set("style", style);
     if (location) params.set("location", location);
+    if (dossierOnly) params.set("dossier", "true");
     if (confirmedOnly) params.set("confirmed", "true");
 
     try {
@@ -59,7 +61,7 @@ export function SearchableIndex() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, year, style, location, confirmedOnly]);
+  }, [page, search, year, style, location, dossierOnly, confirmedOnly]);
 
   useEffect(() => {
     fetchData();
@@ -101,6 +103,12 @@ export function SearchableIndex() {
 
   return (
     <SectionContainer width="wide" className="pt-6 pb-20" id="index">
+      {/* Subhead */}
+      <p className="mb-6 max-w-[620px] font-serif text-[15px] italic leading-[1.75] text-foreground/45">
+        Browse all cataloged homes below. Filter by name, year, style, or
+        location. Confirmed connections are highlighted by default.
+      </p>
+
       {/* Filters — snapped to 6-column design grid */}
       <div className="mb-6 grid grid-cols-6 gap-x-6 gap-y-3">
         {/* Row 1: inputs */}
@@ -127,7 +135,7 @@ export function SearchableIndex() {
           onChange={(e) => updateParam("location", e.target.value)}
         />
         <div className="flex items-center justify-end">
-          {(search || year || style || location || !confirmedOnly) && (
+          {(search || year || style || location || dossierOnly || !confirmedOnly) && (
             <Button
               variant="ghost"
               size="sm"
@@ -140,16 +148,27 @@ export function SearchableIndex() {
             </Button>
           )}
         </div>
-        {/* Row 2: checkbox */}
-        <label className="col-span-2 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
-          <input
-            type="checkbox"
-            checked={confirmedOnly}
-            onChange={(e) => updateParam("confirmed", e.target.checked ? "" : "false")}
-            className="h-3.5 w-3.5 rounded border-border accent-[#B87333]"
-          />
-          Confirmed connections only
-        </label>
+        {/* Row 2: checkboxes */}
+        <div className="col-span-6 flex gap-6">
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
+            <input
+              type="checkbox"
+              checked={dossierOnly}
+              onChange={(e) => updateParam("dossier", e.target.checked ? "true" : "")}
+              className="h-3.5 w-3.5 rounded border-border accent-[#B87333]"
+            />
+            Full dossier created
+          </label>
+          <label className="flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
+            <input
+              type="checkbox"
+              checked={confirmedOnly}
+              onChange={(e) => updateParam("confirmed", e.target.checked ? "" : "false")}
+              className="h-3.5 w-3.5 rounded border-border accent-[#B87333]"
+            />
+            Confirmed connections only
+          </label>
+        </div>
       </div>
 
       {/* Table */}

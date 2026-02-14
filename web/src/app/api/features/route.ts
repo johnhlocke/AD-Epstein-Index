@@ -14,6 +14,7 @@ export async function GET(request: NextRequest) {
       style: searchParams.get("style") ?? undefined,
       search: searchParams.get("search") ?? undefined,
       confirmedOnly: searchParams.get("confirmed") === "true",
+      hasDossier: searchParams.get("dossier") === "true" || undefined,
     };
 
     const result = await getFeatures(filters);
