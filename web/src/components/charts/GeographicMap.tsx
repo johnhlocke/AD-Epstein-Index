@@ -1,10 +1,18 @@
 "use client";
 
 import { Treemap, ResponsiveContainer, Tooltip } from "recharts";
-import { SectionContainer } from "@/components/layout/SectionContainer";
+import { Separator } from "@/components/ui/separator";
 import { useMounted } from "@/lib/use-mounted";
 
-const COLORS = ["#B87333", "#2D6A4F", "#4A7C8F", "#9B7653", "#6B5B73", "#D4A574", "#8B5E3C"];
+const COPPER_PALETTE = [
+  "#8B5E3C",
+  "#A0714D",
+  "#B87333",
+  "#C68B4F",
+  "#D4A574",
+  "#E0BA8A",
+  "#E8D5C0",
+];
 
 interface GeographicMapProps {
   data: { location: string; count: number }[];
@@ -19,8 +27,15 @@ interface TreemapContentProps {
   name: string;
 }
 
-function CustomContent({ x, y, width, height, index, name }: TreemapContentProps) {
-  const color = COLORS[index % COLORS.length];
+function CustomContent({
+  x,
+  y,
+  width,
+  height,
+  index,
+  name,
+}: TreemapContentProps) {
+  const color = COPPER_PALETTE[index % COPPER_PALETTE.length];
   const showLabel = width > 60 && height > 30;
 
   return (
@@ -33,7 +48,7 @@ function CustomContent({ x, y, width, height, index, name }: TreemapContentProps
         fill={color}
         stroke="#FAFAFA"
         strokeWidth={2}
-        rx={3}
+        rx={2}
       />
       {showLabel && (
         <text
@@ -42,8 +57,9 @@ function CustomContent({ x, y, width, height, index, name }: TreemapContentProps
           textAnchor="middle"
           dominantBaseline="middle"
           fill="#FFFFFF"
-          fontSize={width > 120 ? 12 : 10}
+          fontSize={width > 120 ? 11 : 9}
           fontWeight={500}
+          fontFamily="futura-pt, sans-serif"
         >
           {name.length > 20 ? name.slice(0, 17) + "..." : name}
         </text>
@@ -63,34 +79,89 @@ export function GeographicMap({ data }: GeographicMapProps) {
   }));
 
   return (
-    <SectionContainer width="wide" className="py-20" id="geography">
-      <h2 className="font-serif text-3xl font-bold">Locations</h2>
-      <p className="mt-2 mb-8 text-muted-foreground">
-        Where the featured homes are located. Larger areas represent more
-        frequent locations.
-      </p>
-      <div className="h-[400px] w-full">
-        {mounted && (
-        <ResponsiveContainer width="100%" height="100%">
-          <Treemap
-            data={treeData}
-            dataKey="size"
-            aspectRatio={4 / 3}
-            content={<CustomContent x={0} y={0} width={0} height={0} index={0} name="" />}
+    <section
+      className="border-b border-border bg-background pb-20 pt-16"
+      id="geography"
+    >
+      <div
+        className="mx-auto w-full"
+        style={{
+          maxWidth: "var(--grid-max-width)",
+          paddingLeft: "var(--grid-margin)",
+          paddingRight: "var(--grid-margin)",
+        }}
+      >
+        <div className="grid gap-6 md:grid-cols-[188px_1fr]">
+          {/* ── Sidebar ── */}
+          <div className="flex flex-col pt-1">
+            <p
+              className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              Locations
+            </p>
+
+            <Separator className="mt-2 mb-5" />
+
+            <p className="font-serif text-[15px] leading-[1.75] text-foreground/60">
+              Where the featured homes are located. Larger areas represent more
+              frequent locations across the archive.
+            </p>
+
+            <div className="mt-8 border-t border-border pt-4">
+              <p
+                className="text-[28px] font-bold leading-none tracking-tight"
+                style={{ fontFamily: "futura-pt, sans-serif" }}
+              >
+                {data.length}
+              </p>
+              <p
+                className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
+                style={{ fontFamily: "futura-pt, sans-serif" }}
+              >
+                Locations Tracked
+              </p>
+            </div>
+          </div>
+
+          {/* ── Chart ── */}
+          <div
+            className="h-[400px] overflow-hidden rounded border border-border"
+            style={{ backgroundColor: "#FAFAFA" }}
           >
-            <Tooltip
-              contentStyle={{
-                backgroundColor: "#FFFFFF",
-                border: "1px solid #E5E5E5",
-                borderRadius: "6px",
-                fontSize: "13px",
-              }}
-              formatter={(value) => [String(value), "Homes"]}
-            />
-          </Treemap>
-        </ResponsiveContainer>
-        )}
+            {mounted && (
+              <ResponsiveContainer width="100%" height="100%">
+                <Treemap
+                  data={treeData}
+                  dataKey="size"
+                  aspectRatio={4 / 3}
+                  content={
+                    <CustomContent
+                      x={0}
+                      y={0}
+                      width={0}
+                      height={0}
+                      index={0}
+                      name=""
+                    />
+                  }
+                >
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#FFFFFF",
+                      border: "1px solid #E5E5E5",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      fontFamily: "futura-pt, sans-serif",
+                    }}
+                    formatter={(value) => [String(value), "Homes"]}
+                  />
+                </Treemap>
+              </ResponsiveContainer>
+            )}
+          </div>
+        </div>
       </div>
-    </SectionContainer>
+    </section>
   );
 }

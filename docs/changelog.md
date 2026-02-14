@@ -6,6 +6,39 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-13 (Session 27)
+
+### Changed — Simplified Page Layout
+- **`web/src/app/page.tsx`** — Removed 5 standalone chart sections (CoverageHeatmap, FeaturesTimeline, StyleDistribution, GeographicMap, VerdictBreakdown). Page now flows: Hero → Key Finding → Searchable Index → Confirmed Timeline → Knowledge Graph → Methodology. Replaced `KeyFindings` with new `KeyFinding` component.
+- **`web/src/components/landing/SearchableIndex.tsx`** — Confirmed-only checkbox defaults to ON (`!== "false"` logic). Reduced to 8 rows per page. Widened to full grid width (`width="wide"`). Removed title/subtitle — filters are first content. Added copper-accented checkbox with "Confirmed connections only" label.
+- **`web/src/app/api/features/route.ts`** — Added `confirmedOnly` filter param to features API.
+- **`web/src/lib/queries.ts`** — Added confirmed timeline data to stats query (dossier subjects placed on year axis with location/strength).
+- **`web/src/lib/types.ts`** — Added `confirmedTimeline` array to `StatsResponse` interface.
+
+### Added — New Components
+- **`web/src/components/landing/KeyFinding.tsx`** — NEW: Three-column editorial Key Finding section replacing the old KeyFindings dashboard-style cards.
+- **`web/src/components/charts/ConfirmedTimeline.tsx`** — NEW: Timeline visualization of confirmed Epstein connections by year.
+- **`web/src/components/charts/AestheticRadar.tsx`** — NEW: Radar chart component for aesthetic taxonomy comparison.
+- **`web/src/components/charts/USMapDiagram.tsx`** — NEW: US map diagram component.
+
+### Changed — Methodology Section Overhaul
+- **`web/src/components/landing/MethodologySection.tsx`** — Complete rewrite: dark investigative-themed design with 5-phase pipeline visualization, agent grid (7 agents with sprites + roles), data metrics, "Epstein Aesthetic" radar comparison, and footnotes. Includes Miranda hero row and Sable designer agent.
+
+### Changed — Hero & Header Polish
+- **`web/src/components/landing/HeroSection.tsx`** — Removed bottom border, lightened epigraph color to `#B7B7B7`, centered headline block, adjusted subtitle sizing.
+- **`web/src/components/layout/Header.tsx`** — Minor layout adjustment.
+
+### Changed — Agent Skills
+- **`src/agents/skills/designer.md`** — Added Sable designer agent personality and methodology documentation.
+- **`src/agents/skills/reader.md`** — Updated Elias reader agent skill file.
+
+### Figma Sync
+- Deleted 5 chart section frames from Figma (Coverage Heatmap, Features by Year, Design Styles, Locations, Epstein Connections).
+- Rebuilt Searchable Index in Figma with real confirmed data (8 rows, copper checkbox, full width).
+- Repositioned all Figma sections to match new localhost layout order.
+
+---
+
 ## 2026-02-13 (Session 26)
 
 ### Added — 6-Dimension Aesthetic Taxonomy

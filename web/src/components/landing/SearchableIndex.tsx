@@ -36,15 +36,17 @@ export function SearchableIndex() {
   const search = searchParams.get("search") ?? "";
   const year = searchParams.get("year") ?? "";
   const style = searchParams.get("style") ?? "";
+  const confirmedOnly = searchParams.get("confirmed") !== "false";
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     params.set("page", String(page));
-    params.set("limit", "15");
+    params.set("limit", "8");
     if (search) params.set("search", search);
     if (year) params.set("year", year);
     if (style) params.set("style", style);
+    if (confirmedOnly) params.set("confirmed", "true");
 
     try {
       const res = await fetch(`/api/features?${params.toString()}`);
@@ -55,7 +57,7 @@ export function SearchableIndex() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, year, style]);
+  }, [page, search, year, style, confirmedOnly]);
 
   useEffect(() => {
     fetchData();
@@ -96,12 +98,7 @@ export function SearchableIndex() {
   }
 
   return (
-    <SectionContainer width="medium" className="py-20" id="index">
-      <h2 className="font-serif text-3xl font-bold">Searchable Index</h2>
-      <p className="mt-2 mb-6 text-muted-foreground">
-        Browse all extracted features. Search by homeowner, designer, or article title.
-      </p>
-
+    <SectionContainer width="wide" className="pt-6 pb-20" id="index">
       {/* Filters */}
       <div className="mb-6 flex flex-wrap gap-3">
         <Input
@@ -123,7 +120,16 @@ export function SearchableIndex() {
           onChange={(e) => updateParam("style", e.target.value)}
           className="max-w-[200px]"
         />
-        {(search || year || style) && (
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground select-none">
+          <input
+            type="checkbox"
+            checked={confirmedOnly}
+            onChange={(e) => updateParam("confirmed", e.target.checked ? "" : "false")}
+            className="h-4 w-4 rounded border-border accent-[#B87333]"
+          />
+          Confirmed connections only
+        </label>
+        {(search || year || style || !confirmedOnly) && (
           <Button
             variant="ghost"
             size="sm"

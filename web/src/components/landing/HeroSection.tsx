@@ -13,7 +13,7 @@ interface HeroSectionProps {
  */
 export function HeroSection({ stats }: HeroSectionProps) {
   return (
-    <section className="relative border-b border-border bg-background">
+    <section className="relative bg-background">
       <div
         className="mx-auto flex w-full flex-col"
         style={{
@@ -26,7 +26,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
       >
         {/* ── Epigraph ── */}
         <div className="mb-12 flex flex-col items-center text-center md:mb-16">
-          <blockquote className="max-w-[520px] font-serif text-[14px] italic leading-[1.8] text-muted-foreground md:text-[15px]">
+          <blockquote className="max-w-[520px] font-serif text-[14px] italic leading-[1.8] text-[#B7B7B7] md:text-[15px]">
             &ldquo;While civilization has been improving our houses, it has not
             equally improved the men who are to inhabit them. It has created
             palaces, but it was not so easy to create noblemen and
@@ -38,7 +38,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
         </div>
 
         {/* ── Headline + Subhead ── */}
-        <div className="mb-10 md:mb-12">
+        <div className="mb-10 text-center md:mb-12">
           <h1
             className="text-[48px] font-black uppercase leading-[0.92] tracking-[0.01em] sm:text-[64px] md:text-[80px] lg:text-[96px]"
             style={{ fontFamily: "futura-pt, sans-serif" }}
@@ -46,10 +46,10 @@ export function HeroSection({ stats }: HeroSectionProps) {
             Where They Live
           </h1>
           <p
-            className="mt-3 text-base font-bold leading-[1.4] text-foreground/80 md:mt-4 md:text-lg lg:text-xl"
+            className="mt-3 text-[22px] font-bold leading-[1.0] text-foreground/80 md:mt-4 md:text-[28px]"
             style={{ fontFamily: "futura-pt, sans-serif" }}
           >
-            A Visual Map of the Connections between Architectural Digest and the Epstein Files
+            A Visual Mapping of the Connections between Architectural Digest and the Epstein Files
           </p>
         </div>
 
@@ -92,18 +92,19 @@ export function HeroSection({ stats }: HeroSectionProps) {
             <p className="font-serif text-[15px] leading-[1.75] text-foreground/65">
               This is not a claim of guilt. Appearing in a contact book or a
               legal document does not imply criminal conduct. What it does
-              establish is proximity — that a meaningful number of individuals
-              celebrated by America&rsquo;s most influential design magazine
-              also moved in circles that intersected, directly and repeatedly,
-              with Jeffrey Epstein&rsquo;s. The patterns that emerge from that
-              overlap are the subject of this investigation.
+              establish is proximity, that a meaningful number of individuals
+              chosen to be highlighted in the glossy pages of America&rsquo;s
+              most influential design magazine also moved in circles that
+              intersected, directly and repeatedly, with Jeffrey
+              Epstein&rsquo;s. The patterns that emerge from that overlap are
+              the subject of this investigation. No data was manually entered.
+              See &ldquo;Methodology&rdquo; for a full discussion of process.
             </p>
           </div>
         </div>
 
         {/* ── 6-Column Stats Grid ── */}
         <div className="mt-12 md:mt-14">
-          <Separator />
           <div className="grid grid-cols-2 gap-6 pt-8 sm:grid-cols-3 md:grid-cols-6 md:gap-px">
             {/* Stat 1: Years Covered */}
             <div className="flex flex-col py-3 pr-4">

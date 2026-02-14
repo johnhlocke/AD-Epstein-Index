@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
       designer: searchParams.get("designer") ?? undefined,
       style: searchParams.get("style") ?? undefined,
       search: searchParams.get("search") ?? undefined,
+      confirmedOnly: searchParams.get("confirmed") === "true",
     };
 
     const result = await getFeatures(filters);

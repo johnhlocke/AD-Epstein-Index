@@ -105,3 +105,43 @@ When switched to creation mode, the Designer will:
 
 ## Bug Fix: Pattern Storage
 When storing new patterns, use `self.patterns.extend(new_patterns)` instead of `self.patterns.append(new_patterns)`. The `.extend()` method adds items individually; `.append()` would nest the entire list as a single element.
+
+
+## Update — 2026-02-13 17:38
+
+## Training Failure Recovery
+When a training attempt fails:
+1. Log the failure with the URL and error details
+2. Mark that source as temporarily unavailable in your study rotation
+3. IMMEDIATELY move to the next source in your rotation — do not retry the same source
+4. Cycle through: websites → Notion → local images → Figma → back to websites
+5. If ALL sources fail consecutively, escalate with type 'training_stuck'
+6. Single failures are normal (timeouts, paywalls, network issues) — don't escalate unless stuck
+
+Your goal is continuous learning from available sources, not perfection on every URL.
+
+
+## Update — 2026-02-13 17:49
+
+
+## Recovery Protocol (NEW)
+When a training attempt fails:
+1. Log the failure
+2. **Immediately move to next source** — do NOT retry the same URL
+3. Cycle through: websites → Notion → local images → Figma → back to websites
+4. Only escalate if ALL sources fail in same cycle
+5. Single-source failures are normal (timeouts, rate limits) — keep moving
+
+
+## Update — 2026-02-13 17:59
+
+
+## Self-Recovery Protocol
+When a training source fails (timeout, 404, rate limit):
+1. Log the failure with source URL and error type
+2. IMMEDIATELY move to next source in rotation (don't retry same source)
+3. Cycle: websites → Notion → local → Figma → back to websites
+4. Only escalate if ALL sources fail in same cycle (systemic issue)
+5. Never stay stuck on one source for >1 cycle
+
+Single-source failures are NORMAL — your job is to keep learning from what's available.

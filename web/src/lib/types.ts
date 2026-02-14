@@ -113,6 +113,15 @@ export interface StatsResponse {
     rejected: number;
     pending: number;
   };
+  confirmedTimeline: {
+    personName: string;
+    year: number;
+    month: number | null;
+    connectionStrength: string | null;
+    locationCity: string | null;
+    locationState: string | null;
+    locationCountry: string | null;
+  }[];
   crossReferences: {
     total: number;
   };

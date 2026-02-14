@@ -26,10 +26,10 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .from("features")
     .select("id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built");
 
-  // Fetch dossiers verdict counts
+  // Fetch dossiers verdict counts + confirmed timeline data
   const { data: dossiers } = await sb
     .from("dossiers")
-    .select("id, editor_verdict");
+    .select("id, editor_verdict, subject_name, feature_id, connection_strength");
 
   // Fetch cross-reference count
   const { count: xrefCount } = await sb
@@ -110,6 +110,27 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .map(([year, months]) => ({ year, months }))
     .sort((a, b) => a.year - b.year);
 
+  // Confirmed timeline — place each confirmed dossier on the year axis
+  const confirmedTimeline = allDossiers
+    .filter((d) => d.editor_verdict === "CONFIRMED")
+    .map((d) => {
+      const feature = allFeatures.find((f) => f.id === d.feature_id);
+      const issue = feature
+        ? allIssues.find((i) => i.id === feature.issue_id)
+        : null;
+      return {
+        personName: d.subject_name ?? "Unknown",
+        year: issue?.year ?? 0,
+        month: issue?.month ?? null,
+        connectionStrength: d.connection_strength ?? null,
+        locationCity: feature?.location_city ?? null,
+        locationState: feature?.location_state ?? null,
+        locationCountry: feature?.location_country ?? null,
+      };
+    })
+    .filter((d) => d.year > 0)
+    .sort((a, b) => a.year - b.year || (a.month ?? 6) - (b.month ?? 6));
+
   return {
     issues: {
       total: allIssues.length,
@@ -132,6 +153,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
       rejected,
       pending,
     },
+    confirmedTimeline,
     crossReferences: {
       total: xrefCount ?? 0,
     },
@@ -150,6 +172,7 @@ interface FeatureFilters {
   style?: string;
   search?: string;
   hasDossier?: boolean;
+  confirmedOnly?: boolean;
 }
 
 export async function getFeatures(
@@ -183,6 +206,22 @@ export async function getFeatures(
     query = query.or(
       `homeowner_name.ilike.%${filters.search}%,designer_name.ilike.%${filters.search}%,article_title.ilike.%${filters.search}%`
     );
+  }
+  if (filters.confirmedOnly) {
+    // Get feature IDs with confirmed dossiers, then filter
+    const { data: confirmed } = await sb
+      .from("dossiers")
+      .select("feature_id")
+      .eq("editor_verdict", "CONFIRMED");
+    const confirmedIds = (confirmed ?? [])
+      .map((d: { feature_id: string | null }) => d.feature_id)
+      .filter(Boolean) as string[];
+    if (confirmedIds.length > 0) {
+      query = query.in("id", confirmedIds);
+    } else {
+      // No confirmed connections — return empty
+      return { data: [], total: 0, page, pageSize, totalPages: 0 };
+    }
   }
 
   const { data, count } = await query

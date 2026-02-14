@@ -6,9 +6,8 @@ import {
   Cell,
   ResponsiveContainer,
   Tooltip,
-  Legend,
 } from "recharts";
-import { SectionContainer } from "@/components/layout/SectionContainer";
+import { Separator } from "@/components/ui/separator";
 import { useMounted } from "@/lib/use-mounted";
 
 const VERDICT_COLORS = {
@@ -38,75 +37,133 @@ export function VerdictBreakdown({ dossiers }: VerdictBreakdownProps) {
   ].filter((d) => d.value > 0);
 
   return (
-    <SectionContainer width="wide" className="py-20" id="verdicts">
-      <h2 className="font-serif text-3xl font-bold">Epstein Connections</h2>
-      <p className="mt-2 mb-8 text-muted-foreground">
-        Breakdown of cross-reference investigations by Editor verdict.
-      </p>
-      <div className="grid gap-6 md:grid-cols-3">
-        <div className="flex h-[300px] items-center justify-center md:col-span-2">
-          {mounted && (
-          <ResponsiveContainer width="100%" height="100%">
-            <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                innerRadius={70}
-                outerRadius={120}
-                dataKey="value"
-                paddingAngle={2}
-                stroke="none"
+    <section
+      className="border-b border-border bg-background pb-20 pt-16"
+      id="verdicts"
+    >
+      <div
+        className="mx-auto w-full"
+        style={{
+          maxWidth: "var(--grid-max-width)",
+          paddingLeft: "var(--grid-margin)",
+          paddingRight: "var(--grid-margin)",
+        }}
+      >
+        <div className="grid gap-6 md:grid-cols-[188px_1fr]">
+          {/* ── Sidebar ── */}
+          <div className="flex flex-col pt-1">
+            <p
+              className="text-[11px] font-bold uppercase tracking-[0.15em] text-muted-foreground"
+              style={{ fontFamily: "futura-pt, sans-serif" }}
+            >
+              Epstein Connections
+            </p>
+
+            <Separator className="mt-2 mb-5" />
+
+            <p className="font-serif text-[15px] leading-[1.75] text-foreground/60">
+              Breakdown of cross-reference investigations by Editor verdict.
+              Each dossier is reviewed against DOJ records and the Little Black
+              Book.
+            </p>
+
+            {/* Stats */}
+            <div className="mt-8 border-t border-border pt-4">
+              <p
+                className="font-mono text-[36px] font-bold leading-none tracking-tight"
               >
-                {data.map((entry) => (
-                  <Cell
-                    key={entry.name}
-                    fill={VERDICT_COLORS[entry.name as keyof typeof VERDICT_COLORS]}
+                {dossiers.total}
+              </p>
+              <p
+                className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
+                style={{ fontFamily: "futura-pt, sans-serif" }}
+              >
+                Total Dossiers
+              </p>
+
+              {dossiers.confirmed > 0 && (
+                <div className="mt-4">
+                  <p
+                    className="text-[28px] font-bold leading-none tracking-tight"
+                    style={{
+                      fontFamily: "futura-pt, sans-serif",
+                      color: "#2D6A4F",
+                    }}
+                  >
+                    {dossiers.confirmed}
+                  </p>
+                  <p
+                    className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
+                    style={{ fontFamily: "futura-pt, sans-serif" }}
+                  >
+                    Confirmed
+                  </p>
+                </div>
+              )}
+
+              {dossiers.rejected > 0 && (
+                <div className="mt-4">
+                  <p
+                    className="text-[28px] font-bold leading-none tracking-tight text-[#A3A3A3]"
+                    style={{ fontFamily: "futura-pt, sans-serif" }}
+                  >
+                    {dossiers.rejected}
+                  </p>
+                  <p
+                    className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
+                    style={{ fontFamily: "futura-pt, sans-serif" }}
+                  >
+                    Rejected
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Chart ── */}
+          <div
+            className="flex h-[400px] items-center justify-center overflow-hidden rounded border border-border"
+            style={{ backgroundColor: "#FAFAFA" }}
+          >
+            {mounted && (
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={data}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={80}
+                    outerRadius={140}
+                    dataKey="value"
+                    paddingAngle={2}
+                    stroke="none"
+                  >
+                    {data.map((entry) => (
+                      <Cell
+                        key={entry.name}
+                        fill={
+                          VERDICT_COLORS[
+                            entry.name as keyof typeof VERDICT_COLORS
+                          ]
+                        }
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: "#FFFFFF",
+                      border: "1px solid #E5E5E5",
+                      borderRadius: "4px",
+                      fontSize: "12px",
+                      fontFamily: "futura-pt, sans-serif",
+                    }}
                   />
-                ))}
-              </Pie>
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: "#FFFFFF",
-                  border: "1px solid #E5E5E5",
-                  borderRadius: "6px",
-                  fontSize: "13px",
-                }}
-              />
-              <Legend
-                verticalAlign="bottom"
-                iconType="circle"
-                iconSize={8}
-                formatter={(value: string) => (
-                  <span className="text-sm text-foreground">{value}</span>
-                )}
-              />
-            </PieChart>
-          </ResponsiveContainer>
-          )}
-        </div>
-        <div className="flex flex-col gap-3">
-          <p className="font-mono text-4xl font-bold">
-            {dossiers.total}
-          </p>
-          <p className="text-sm text-muted-foreground">
-            Total dossiers investigated
-          </p>
-          <div className="mt-4 space-y-2 text-sm">
-            {data.map((d) => (
-              <div key={d.name} className="flex items-center gap-2">
-                <div
-                  className="h-3 w-3 rounded-full"
-                  style={{ backgroundColor: VERDICT_COLORS[d.name as keyof typeof VERDICT_COLORS] }}
-                />
-                <span className="text-muted-foreground">
-                  {d.value} {d.name.toLowerCase()}
-                </span>
-              </div>
-            ))}
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </div>
         </div>
       </div>
-    </SectionContainer>
+    </section>
   );
 }

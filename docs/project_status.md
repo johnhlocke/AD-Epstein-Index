@@ -104,6 +104,12 @@ This file should be automatically updated when necessary to answer three key que
 | 6-dimension aesthetic taxonomy (all features tagged) | Phase 2 | Done |
 | Aesthetic comparison: Epstein orbit vs general AD | Phase 2 | Done |
 | Deep extract confirmed names (Vision + taxonomy) | Phase 2 | Done |
+| Simplified page layout (remove 5 charts, reorder) | Phase 3 | Done |
+| Key Finding editorial section | Phase 3 | Done |
+| Confirmed Timeline visualization | Phase 3 | Done |
+| Methodology section overhaul (dark investigative theme) | Phase 3 | Done |
+| Searchable Index: confirmed default, 8 rows, full width | Phase 3 | Done |
+| Figma ↔ localhost bidirectional sync | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -207,9 +213,9 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 **Tech stack:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Shadcn UI, Recharts
 
 **Pages & Routes:**
-- Landing page with 10 sections: Hero, Key Findings, Coverage Heatmap, Features Timeline, Style Distribution, Geographic Treemap, Verdict Breakdown, Searchable Index, Methodology
+- Landing page with streamlined sections: Hero, Key Finding, Searchable Index (confirmed-only default, 8 rows, full width), Confirmed Timeline, Knowledge Graph, Methodology (dark investigative theme with agent grid)
 - Dossier detail pages (`/dossier/[id]`) with evidence sections, verdict badges, article images
-- API routes: `/api/stats`, `/api/features` (paginated + filterable), `/api/dossiers`, `/api/dossiers/[id]`
+- API routes: `/api/stats`, `/api/features` (paginated + filterable + confirmed-only), `/api/dossiers`, `/api/dossiers/[id]`
 
 **Design:**
 - Editorial/investigative journalism aesthetic (ProPublica-inspired)
