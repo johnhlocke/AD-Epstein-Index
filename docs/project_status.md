@@ -117,6 +117,7 @@ This file should be automatically updated when necessary to answer three key que
 | Live radar chart in Epstein Aesthetic section | Phase 3 | Done |
 | "Full Dossier Created" filter in Searchable Index | Phase 3 | Done |
 | Body text solid color + heading size consistency | Phase 3 | Done |
+| "What's Next" section + contact email | Phase 3 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 

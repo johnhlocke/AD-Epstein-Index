@@ -6,6 +6,17 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-14 (Session 32)
+
+### Added — "What's Next" Section + Contact Email
+- **`web/src/components/landing/WhatsNext.tsx`** — NEW: Two-column section between Conclusion and Methodology. Left column: "The Pipeline Is Still Running" (ongoing investigation status, live data). Right column: "Future Directions" (other shelter magazines, open codebase). Contact line centered below with copper mailto link (john.h.locke@gmail.com).
+- **`web/src/app/page.tsx`** — Added `WhatsNext` import and placement between Conclusion and Methodology.
+
+### Figma Sync
+- Created "What's Next + Contact" frame in Figma matching website layout (two-column text, copper sub-labels, centered contact).
+
+---
+
 ## 2026-02-14 (Session 31)
 
 ### Added — Live Radar Chart in "Is There an Epstein Aesthetic?"

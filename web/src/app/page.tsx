@@ -13,6 +13,7 @@ import { EpsteinAesthetic } from "@/components/landing/EpsteinAesthetic";
 import { AestheticAnalysis } from "@/components/landing/AestheticAnalysis";
 import { TestingAesthetic } from "@/components/landing/TestingAesthetic";
 import { Conclusion } from "@/components/landing/Conclusion";
+import { WhatsNext } from "@/components/landing/WhatsNext";
 import { MethodologySection } from "@/components/landing/MethodologySection";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -131,6 +132,9 @@ export default async function Home() {
 
       {/* ── H: Conclusion ── */}
       <Conclusion />
+
+      {/* ── What's Next + Contact ── */}
+      <WhatsNext />
 
       {/* ── Methodology ── */}
       <MethodologySection radarData={radarData} />
