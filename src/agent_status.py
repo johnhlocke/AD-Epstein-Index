@@ -270,9 +270,7 @@ def _build_xref_summary_from_rows(rows):
                 "original_name": r.get("homeowner_name", ""),
             }
 
-    leads = sum(1 for entry in by_name.values()
-                if entry["verdict"] != "no_match"
-                or entry["bb_status"] == "match")
+    leads = sum(1 for r in rows if r.get("binary_verdict") == "YES")
 
     return {"checked": checked, "matches": matches, "leads": leads,
             "verdicts": verdicts, "by_name": by_name}
@@ -1294,9 +1292,10 @@ def generate_status():
     confirmed_names_list = dossier_stats.get("confirmed_names", [])
     confirmed_associates = len(confirmed_names_list)
 
-    # Single source of truth for active leads — used by stats, agents, and Current Leads panel
+    # Notable finds for Current Leads panel (includes weak matches for display)
     notable_finds = build_notable_finds(extraction_stats, xref_stats, dossier_stats)
-    active_leads = len(notable_finds)
+    # Active leads stat = binary_verdict YES count (real leads that produce dossiers)
+    active_leads = xref_stats.get("leads", len(notable_finds))
 
     # Determine statuses
     scout_status = "working" if 0 < manifest_stats["total"] < TOTAL_EXPECTED_ISSUES else (
