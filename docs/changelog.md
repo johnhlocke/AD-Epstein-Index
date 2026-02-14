@@ -6,6 +6,29 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-14 (Session 30)
+
+### Fixed — Rejected Dossier Audit & Verdict Overrides
+- **Full audit of 154 rejected dossiers** — Found 3 wrongly rejected due to triage not reading DOJ evidence:
+  - **Mica Ertegun** — 3 DOJ hits including contact database entry and dinner thank-you letter. Overridden to CONFIRMED.
+  - **David Copperfield** — 54 DOJ hits, publicly documented Epstein associate. Auto-rejected as COINCIDENCE due to fame-dismissal bug. Overridden to CONFIRMED.
+  - **Joy and Regis Philbin** — DOJ docs say "lunch with Regis and Joy Philbin today." Dining together = direct connection per investigation policy. Overridden to CONFIRMED.
+- **Total confirmed: 33** (was 30).
+
+### Fixed — Detective Stale Task Purge
+- **`src/agents/editor.py`** — Exempted `cross_reference` tasks from stale task cleanup. Detective's DOJ browser searches legitimately take hours (50 names × DOJ search = 2-3 hours). The 60-minute stale cleanup was killing batches before completion, leaving 845 features unchecked.
+- Pipeline restarted — detective now processing the 845 remaining unchecked features.
+
+### Added — Investigation Policy Refinements
+- Dining/lunch together = confirmed connection (Mica Ertegun, Philbin precedents)
+- BB contact entry with phone numbers = confirmed (direct network evidence)
+- DOJ mention alone ≠ confirmed — must show actual interaction
+- Dislike/negative context ≠ connection (Isabel Goldsmith precedent)
+- "Mentioned by someone else" ≠ connection (William Goldman precedent)
+- Family members in DOJ ≠ confirmed for different family member (Elissa Cullman precedent)
+
+---
+
 ## 2026-02-14 (Session 29)
 
 ### Added — Aesthetic Radar Chart (Real Data)

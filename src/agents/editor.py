@@ -1643,6 +1643,10 @@ Respond with JSON only:
         stale_ids = []
         for tid, info in self._tasks_in_flight.items():
             try:
+                task_type = info.get("task", {}).get("type", "")
+                # Cross-reference tasks legitimately take hours (DOJ browser searches)
+                if task_type == "cross_reference":
+                    continue
                 assigned = datetime.fromisoformat(info["assigned_at"])
                 if (now - assigned).total_seconds() > max_age_minutes * 60:
                     stale_ids.append(tid)
