@@ -1112,6 +1112,23 @@ class EditorAgent(Agent):
         page_numbers = data.get("page_numbers", [])
         temp_dir = data.get("temp_dir")
 
+        # ── Guard: Protect manual verdict overrides ──
+        if feature_id:
+            try:
+                sb = get_supabase()
+                existing = sb.table("dossiers").select("id, editor_verdict, editor_reasoning").eq("feature_id", feature_id).execute()
+                if existing.data:
+                    ex = existing.data[0]
+                    reasoning_text = (ex.get("editor_reasoning") or "").upper()
+                    if "MANUAL OVERRIDE" in reasoning_text:
+                        self.log(f"Skipping re-investigation of {name} — has manual override ({ex.get('editor_verdict')})")
+                        if temp_dir:
+                            import shutil
+                            shutil.rmtree(temp_dir, ignore_errors=True)
+                        return
+            except Exception:
+                pass  # DB check failed — proceed with investigation
+
         # ── Step 1: Persist dossier to Supabase ──
         dossier_id = None
         if feature_id:
