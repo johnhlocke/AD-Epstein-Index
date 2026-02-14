@@ -110,6 +110,10 @@ This file should be automatically updated when necessary to answer three key que
 | Methodology section overhaul (dark investigative theme) | Phase 3 | Done |
 | Searchable Index: confirmed default, 8 rows, full width | Phase 3 | Done |
 | Figma ↔ localhost bidirectional sync | Phase 3 | Done |
+| Grid-aligned filter bar (6-col CSS Grid) | Phase 3 | Done |
+| Phase 01 Architecture diagram (Figma → SVG) | Phase 3 | Done |
+| Phase 02 Architecture diagram | Phase 3 | Not Started |
+| Phase 03 Architecture diagram | Phase 3 | Not Started |
 
 ## 2. What's Been Accomplished
 

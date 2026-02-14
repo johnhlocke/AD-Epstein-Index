@@ -304,53 +304,62 @@ export function MethodologySection() {
           {/* Phase cards */}
           <div className="mt-10 grid gap-6 md:grid-cols-3">
             {phases.map((phase) => (
-              <div key={phase.num} className="flex flex-col gap-6">
-                {/* Card */}
-                <div
-                  className="relative flex flex-1 flex-col rounded border p-6"
-                  style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
+              <div
+                key={phase.num}
+                className="relative flex flex-col rounded border p-6"
+                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
+              >
+                <span
+                  className="text-[64px] font-bold leading-none"
+                  style={{ fontFamily: MONO, color: COPPER_DIM }}
                 >
-                  <span
-                    className="text-[64px] font-bold leading-none"
-                    style={{ fontFamily: MONO, color: COPPER_DIM }}
-                  >
-                    {phase.num}
-                  </span>
-                  <p
-                    className="mt-2 text-[13px] font-bold tracking-wide"
-                    style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-                  >
-                    {phase.title}
-                  </p>
-                  <p
-                    className="mt-3 flex-1 text-[11px] leading-[1.65]"
-                    style={{ fontFamily: MONO, color: TEXT_MID }}
-                  >
-                    {phase.description}
-                  </p>
-                  <div className="mt-6 flex flex-wrap gap-2">
-                    {phase.agents.map((agent) => (
-                      <span
-                        key={agent}
-                        className="rounded-sm px-2 py-1 text-[9px]"
-                        style={{
-                          fontFamily: MONO,
-                          backgroundColor: GREEN_BG,
-                          color: GREEN,
-                        }}
-                      >
-                        {agent}
-                      </span>
-                    ))}
-                  </div>
+                  {phase.num}
+                </span>
+                <p
+                  className="mt-2 text-[13px] font-bold tracking-wide"
+                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                >
+                  {phase.title}
+                </p>
+                <p
+                  className="mt-3 flex-1 text-[11px] leading-[1.65]"
+                  style={{ fontFamily: MONO, color: TEXT_MID }}
+                >
+                  {phase.description}
+                </p>
+                <div className="mt-6 flex flex-wrap gap-2">
+                  {phase.agents.map((agent) => (
+                    <span
+                      key={agent}
+                      className="rounded-sm px-2 py-1 text-[9px]"
+                      style={{
+                        fontFamily: MONO,
+                        backgroundColor: GREEN_BG,
+                        color: GREEN,
+                      }}
+                    >
+                      {agent}
+                    </span>
+                  ))}
                 </div>
-
-                {/* Architecture diagram placeholder */}
-                <DiagramPlaceholder
-                  label={`PHASE ${phase.num} ARCHITECTURE`}
-                />
               </div>
             ))}
+          </div>
+
+          {/* Architecture diagrams — full-width below phase cards */}
+          <div className="mt-10 flex flex-col gap-6">
+            {/* Phase 01 — live SVG from Figma */}
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/pipeline-phase01.svg"
+              alt="Phase 01 Architecture — Hub-and-spoke pipeline showing Scout, Courier, and Reader agents feeding data through the Editor to Supabase"
+              className="w-full rounded"
+              style={{ backgroundColor: CARD_BG }}
+            />
+
+            {/* Phase 02 & 03 — placeholders until designed */}
+            <DiagramPlaceholder label="PHASE 02 ARCHITECTURE" />
+            <DiagramPlaceholder label="PHASE 03 ARCHITECTURE" />
           </div>
         </div>
 

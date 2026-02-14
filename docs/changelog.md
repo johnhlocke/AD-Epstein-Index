@@ -6,6 +6,26 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-14 (Session 28)
+
+### Changed — Searchable Index Grid Alignment
+- **`web/src/components/landing/SearchableIndex.tsx`** — Replaced flexbox filter bar with 6-column CSS Grid (`grid grid-cols-6 gap-x-6 gap-y-3`) for pixel-perfect alignment with the design grid. Search spans columns 1-2, Year/Style/Location each get one column. Moved "Confirmed connections only" checkbox to a second row below search with smaller text. Removed redundant "Showing X of Y results" text (pagination already at bottom). Added Location filter input wired into API.
+
+### Changed — Hero Section Polish
+- **`web/src/components/landing/HeroSection.tsx`** — Increased spacer between Thoreau epigraph and headline from `mb-12 md:mb-16` to `mb-24` (96px). Added `shadow-sm` drop shadow to the Confirmed Connections stat box.
+
+### Changed — Pipeline Architecture Diagram (Phase 01)
+- **`web/src/components/landing/MethodologySection.tsx`** — Separated phase cards from architecture diagrams. Phase cards now render as a clean 3-column grid without stacked placeholders. Architecture diagrams render full-width below: Phase 01 as live SVG, Phases 02 & 03 as placeholders.
+- **`web/public/pipeline-phase01.svg`** — NEW: Phase 01 Architecture diagram exported from Figma. Hub-and-spoke layout showing Scout, Courier, and Reader agents with assign/task-result arrows through the Editor Agent to Supabase. 2496x960, dark purple background (#1A0E2E).
+
+### Figma Sync
+- Synced all code changes to Figma (hero spacer, stat shadow, filter grid, table columns)
+- Added 6-column layout grids to all Figma section frames for snap-to-column design
+- Resized Phase 01 Architecture placeholder to 480px, shifted downstream sections
+- Designed and exported Phase 01 pipeline architecture diagram in Figma
+
+---
+
 ## 2026-02-13 (Session 27)
 
 ### Changed — Simplified Page Layout

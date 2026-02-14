@@ -25,7 +25,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
         }}
       >
         {/* ── Epigraph ── */}
-        <div className="mb-12 flex flex-col items-center text-center md:mb-16">
+        <div className="mb-24 flex flex-col items-center text-center">
           <blockquote className="max-w-[520px] font-serif text-[14px] italic leading-[1.8] text-[#B7B7B7] md:text-[15px]">
             &ldquo;While civilization has been improving our houses, it has not
             equally improved the men who are to inhabit them. It has created
@@ -188,7 +188,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
 
             {/* Stat 6: Confirmed Connections — THE anchor stat */}
             <div
-              className="-my-1 flex flex-col justify-center rounded px-4 py-4"
+              className="-my-1 flex flex-col justify-center rounded px-4 py-4 shadow-sm"
               style={{ backgroundColor: "rgba(184, 115, 51, 0.12)" }}
             >
               <p

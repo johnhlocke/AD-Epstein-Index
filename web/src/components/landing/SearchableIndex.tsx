@@ -36,6 +36,7 @@ export function SearchableIndex() {
   const search = searchParams.get("search") ?? "";
   const year = searchParams.get("year") ?? "";
   const style = searchParams.get("style") ?? "";
+  const location = searchParams.get("location") ?? "";
   const confirmedOnly = searchParams.get("confirmed") !== "false";
 
   const fetchData = useCallback(async () => {
@@ -46,6 +47,7 @@ export function SearchableIndex() {
     if (search) params.set("search", search);
     if (year) params.set("year", year);
     if (style) params.set("style", style);
+    if (location) params.set("location", location);
     if (confirmedOnly) params.set("confirmed", "true");
 
     try {
@@ -57,7 +59,7 @@ export function SearchableIndex() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, year, style, confirmedOnly]);
+  }, [page, search, year, style, location, confirmedOnly]);
 
   useEffect(() => {
     fetchData();
@@ -99,76 +101,75 @@ export function SearchableIndex() {
 
   return (
     <SectionContainer width="wide" className="pt-6 pb-20" id="index">
-      {/* Filters */}
-      <div className="mb-6 flex flex-wrap gap-3">
+      {/* Filters — snapped to 6-column design grid */}
+      <div className="mb-6 grid grid-cols-6 gap-x-6 gap-y-3">
+        {/* Row 1: inputs */}
         <Input
           placeholder="Search names, designers, titles..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="max-w-xs"
+          className="col-span-2"
         />
         <Input
           placeholder="Year"
           type="number"
           value={year}
           onChange={(e) => updateParam("year", e.target.value)}
-          className="w-24"
         />
         <Input
           placeholder="Style"
           value={style}
           onChange={(e) => updateParam("style", e.target.value)}
-          className="max-w-[200px]"
         />
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted-foreground select-none">
+        <Input
+          placeholder="Location"
+          value={location}
+          onChange={(e) => updateParam("location", e.target.value)}
+        />
+        <div className="flex items-center justify-end">
+          {(search || year || style || location || !confirmedOnly) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setSearchInput("");
+                router.push("?#index", { scroll: false });
+              }}
+            >
+              Clear filters
+            </Button>
+          )}
+        </div>
+        {/* Row 2: checkbox */}
+        <label className="col-span-2 flex cursor-pointer items-center gap-2 text-xs text-muted-foreground select-none">
           <input
             type="checkbox"
             checked={confirmedOnly}
             onChange={(e) => updateParam("confirmed", e.target.checked ? "" : "false")}
-            className="h-4 w-4 rounded border-border accent-[#B87333]"
+            className="h-3.5 w-3.5 rounded border-border accent-[#B87333]"
           />
           Confirmed connections only
         </label>
-        {(search || year || style || !confirmedOnly) && (
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setSearchInput("");
-              router.push("?#index", { scroll: false });
-            }}
-          >
-            Clear filters
-          </Button>
-        )}
       </div>
-
-      {/* Results count */}
-      {data && !loading && (
-        <p className="mb-4 text-sm text-muted-foreground">
-          Showing {data.data.length} of {data.total} results
-          {data.totalPages > 1 && ` (page ${data.page} of ${data.totalPages})`}
-        </p>
-      )}
 
       {/* Table */}
       <div className="overflow-x-auto rounded-lg border border-border">
-        <Table>
+        <Table className="table-fixed">
           <TableHeader>
             <TableRow>
-              <TableHead className="w-[200px]">Homeowner</TableHead>
-              <TableHead>Issue</TableHead>
-              <TableHead>Designer</TableHead>
-              <TableHead>Location</TableHead>
-              <TableHead>Style</TableHead>
+              <TableHead className="w-[8%] font-serif">Issue</TableHead>
+              <TableHead className="w-[25.33%] font-serif">Homeowner</TableHead>
+              <TableHead className="w-[33.34%] font-serif">Designer</TableHead>
+              <TableHead className="w-[16.67%] font-serif">Location</TableHead>
+              <TableHead className="w-[16.66%] font-serif">Style</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
-                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-28" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
@@ -177,22 +178,22 @@ export function SearchableIndex() {
             ) : data?.data.length ? (
               data.data.map((f) => (
                 <TableRow key={f.id}>
-                  <TableCell className="font-medium">
-                    {f.homeowner_name ?? (
-                      <span className="text-muted-foreground italic">Unknown</span>
-                    )}
-                  </TableCell>
-                  <TableCell className="font-mono text-sm">
+                  <TableCell className="truncate font-serif text-sm">
                     {f.issue_month ? `${MONTH_ABBR[f.issue_month]} ` : ""}
                     {f.issue_year}
                   </TableCell>
-                  <TableCell>{f.designer_name ?? "\u2014"}</TableCell>
-                  <TableCell>
+                  <TableCell className="truncate font-serif font-bold text-foreground">
+                    {f.homeowner_name ?? (
+                      <span className="font-normal text-muted-foreground italic">Unknown</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="truncate font-serif">{f.designer_name ?? "\u2014"}</TableCell>
+                  <TableCell className="truncate font-serif">
                     {[f.location_city, f.location_state].filter(Boolean).join(", ") || "\u2014"}
                   </TableCell>
-                  <TableCell>
+                  <TableCell className="truncate font-serif">
                     {f.design_style ? (
-                      <Badge variant="secondary" className="text-xs font-normal">
+                      <Badge variant="secondary" className="truncate text-xs font-normal">
                         {f.design_style}
                       </Badge>
                     ) : (
