@@ -19,6 +19,8 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ### Figma Sync
 - Created "What's Next + Contact" frame in Figma matching website layout (two-column text, copper sub-labels, centered contact).
+- Updated "B: Who Are They?" frame: reduced bottom padding from ~132px to 24px to match website `pb-6`.
+- Updated "Searchable Index" frame: removed top padding to match website `pt-0`. All downstream frames shifted up 132px.
 
 ---
 
