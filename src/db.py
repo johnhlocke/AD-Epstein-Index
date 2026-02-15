@@ -365,13 +365,21 @@ def list_dossiers(strength=None, editor_verdict=None):
         List of dossier dicts.
     """
     sb = get_supabase()
-    query = sb.table("dossiers").select("*")
-    if strength is not None:
-        query = query.eq("connection_strength", strength)
-    if editor_verdict is not None:
-        query = query.eq("editor_verdict", editor_verdict)
-    result = query.order("created_at", desc=True).execute()
-    return result.data
+    # Paginate — Supabase default limit is 1000 rows
+    all_rows = []
+    offset = 0
+    while True:
+        query = sb.table("dossiers").select("*")
+        if strength is not None:
+            query = query.eq("connection_strength", strength)
+        if editor_verdict is not None:
+            query = query.eq("editor_verdict", editor_verdict)
+        batch = query.order("created_at", desc=True).range(offset, offset + 999).execute()
+        all_rows.extend(batch.data or [])
+        if len(batch.data or []) < 1000:
+            break
+        offset += 1000
+    return all_rows
 
 
 def update_editor_verdict(feature_id, verdict, reasoning):
@@ -513,11 +521,19 @@ def list_cross_references(combined_verdict=None):
         List of xref dicts.
     """
     sb = get_supabase()
-    query = sb.table("cross_references").select("*")
-    if combined_verdict is not None:
-        query = query.eq("combined_verdict", combined_verdict)
-    result = query.order("checked_at", desc=True).execute()
-    return result.data
+    # Paginate — Supabase default limit is 1000 rows
+    all_rows = []
+    offset = 0
+    while True:
+        query = sb.table("cross_references").select("*")
+        if combined_verdict is not None:
+            query = query.eq("combined_verdict", combined_verdict)
+        batch = query.order("checked_at", desc=True).range(offset, offset + 999).execute()
+        all_rows.extend(batch.data or [])
+        if len(batch.data or []) < 1000:
+            break
+        offset += 1000
+    return all_rows
 
 
 def get_xrefs_needing_doj_retry():
