@@ -9,10 +9,12 @@ Format: entries are grouped by date, with the most recent at the top.
 ## 2026-02-14 (Session 33)
 
 ### Added — Subject Category Classification (Profession Tags)
-- **`src/classify_dossier_subjects.py`** — NEW: Classifies all AD homeowner names into profession categories using Claude Haiku. 10 categories: Associate, Politician, Legal, Royalty, Celebrity, Business, Designer, Socialite, Private, Other. Flags: `--all`, `--reclassify-other`, `--dry-run`. Classifies features table first (full baseline), then copies to dossiers via feature_id linkage.
-- Classified 1,601 features + 320 dossiers across two runs (~$0.05 total Haiku cost)
-- Initial "Other" category (405 names) split into Private (378 non-public figures) and Other (25 recognizable public figures not fitting main categories)
-- **Key finding**: Socialites 3.5x overrepresented in Epstein orbit (14.3% vs 4.1% baseline), Business 1.6x, Private 0.5x underrepresented
+- **`src/classify_dossier_subjects.py`** — NEW: Classifies all AD homeowner names into profession categories. 10 categories: Associate, Politician, Legal, Royalty, Celebrity, Business, Designer, Socialite, Private, Other. Flags: `--all`, `--reclassify-other`, `--dry-run`.
+- Initial pass with Haiku (~$0.05), then full QA audit with Opus (~$1.70) after 27% disagreement rate found systematic errors: Haiku over-classified artists/writers as Celebrity, and homeowner=designer heuristic overcorrected Private→Designer
+- Opus reclassified all 1,368 unique names across 1,600 features + 320 dossiers. 458 features corrected.
+- **Corrected baseline**: Private 34.9%, Designer 18.6%, Celebrity 15.5%, Business 13.3%, Other 9.8%, Socialite 4.2%, Royalty 2.6%, Politician 0.9%
+- **Key finding**: Socialites 3.3x, Royalty 2.3x, Business 1.8x overrepresented in Epstein orbit. Private citizens 0.3x (nearly absent).
+- Guy and Marie-Hélène de Rothschild manually overridden to CONFIRMED (duplicate of already-confirmed "Baron and Baroness Guy de Rothschild")
 
 ### Fixed — Supabase 1000-Row Pagination Bug
 - **`src/db.py`** — `list_cross_references()` and `list_dossiers()` were silently truncating at 1000 rows (Supabase default limit). Added pagination loops with `.range(offset, offset + 999)`. Agent Office dashboard "Names" panel was stuck at 1000 instead of actual 1,057.
