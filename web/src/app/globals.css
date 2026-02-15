@@ -118,6 +118,31 @@
   }
 }
 
+/* Always-visible thin scrollbar for tables */
+.scrollbar-visible {
+  overflow-x: scroll;
+  scrollbar-width: auto; /* Firefox */
+  scrollbar-color: #999 #f0f0f0;
+}
+.scrollbar-visible::-webkit-scrollbar {
+  height: 10px;
+}
+.scrollbar-visible::-webkit-scrollbar-track {
+  background: #f0f0f0;
+  border-radius: 5px;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb {
+  background: #999;
+  border-radius: 5px;
+}
+.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+  background: #777;
+}
+/* Let Shadcn Table's inner container pass overflow to outer scrollbar wrapper */
+.scrollbar-visible [data-slot="table-container"] {
+  overflow-x: visible;
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

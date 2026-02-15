@@ -12,6 +12,7 @@ export async function GET(request: NextRequest) {
       location: searchParams.get("location") ?? undefined,
       designer: searchParams.get("designer") ?? undefined,
       style: searchParams.get("style") ?? undefined,
+      category: searchParams.get("category") ?? undefined,
       search: searchParams.get("search") ?? undefined,
       confirmedOnly: searchParams.get("confirmed") === "true",
       hasDossier: searchParams.get("dossier") === "true" || undefined,

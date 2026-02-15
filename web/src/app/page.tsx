@@ -53,7 +53,7 @@ export default async function Home() {
         <SearchableIndex />
       </Suspense>
 
-      {/* ── C: When and Where Do They Appear? (Key Finding 01 cont.) ── */}
+      {/* ── C: When and Where Are They (Key Finding 01 cont.) ── */}
       {(stats.confirmedTimeline?.length ?? 0) > 0 && (
         <section className="bg-background pb-20 pt-14" id="timeline">
           <div
@@ -75,12 +75,12 @@ export default async function Home() {
               className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"
               style={{ fontFamily: "futura-pt, sans-serif" }}
             >
-              When and Where Do They Appear?
+              What, When and Where Are They
             </h2>
 
             <Separator className="mt-5 mb-6" />
 
-            <ConfirmedTimeline data={stats.confirmedTimeline} />
+            <ConfirmedTimeline data={stats.confirmedTimeline} categoryBreakdown={stats.categoryBreakdown} />
           </div>
         </section>
       )}

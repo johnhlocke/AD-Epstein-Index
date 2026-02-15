@@ -34,6 +34,7 @@ export interface Feature {
   location_state: string | null;
   location_country: string | null;
   design_style: string | null;
+  subject_category: string | null;
   page_number: number | null;
   notes: string | null;
   created_at: string;
@@ -121,6 +122,12 @@ export interface StatsResponse {
     locationCity: string | null;
     locationState: string | null;
     locationCountry: string | null;
+    category: string | null;
+  }[];
+  categoryBreakdown: {
+    category: string;
+    baselinePct: number;
+    epsteinPct: number;
   }[];
   crossReferences: {
     total: number;

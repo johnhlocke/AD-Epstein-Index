@@ -25,7 +25,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
   // Fetch features with homeowner presence
   const { data: features } = await sb
     .from("features")
-    .select("id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built");
+    .select("id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built, subject_category");
 
   // Fetch dossiers verdict counts + confirmed timeline data
   const { data: dossiers } = await sb
@@ -127,10 +127,50 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
         locationCity: feature?.location_city ?? null,
         locationState: feature?.location_state ?? null,
         locationCountry: feature?.location_country ?? null,
+        category: feature?.subject_category ?? null,
       };
     })
     .filter((d) => d.year > 0)
     .sort((a, b) => a.year - b.year || (a.month ?? 6) - (b.month ?? 6));
+
+  // Category breakdown — baseline vs Epstein orbit percentages
+  const confirmedFeatureIds = new Set(
+    allDossiers
+      .filter((d) => d.editor_verdict === "CONFIRMED")
+      .map((d) => d.feature_id)
+      .filter(Boolean)
+  );
+
+  const CATEGORIES = ["Business", "Celebrity", "Designer", "Politician", "Private", "Royalty", "Socialite", "Other"];
+  const baselineCatCounts = new Map<string, number>();
+  const epsteinCatCounts = new Map<string, number>();
+  let baselineTotal = 0;
+  let epsteinTotal = 0;
+
+  for (const f of allFeatures) {
+    const cat = f.subject_category && CATEGORIES.includes(f.subject_category)
+      ? f.subject_category
+      : "Other";
+    if (confirmedFeatureIds.has(f.id)) {
+      epsteinCatCounts.set(cat, (epsteinCatCounts.get(cat) ?? 0) + 1);
+      epsteinTotal++;
+    } else {
+      baselineCatCounts.set(cat, (baselineCatCounts.get(cat) ?? 0) + 1);
+      baselineTotal++;
+    }
+  }
+
+  const categoryBreakdown = CATEGORIES
+    .map((cat) => ({
+      category: cat,
+      baselinePct: baselineTotal > 0
+        ? Math.round(((baselineCatCounts.get(cat) ?? 0) / baselineTotal) * 100)
+        : 0,
+      epsteinPct: epsteinTotal > 0
+        ? Math.round(((epsteinCatCounts.get(cat) ?? 0) / epsteinTotal) * 100)
+        : 0,
+    }))
+    .filter((c) => c.baselinePct > 0 || c.epsteinPct > 0);
 
   return {
     issues: {
@@ -155,6 +195,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
       pending,
     },
     confirmedTimeline,
+    categoryBreakdown,
     crossReferences: {
       total: xrefCount ?? 0,
     },
@@ -171,6 +212,7 @@ interface FeatureFilters {
   location?: string;
   designer?: string;
   style?: string;
+  category?: string;
   search?: string;
   hasDossier?: boolean;
   confirmedOnly?: boolean;
@@ -178,16 +220,16 @@ interface FeatureFilters {
 
 export async function getFeatures(
   filters: FeatureFilters = {}
-): Promise<PaginatedResponse<Feature & { issue_month: number | null; issue_year: number }>> {
+): Promise<PaginatedResponse<Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null }>> {
   const sb = getSupabase();
   const page = filters.page ?? 1;
   const pageSize = filters.pageSize ?? 20;
   const offset = (page - 1) * pageSize;
 
-  // Build query — join with issues for month/year
+  // Build query — join with issues for month/year, and dossiers for link
   let query = sb
     .from("features")
-    .select("*, issues!inner(month, year)", { count: "exact" });
+    .select("*, issues!inner(month, year), dossiers(id)", { count: "exact" });
 
   if (filters.year) {
     query = query.eq("issues.year", filters.year);
@@ -197,6 +239,9 @@ export async function getFeatures(
   }
   if (filters.designer) {
     query = query.ilike("designer_name", `%${filters.designer}%`);
+  }
+  if (filters.category) {
+    query = query.ilike("subject_category", `%${filters.category}%`);
   }
   if (filters.location) {
     query = query.or(
@@ -244,20 +289,22 @@ export async function getFeatures(
     .range(offset, offset + pageSize - 1);
 
   const features = (data ?? []).map((row: Record<string, unknown>) => {
-    const { issues: issueData, ...feature } = row as Record<string, unknown> & {
+    const { issues: issueData, dossiers: dossierData, ...feature } = row as Record<string, unknown> & {
       issues: { month: number | null; year: number };
+      dossiers: { id: number } | null;
     };
     return {
       ...feature,
       issue_month: issueData?.month ?? null,
       issue_year: issueData?.year ?? 0,
+      dossier_id: dossierData?.id ?? null,
     };
   });
 
   const total = count ?? 0;
 
   return {
-    data: features as (Feature & { issue_month: number | null; issue_year: number })[],
+    data: features as (Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null })[],
     total,
     page,
     pageSize,

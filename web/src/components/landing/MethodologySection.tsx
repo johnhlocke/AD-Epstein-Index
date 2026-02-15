@@ -1,8 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { AestheticRadar } from "@/components/charts/AestheticRadar";
-import type { AestheticRadarData } from "@/lib/types";
 
 // ── Shared style constants ──────────────────────────────────────────────────
 const MONO = "JetBrains Mono, monospace";
@@ -96,15 +94,6 @@ const subAgents = [
     sprite: "/agents/designer_front_trans.png",
     description: "Designs and builds the public-facing website. Translates pipeline data into interactive visualizations, charts, and searchable interfaces.",
   },
-];
-
-const taxonomyDimensions = [
-  { label: "FORMALITY", description: "How formal vs. casual is the interior? Think ballrooms vs. lofts." },
-  { label: "SCALE", description: "Square footage, room count, property acreage. The sheer size of the space." },
-  { label: "ORNAMENTATION", description: "Level of decorative detail — gilding, moldings, custom millwork, museum-quality art." },
-  { label: "COLOR PALETTE", description: "Warm earth tones, cool neutrals, bold accents, or the absence of color entirely." },
-  { label: "MATERIAL COST", description: "Marble vs. concrete. Custom bespoke vs. catalog. A proxy for budget." },
-  { label: "HISTORICAL REF.", description: "Degree of historical citation — Art Deco, Neoclassical, Modernist, or none." },
 ];
 
 const dataSources = [
@@ -212,23 +201,19 @@ function DiagramPlaceholder({ label }: { label: string }) {
 // ── Main component ──────────────────────────────────────────────────────────
 
 /**
- * Methodology — five-section dark tech editorial.
+ * Agent AI Methodology — four-section dark tech editorial.
  *
  * Deep purple background (#1a1a28) with JetBrains Mono throughout.
- * Five numbered sections: Pipeline, Aesthetic Analysis, Multi-Agent System,
+ * Four numbered sections: Pipeline, Multi-Agent System,
  * Limitations, and Data Sources.
  *
  * Clean. Minimal. As it should be. — Sable
  */
-interface MethodologySectionProps {
-  radarData?: AestheticRadarData;
-}
-
-export function MethodologySection({ radarData }: MethodologySectionProps) {
+export function AgentMethodologySection() {
   return (
     <section
       className="relative overflow-hidden"
-      id="methodology"
+      id="agent-methodology"
       style={{ backgroundColor: BG }}
     >
       {/* Subtle gradient overlay */}
@@ -300,6 +285,40 @@ export function MethodologySection({ radarData }: MethodologySectionProps) {
             title="THE PIPELINE"
             subtitle="Three phases. Seven agents. Zero manual data entry."
           />
+
+          {/* Pipeline body text — 4 minor columns wide */}
+          <div
+            className="mt-4 flex flex-col gap-4 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+            style={{ fontFamily: MONO, color: TEXT_MID }}
+          >
+            <p>
+              The entire investigation is run by seven autonomous AI agents
+              coordinated through a hub-and-spoke architecture. No human
+              touches the data. An editor agent &mdash; Miranda &mdash;
+              sits at the center, assigning tasks, reviewing results, and
+              making every final call on whether a connection is confirmed
+              or rejected. The other six agents report to her.
+            </p>
+            <p>
+              The pipeline operates in three sequential phases. First, the
+              AD archive is scraped and every featured home is cataloged
+              with its homeowner, designer, location, and style. Second,
+              every extracted name is cross-referenced against two Epstein
+              sources: the Little Black Book (~1,500 contacts) and the DOJ
+              Epstein Library (millions of pages of released documents).
+              Third, flagged names receive full investigative dossiers,
+              editorial review, and aesthetic scoring before being
+              published to this site.
+            </p>
+            <p>
+              The system uses four different AI models, each chosen for
+              cost and capability: Opus for editorial judgment, Sonnet for
+              research synthesis, Haiku for bulk classification, and Gemini
+              for vision tasks like reading magazine pages. Total API cost
+              for the full run was approximately $55 over ~18 hours of
+              wall-clock time.
+            </p>
+          </div>
 
           {/* Pipeline stats — moved here from bottom */}
           <div className="mt-8 grid grid-cols-2 gap-6 md:grid-cols-4">
@@ -376,131 +395,11 @@ export function MethodologySection({ radarData }: MethodologySectionProps) {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 2: AESTHETIC ANALYSIS
+            SECTION 2: MULTI-AGENT SYSTEM
         ══════════════════════════════════════════════════════════════════ */}
         <div className="mt-24">
           <SectionHeader
             num="2"
-            title="AESTHETIC ANALYSIS"
-            subtitle="A six-dimension taxonomy of design. Is there an Epstein aesthetic?"
-          />
-
-          <div className="mt-10 grid items-start gap-6 md:grid-cols-3">
-            {/* Left: editorial text */}
-            <div className="flex flex-col gap-6">
-              <p
-                className="text-[11px] leading-[1.7]"
-                style={{ fontFamily: MONO, color: TEXT_MID }}
-              >
-                Every featured home is scored across six aesthetic dimensions,
-                creating a fingerprint of design taste. By comparing the profiles
-                of Epstein-connected homes against the full AD baseline, patterns
-                emerge — or don&rsquo;t. The data speaks.
-              </p>
-
-              {/* Taxonomy dimensions list */}
-              <div className="flex flex-col gap-3">
-                {taxonomyDimensions.map((dim, i) => (
-                  <div
-                    key={dim.label}
-                    className="rounded border px-4 py-3"
-                    style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
-                  >
-                    <div className="flex items-baseline gap-3">
-                      <span
-                        className="text-[10px] font-bold"
-                        style={{ fontFamily: MONO, color: GOLD }}
-                      >
-                        {String(i + 1).padStart(2, "0")}
-                      </span>
-                      <span
-                        className="text-[10px] font-bold tracking-wider"
-                        style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-                      >
-                        {dim.label}
-                      </span>
-                    </div>
-                    <p
-                      className="mt-1 text-[10px] leading-[1.5]"
-                      style={{
-                        fontFamily: MONO,
-                        color: TEXT_DIM,
-                        paddingLeft: "34px",
-                      }}
-                    >
-                      {dim.description}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Center + Right: radar chart spanning 2 columns */}
-            <div className="md:col-span-2">
-              <AestheticRadar variant="embedded" data={radarData} />
-
-              <div className="mt-4 flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <div
-                    className="h-2 w-6 rounded-sm"
-                    style={{ backgroundColor: "#B87333" }}
-                  />
-                  <span
-                    className="text-[9px] tracking-wider"
-                    style={{ fontFamily: MONO, color: TEXT_DIM }}
-                  >
-                    EPSTEIN-LINKED HOMES
-                  </span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div
-                    className="h-2 w-6 rounded-sm"
-                    style={{
-                      backgroundColor: "rgba(46, 204, 113, 0.5)",
-                    }}
-                  />
-                  <span
-                    className="text-[9px] tracking-wider"
-                    style={{ fontFamily: MONO, color: TEXT_DIM }}
-                  >
-                    AD BASELINE
-                  </span>
-                </div>
-              </div>
-
-              {/* Findings placeholder */}
-              <div
-                className="mt-6 rounded border p-6"
-                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
-              >
-                <p
-                  className="text-[11px] font-bold tracking-wider"
-                  style={{ fontFamily: MONO, color: GOLD_DIM }}
-                >
-                  {"// KEY FINDINGS"}
-                </p>
-                <p
-                  className="mt-3 text-[11px] leading-[1.7]"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  Placeholder for aesthetic analysis findings. Does the
-                  Epstein-linked portfolio skew toward formality and scale? Do
-                  material costs diverge significantly from the baseline? The
-                  taxonomy will reveal whether these homes share a coherent
-                  aesthetic identity — or whether the overlap is stylistically
-                  random.
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION 3: MULTI-AGENT SYSTEM
-        ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
-          <SectionHeader
-            num="3"
             title="MULTI-AGENT SYSTEM"
             subtitle="A hub-and-spoke architecture. Seven autonomous agents, one editor, zero humans in the loop."
           />
@@ -593,62 +492,59 @@ export function MethodologySection({ radarData }: MethodologySectionProps) {
             >
               {"// THE AGENT OFFICE"}
             </p>
-            <p
-              className="mt-2 text-[11px] leading-[1.7]"
+            <div
+              className="mt-2 flex flex-col gap-4 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
               style={{ fontFamily: MONO, color: TEXT_MID }}
             >
-              A real-time pixel-art dashboard showing all seven agents at work.
-              Each agent has a desk, speech bubbles for status updates, and
-              visual indicators for their current task. The office runs on live
-              pipeline data — when an agent processes a task, you see it happen.
-            </p>
-
-            {/* Video / interactive embed placeholder */}
-            <div
-              className="mt-4 flex h-[480px] flex-col items-center justify-center overflow-hidden rounded border"
-              style={{
-                backgroundColor: "rgba(17, 17, 24, 0.8)",
-                borderColor: BORDER,
-              }}
-            >
-              <div
-                className="flex h-8 w-8 items-center justify-center rounded-full border"
-                style={{ borderColor: "#B87333" }}
-              >
-                <div
-                  className="ml-0.5 h-0 w-0"
-                  style={{
-                    borderLeft: "8px solid #B87333",
-                    borderTop: "5px solid transparent",
-                    borderBottom: "5px solid transparent",
-                  }}
-                />
-              </div>
-              <p
-                className="mt-4 text-[11px] tracking-widest"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                AGENT OFFICE — SCREEN RECORDING
+              <p>
+                A real-time pixel-art dashboard showing all seven agents at work.
+                Each agent has a desk, speech bubbles for status updates, and
+                visual indicators for their current task. The office runs on live
+                pipeline data &mdash; when an agent processes a task, you see it happen.
               </p>
-              <p
-                className="mt-1 text-[9px] tracking-wider"
-                style={{
-                  fontFamily: MONO,
-                  color: "rgba(160, 160, 176, 0.35)",
-                }}
-              >
-                VIDEO EMBED PLACEHOLDER
+              <p>
+                The Agent Office was built as a monitoring tool during development
+                &mdash; a way to watch the entire pipeline in real time without
+                reading log files. Each of the seven agents occupies a desk in a
+                shared office. When Miranda assigns a task, you see the speech
+                bubble update. When Elias finishes reading a magazine page, his
+                status changes. When Silas returns a verdict, it appears on screen.
+              </p>
+              <p>
+                The result is a live visualization of autonomous AI coordination
+                &mdash; seven agents working in parallel, communicating through a
+                shared bulletin board, with Miranda orchestrating from the center.
+                The video below captures a typical session.
               </p>
             </div>
+
+            {/* Agent Office screen recording */}
+            <video
+              autoPlay
+              muted
+              loop
+              playsInline
+              controls
+              className="mt-4 w-full rounded border"
+              style={{
+                borderColor: BORDER,
+                backgroundColor: "rgba(17, 17, 24, 0.8)",
+              }}
+            >
+              <source
+                src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/agent-office.mp4"
+                type="video/mp4"
+              />
+            </video>
           </div>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4: LIMITATIONS AND DISCLAIMERS
+            SECTION 3: LIMITATIONS AND DISCLAIMERS
         ══════════════════════════════════════════════════════════════════ */}
         <div className="mt-24">
           <SectionHeader
-            num="4"
+            num="3"
             title="LIMITATIONS"
             subtitle="What this project can and cannot tell you."
           />
@@ -704,11 +600,11 @@ export function MethodologySection({ radarData }: MethodologySectionProps) {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 5: DATA SOURCES
+            SECTION 4: DATA SOURCES
         ══════════════════════════════════════════════════════════════════ */}
         <div className="mt-24">
           <SectionHeader
-            num="5"
+            num="4"
             title="DATA SOURCES"
             subtitle="Primary sources, infrastructure, and the full codebase."
           />
