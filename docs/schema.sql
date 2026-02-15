@@ -69,6 +69,10 @@ CREATE TABLE features (
   --   "extracted_at": "2026-02-13T..."                    -- When classified
   -- }
   aesthetic_profile JSONB DEFAULT NULL,
+  subject_category TEXT DEFAULT NULL
+    CHECK (subject_category IN ('Associate', 'Politician', 'Legal', 'Royalty',
+                                 'Celebrity', 'Business', 'Designer', 'Socialite',
+                                 'Private', 'Other')),
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -138,6 +142,12 @@ CREATE TABLE dossiers (
   investigation_depth TEXT DEFAULT 'standard',
   needs_manual_review BOOLEAN DEFAULT FALSE,
   review_reason TEXT,
+
+  -- Subject classification
+  subject_category TEXT DEFAULT NULL
+    CHECK (subject_category IN ('Associate', 'Politician', 'Legal', 'Royalty',
+                                 'Celebrity', 'Business', 'Designer', 'Socialite',
+                                 'Private', 'Other')),
 
   -- Editor gatekeeper fields
   editor_verdict TEXT DEFAULT 'PENDING_REVIEW'

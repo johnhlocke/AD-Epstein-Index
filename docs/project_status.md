@@ -118,6 +118,8 @@ This file should be automatically updated when necessary to answer three key que
 | "Full Dossier Created" filter in Searchable Index | Phase 3 | Done |
 | Body text solid color + heading size consistency | Phase 3 | Done |
 | "What's Next" section + contact email | Phase 3 | Done |
+| Subject category classification (profession tags) | Phase 2 | Done |
+| Fix Supabase 1000-row pagination in db.py | Tooling | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 
@@ -279,7 +281,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — In Progress (Clean Slate Rebuild):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
-- Current stats: ~480 issues, ~1613 features, ~768 cross-references (182 YES), ~185 dossiers, 33 confirmed connections
+- Current stats: ~1,396 issues, ~1,602 features, ~1,056 cross-references (243 YES), ~259 dossiers, 64 confirmed connections
 - Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
 - Total API cost: ~$94 (Miranda $70 at 74%, Courier $11, Researcher $5, Detective + others ~$8)
 - Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified
@@ -288,9 +290,11 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - Cost control toggles added: `IDLE_LLM_ENABLED` and `NARRATE_EVENTS` for reducing LLM spend
 - Future-date scraping fix: pipeline no longer tries to scrape issues beyond current month
 - Miranda strategic assessment interval relaxed from 3min to 10min
-- 24% cross-reference hit rate (182 YES out of 768 checked)
+- 23% cross-reference hit rate (243 YES out of 1,056 checked)
 - Rejected dossier audit: 154 reviewed, 3 wrongly rejected (Mica Ertegun, David Copperfield, Joy & Regis Philbin) — overridden to CONFIRMED
 - Stale task purge fix: cross_reference tasks exempted from 60-min cleanup (DOJ searches take hours)
+- Subject category classification: 1,601 features + 320 dossiers tagged with profession categories (10 categories including Private/Other split)
+- Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
 
 **Ongoing — Scale the Pipeline:**
 - Continue orchestrator run to process remaining issues and cross-reference all names
@@ -305,7 +309,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Phase 2 — Cross-Reference at Scale:**
 - ~~Store cross-reference data in Supabase~~ **Done** (`cross_references` table)
-- Complete dossier building for all flagged leads (~185 dossiers, 33 confirmed)
+- Complete dossier building for all flagged leads (~259 dossiers, 64 confirmed)
 - Manual review of HIGH and MEDIUM connection strength dossiers
 - ~~6-dimension aesthetic taxonomy for all features~~ **Done** (1,622 features tagged, $2.90 cost)
 - ~~Statistical comparison: Epstein aesthetic vs general AD population~~ **Done** (strong signals found)

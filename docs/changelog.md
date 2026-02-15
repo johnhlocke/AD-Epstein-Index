@@ -6,6 +6,25 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-14 (Session 33)
+
+### Added — Subject Category Classification (Profession Tags)
+- **`src/classify_dossier_subjects.py`** — NEW: Classifies all AD homeowner names into profession categories using Claude Haiku. 10 categories: Associate, Politician, Legal, Royalty, Celebrity, Business, Designer, Socialite, Private, Other. Flags: `--all`, `--reclassify-other`, `--dry-run`. Classifies features table first (full baseline), then copies to dossiers via feature_id linkage.
+- Classified 1,601 features + 320 dossiers across two runs (~$0.05 total Haiku cost)
+- Initial "Other" category (405 names) split into Private (378 non-public figures) and Other (25 recognizable public figures not fitting main categories)
+- **Key finding**: Socialites 3.5x overrepresented in Epstein orbit (14.3% vs 4.1% baseline), Business 1.6x, Private 0.5x underrepresented
+
+### Fixed — Supabase 1000-Row Pagination Bug
+- **`src/db.py`** — `list_cross_references()` and `list_dossiers()` were silently truncating at 1000 rows (Supabase default limit). Added pagination loops with `.range(offset, offset + 999)`. Agent Office dashboard "Names" panel was stuck at 1000 instead of actual 1,057.
+
+### Fixed — Detective Dashboard Status Messaging
+- **`src/agent_status.py`** — Detective status now shows backlog progress ("Checking 1056/1600 names (66%) — 544 remaining") instead of misleading completion stats.
+
+### Database
+- Added `subject_category TEXT` column to both `features` and `dossiers` tables (10 valid categories)
+
+---
+
 ## 2026-02-14 (Session 32)
 
 ### Changed — Tighter Spacing Between "Who Are They?" and Searchable Index
