@@ -7,7 +7,8 @@ const navItems = [
   { href: "/", label: "Home" },
   { href: "/#index", label: "Index" },
   { href: "/explorer", label: "Explorer" },
-  { href: "/#methodology", label: "Methodology" },
+  { href: "/#agent-methodology", label: "Agent Methodology" },
+  { href: "/#aesthetic-methodology", label: "Aesthetic Methodology" },
 ];
 
 export function Header() {

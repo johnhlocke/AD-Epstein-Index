@@ -16,8 +16,11 @@ export function Footer() {
           <div className="flex gap-8 text-sm text-muted-foreground">
             <div className="flex flex-col gap-2">
               <span className="font-medium text-foreground">Project</span>
-              <a href="#methodology" className="hover:text-foreground transition-colors">
-                Methodology
+              <a href="#agent-methodology" className="hover:text-foreground transition-colors">
+                Agent Methodology
+              </a>
+              <a href="#aesthetic-methodology" className="hover:text-foreground transition-colors">
+                Aesthetic Methodology
               </a>
               <a
                 href="https://www.justice.gov/epstein"

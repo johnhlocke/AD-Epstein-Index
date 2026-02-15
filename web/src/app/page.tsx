@@ -14,7 +14,8 @@ import { AestheticAnalysis } from "@/components/landing/AestheticAnalysis";
 import { TestingAesthetic } from "@/components/landing/TestingAesthetic";
 import { Conclusion } from "@/components/landing/Conclusion";
 import { WhatsNext } from "@/components/landing/WhatsNext";
-import { MethodologySection } from "@/components/landing/MethodologySection";
+import { AgentMethodologySection } from "@/components/landing/MethodologySection";
+import { AestheticMethodologySection } from "@/components/landing/AestheticMethodologySection";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic"; // Render on-demand, not at build time
@@ -136,8 +137,11 @@ export default async function Home() {
       {/* ── What's Next + Contact ── */}
       <WhatsNext />
 
-      {/* ── Methodology ── */}
-      <MethodologySection radarData={radarData} />
+      {/* ── Methodology: Agent AI ── */}
+      <AgentMethodologySection />
+
+      {/* ── Methodology: Aesthetic Metric ── */}
+      <AestheticMethodologySection />
     </div>
   );
 }

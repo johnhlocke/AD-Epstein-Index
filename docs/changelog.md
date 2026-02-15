@@ -6,6 +6,28 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-15 (Session 36)
+
+### Added — Aesthetic Methodology Section (Warm Dark-Cream Palette)
+
+- **`web/src/components/landing/AestheticMethodologySection.tsx`** — NEW: Standalone methodology section for the v2 9-axis scoring instrument, visually distinct from the Agent Methodology section
+- **Warm dark-cream palette**: BG `#1B1815`, card `#242019`, border `#3A332A`, text `#E8E0D4`/`#B0A594` — espresso tones vs the cool purple-blue of Agent Methodology
+- **Typography split**: Inter (BODY) for prose/descriptions, JetBrains Mono (MONO) for headers/labels/data values — scholarly instrument feel, not terminal
+- **9-axis radar chart**: Recharts RadarChart showing all 9 predicted divergence values (AD Baseline vs Epstein Orbit), group-colored axis labels (SPACE/STORY/STAGE), full-width card
+- **Three sections**: The Instrument (9 axis cards with 1-5 scale bars), The Epstein Signature (diagnostic formula + predicted gaps), Scoring Methodology (rater/input/validation + bibliography)
+- **Proper bibliography**: 8 academic citations formatted with italic titles, journal names, article titles in quotes — single column layout
+- **Warm card glow**: Subtle copper box-shadow on all cards (`0 0 24px rgba(184, 115, 51, 0.06)`)
+- **1px border-top** separates Agent and Aesthetic methodology sections
+
+### Changed — Methodology Section Split
+
+- Split single `MethodologySection` into two independent sections: `AgentMethodologySection` (cool purple-blue, terminal aesthetic) and `AestheticMethodologySection` (warm dark-cream, scholarly aesthetic)
+- `page.tsx` updated to import and render both sections sequentially
+- Header nav: added "Aesthetic Methodology" link
+- Footer: added "Aesthetic Methodology" link
+
+---
+
 ## 2026-02-14 (Session 35)
 
 ### Added — Aesthetic Scoring Pipeline (Opus Vision)

@@ -109,6 +109,8 @@ This file should be automatically updated when necessary to answer three key que
 | Opus Vision scoring pipeline (score_features.py) | Phase 2 | In Progress (38/1,600) |
 | Run Opus Vision on all ~1,600 features (v2 scoring) | Phase 2 | Not Started |
 | Validation: test-retest + human calibration set | Phase 2 | Not Started |
+| Aesthetic Methodology section (warm dark-cream, 9-axis radar) | Phase 3 | Done |
+| Methodology split (Agent AI + Aesthetic Metric) | Phase 3 | Done |
 | Simplified page layout (remove 5 charts, reorder) | Phase 3 | Done |
 | Key Finding editorial section | Phase 3 | Done |
 | Confirmed Timeline visualization | Phase 3 | Done |
@@ -230,7 +232,7 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 **Tech stack:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Shadcn UI, Recharts
 
 **Pages & Routes:**
-- Landing page with streamlined sections: Hero, Key Finding, Searchable Index (confirmed-only default, 8 rows, full width), Confirmed Timeline, Knowledge Graph, Methodology (dark investigative theme with agent grid)
+- Landing page with streamlined sections: Hero, Key Finding, Searchable Index, Confirmed Timeline, Knowledge Graph, Dossier Example, Aesthetic Pivot, Epstein Aesthetic (radar), Aesthetic Analysis, Testing Aesthetic, Conclusion, What's Next, Agent Methodology (cool purple-blue), Aesthetic Methodology (warm dark-cream)
 - Dossier detail pages (`/dossier/[id]`) with evidence sections, verdict badges, article images
 - API routes: `/api/stats`, `/api/features` (paginated + filterable + confirmed-only), `/api/dossiers`, `/api/dossiers/[id]`
 
