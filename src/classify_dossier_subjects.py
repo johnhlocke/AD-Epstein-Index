@@ -4,11 +4,12 @@
 Classifies names on the `features` table first (full baseline), then copies
 to the `dossiers` table via feature_id linkage.
 
-Categories: Associate, Politician, Legal, Royalty, Celebrity, Business, Designer, Socialite, Other
+Categories: Associate, Politician, Legal, Royalty, Celebrity, Business, Designer, Socialite, Private, Other
 
 Usage:
     python3 src/classify_dossier_subjects.py              # classify all untagged
     python3 src/classify_dossier_subjects.py --all         # reclassify everything
+    python3 src/classify_dossier_subjects.py --reclassify-other  # split Other into Private/Other
     python3 src/classify_dossier_subjects.py --dry-run     # preview without saving
 """
 
@@ -32,6 +33,7 @@ VALID_CATEGORIES = [
     "Business",
     "Designer",
     "Socialite",
+    "Private",
     "Other",
 ]
 
@@ -46,34 +48,56 @@ Categories:
 - **Business**: Business executives, financiers, investors, real estate developers (e.g., Leon Black, Les Wexner, Mort Zuckerman)
 - **Designer**: Architects, interior designers, decorators (e.g., Mark Hampton, Mario Buatta, Peter Marino)
 - **Socialite**: Society figures, philanthropists, prominent social figures known primarily for social status rather than a specific profession (e.g., Ivana Trump, Nan Kempner)
-- **Other**: Does not fit any of the above, or name is unrecognizable
+- **Private**: NOT a public figure — you do not recognize this person. They are likely a private wealthy homeowner featured in AD. Most unrecognizable names should be Private.
+- **Other**: A recognizable public figure who does NOT fit the categories above (e.g., a famous doctor, famous writer, famous chef, famous scientist)
 
 Rules:
 - Choose the SINGLE most prominent category for each person
 - If someone is famous for multiple things, pick what they're BEST known for
 - Fashion designers and brand founders are "Business" unless they're primarily celebrities
 - "Designer" is ONLY for architects and interior/home designers (the AD context)
-- If you don't recognize the name, use context clues from the name itself, or "Other"
-- "Anonymous" should be classified as "Other"
+- If you don't recognize the name at all, classify as "Private" — these are wealthy private citizens
+- "Anonymous", "A Scottish couple", "young investor", vague descriptions → "Private"
 - Couples like "John and Jane Smith" — classify based on the more prominent person
+- "Other" is ONLY for famous/recognizable people who don't fit the main categories
 
 For each person below, respond with a JSON object mapping the name exactly as given to their category.
 
 People to classify:
 {names}
 
-Respond with ONLY valid JSON. Example: {{"John Smith": "Business", "Jane Doe": "Celebrity"}}"""
+Respond with ONLY valid JSON. Example: {{"John Smith": "Private", "Jane Doe": "Celebrity"}}"""
+
+RECLASSIFY_PROMPT = """You previously classified these people as "Other" when they appeared in Architectural Digest magazine. Now we need to split "Other" into two categories:
+
+- **Private**: NOT a public figure — you do not recognize this person. They are a private wealthy homeowner. If you're unsure who someone is, they're Private.
+- **Other**: A recognizable public figure who doesn't fit standard categories (Celebrity, Business, Designer, Politician, Legal, Royalty, Socialite). Examples: a famous doctor, famous writer, famous chef, famous scientist, famous art collector.
+
+You may also reclassify into the original categories if you think the original classification was wrong:
+Associate, Politician, Legal, Royalty, Celebrity, Business, Designer, Socialite
+
+Rules:
+- If you don't recognize the name → "Private"
+- If it's a vague description ("A Scottish couple", "young investor", "Anonymous") → "Private"
+- If it's a famous person who doesn't fit other categories → "Other"
+- If you realize the person actually IS a celebrity, business figure, designer, etc. → use that category instead
+
+People to reclassify:
+{names}
+
+Respond with ONLY valid JSON. Example: {{"John Smith": "Private", "Edgar Kaufmann, Jr.": "Other"}}"""
 
 
-def classify_batch(client, names: list[str]) -> dict[str, str]:
+def classify_batch(client, names: list[str], reclassify=False) -> dict[str, str]:
     """Classify a batch of names using Haiku."""
     names_text = "\n".join(f"- {n}" for n in names)
+    prompt = RECLASSIFY_PROMPT if reclassify else PROMPT
 
     response = client.messages.create(
         model="claude-haiku-4-5-20251001",
         max_tokens=8192,
         messages=[
-            {"role": "user", "content": PROMPT.format(names=names_text)},
+            {"role": "user", "content": prompt.format(names=names_text)},
         ],
     )
 
@@ -111,6 +135,7 @@ def paginated_select(sb, table, columns):
 def main():
     parser = argparse.ArgumentParser(description="Classify AD homeowner names by profession")
     parser.add_argument("--all", action="store_true", help="Reclassify everything")
+    parser.add_argument("--reclassify-other", action="store_true", help="Split Other into Private/Other")
     parser.add_argument("--dry-run", action="store_true", help="Preview without saving")
     args = parser.parse_args()
 
@@ -123,7 +148,10 @@ def main():
     named_features = [f for f in all_features if f.get("homeowner_name")]
     print(f"Total features: {len(all_features)}, Named: {len(named_features)}")
 
-    if not args.all:
+    if args.reclassify_other:
+        named_features = [f for f in named_features if f.get("subject_category") == "Other"]
+        print(f"Currently 'Other': {len(named_features)}")
+    elif not args.all:
         named_features = [f for f in named_features if not f.get("subject_category")]
         print(f"Untagged: {len(named_features)}")
 
@@ -155,7 +183,7 @@ def main():
         total_batches = (len(unique_names) + BATCH_SIZE - 1) // BATCH_SIZE
         print(f"\nBatch {batch_num}/{total_batches} ({len(batch)} names)...")
         try:
-            result = classify_batch(client, batch)
+            result = classify_batch(client, batch, reclassify=args.reclassify_other)
             all_classifications.update(result)
             print(f"  Classified {len(result)} names")
         except Exception as e:
@@ -202,13 +230,23 @@ def main():
 
     print(f"  Done: {updated_features} features updated")
 
-    # ── Step 7: Copy to dossiers table via feature_id ────────────────────
-    print("\nUpdating dossiers...")
+    # ── Step 7: Copy to dossiers table from features ─────────────────────
+    # Build full lookup from ALL features (not just classified batch)
+    print("\nUpdating dossiers from features...")
+    all_feats = paginated_select(sb, "features", "id, homeowner_name, subject_category")
+    feat_lookup = {}
+    for f in all_feats:
+        name = (f.get("homeowner_name") or "").strip().lower()
+        if name and f.get("subject_category"):
+            feat_lookup[name] = f["subject_category"]
+    feat_by_id = {f["id"]: f.get("subject_category") for f in all_feats}
+
     dossiers = paginated_select(sb, "dossiers", "id, feature_id, subject_name")
     updated_dossiers = 0
     for d in dossiers:
-        name = (d.get("subject_name") or "").strip()
-        cat = classification_lookup.get(name.lower(), "Other")
+        fid = d.get("feature_id")
+        name = (d.get("subject_name") or "").strip().lower()
+        cat = feat_by_id.get(fid) or feat_lookup.get(name) or "Private"
         sb.table("dossiers").update({"subject_category": cat}).eq("id", d["id"]).execute()
         updated_dossiers += 1
 
