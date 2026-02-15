@@ -940,7 +940,8 @@ def build_now_processing(manifest_stats, extraction_stats, xref_stats, dossier_s
         now["reader"] = {"task": "Waiting for Courier", "active": False}
 
     if awaiting_xref > 0:
-        now["detective"] = {"task": f"Checking ({awaiting_xref} remaining)", "active": True}
+        pct = int(xref_stats["checked"] / manifest_stats["with_homeowner"] * 100) if manifest_stats["with_homeowner"] else 0
+        now["detective"] = {"task": f"Cross-referencing {xref_stats['checked']}/{manifest_stats['with_homeowner']} ({pct}%) — {awaiting_xref} remaining", "active": True}
     elif xref_stats["checked"] > 0:
         now["detective"] = {"task": f"All {xref_stats['checked']} checked", "active": False}
     else:
@@ -1344,10 +1345,14 @@ def generate_status():
         reader_msg = "Waiting for downloads..."
 
     # Detective message
-    if active_leads > 0:
-        detective_msg = f"{active_leads} leads found in {xref_stats['checked']} names checked"
+    awaiting_xref = manifest_stats["with_homeowner"] - xref_stats["checked"]
+    if awaiting_xref > 0:
+        pct = int(xref_stats["checked"] / manifest_stats["with_homeowner"] * 100) if manifest_stats["with_homeowner"] else 0
+        detective_msg = f"Checking {xref_stats['checked']}/{manifest_stats['with_homeowner']} names ({pct}%) — {awaiting_xref} remaining, {active_leads} leads"
+    elif active_leads > 0:
+        detective_msg = f"Done — {active_leads} leads found in {xref_stats['checked']} names"
     elif xref_stats["checked"] > 0:
-        detective_msg = f"No matches yet ({xref_stats['checked']} names checked)"
+        detective_msg = f"Done — no matches ({xref_stats['checked']} names checked)"
     else:
         detective_msg = "Waiting for extracted names..."
 
