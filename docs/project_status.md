@@ -101,9 +101,14 @@ This file should be automatically updated when necessary to answer three key que
 | Hero section redesign (Futura PT, epigraph, stats grid) | Phase 3 | Done |
 | Figma design system sync (hero, header, grid alignment) | Phase 3 | Done |
 | Logo exploration (They Live Wayfarer concept) | Phase 3 | In Progress |
-| 6-dimension aesthetic taxonomy (all features tagged) | Phase 2 | Done |
-| Aesthetic comparison: Epstein orbit vs general AD | Phase 2 | Done |
+| 6-dimension aesthetic taxonomy (all features tagged) | Phase 2 | Done (v1 — superseded by v2) |
+| Aesthetic comparison: Epstein orbit vs general AD | Phase 2 | Done (v1 — superseded by v2) |
 | Deep extract confirmed names (Vision + taxonomy) | Phase 2 | Done |
+| 9-axis aesthetic scoring instrument v2 (design) | Phase 2 | Done |
+| Feature image backfill (Azure Blob → Supabase Storage) | Phase 2 | In Progress |
+| Opus Vision scoring pipeline (score_features.py) | Phase 2 | In Progress (38/1,600) |
+| Run Opus Vision on all ~1,600 features (v2 scoring) | Phase 2 | Not Started |
+| Validation: test-retest + human calibration set | Phase 2 | Not Started |
 | Simplified page layout (remove 5 charts, reorder) | Phase 3 | Done |
 | Key Finding editorial section | Phase 3 | Done |
 | Confirmed Timeline visualization | Phase 3 | Done |
@@ -311,8 +316,15 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - ~~Store cross-reference data in Supabase~~ **Done** (`cross_references` table)
 - Complete dossier building for all flagged leads (~259 dossiers, 64 confirmed)
 - Manual review of HIGH and MEDIUM connection strength dossiers
-- ~~6-dimension aesthetic taxonomy for all features~~ **Done** (1,622 features tagged, $2.90 cost)
-- ~~Statistical comparison: Epstein aesthetic vs general AD population~~ **Done** (strong signals found)
+- ~~6-dimension aesthetic taxonomy for all features~~ **Done** (v1: 1,622 features tagged, $2.90 cost — superseded by v2)
+- ~~Statistical comparison: Epstein aesthetic vs general AD population~~ **Done** (v1: strong signals found — v2 pending)
+- **9-axis aesthetic scoring instrument v2 designed** — see `docs/aesthetic-scoring-instrument.md`
+- **Opus Vision scoring pipeline built** — `src/score_features.py` scores features, `src/backfill_feature_images.py` downloads page images
+- 38 features scored in initial test (Opus, ~$0.08/feature). Full run pending (~$128 for all 1,600)
+- 146 features backfilled with images (1,102 page images in Supabase Storage)
+- 3-strategy article matching reduces skip rate from ~30% to ~5%
+- Run Opus Vision with v2 rubric on all ~1,600 features
+- Validate with test-retest reliability (20 features) + human calibration set (25-30 features)
 
 **Phase 3 — Interactive Website:**
 - ~~Design and build public-facing visualization website~~ **Done**

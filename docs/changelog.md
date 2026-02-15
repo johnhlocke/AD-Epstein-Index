@@ -6,6 +6,55 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-14 (Session 35)
+
+### Added — Aesthetic Scoring Pipeline (Opus Vision)
+
+- **`src/score_features.py`** — NEW: Opus Vision scoring script implementing v2 9-axis rubric. Sends article page images + rubric prompt to Claude, extracts 1-5 numeric scores for all 9 axes, updates `features` table. Flags: `--dry-run`, `--limit`, `--id`, `--rescore`, `--model`.
+- **`src/backfill_feature_images.py`** — NEW: Downloads article page images from Azure Blob Storage (free, public) and uploads to Supabase Storage (`feature-images` bucket). Records URLs in `feature_images` table. Flags: `--dry-run`, `--limit`, `--id`, `--skip-done`, `--unscored`.
+- **`migrations/002_feature_images_and_scores.sql`** — NEW: Adds 9 SMALLINT score columns (1-5 CHECK constraints) + `scoring_version` + `scored_at` to features table. Creates `feature_images` table with storage paths and public URLs.
+
+### Changed — 3-Strategy Article Matching
+
+- Both `score_features.py` and `backfill_feature_images.py` now use 3-strategy matching to find articles in the AD Archive JWT catalog:
+  1. **Name matching**: Homeowner last name in Title/Teaser/Creator (original approach)
+  2. **Title matching**: Feature's `article_title` against JWT Title field
+  3. **Page number matching**: Feature's `page_number` falls within article's PageRange
+- Reduces skip rate from ~30% to ~5% — features like "Virginia's Shirley Plantation" (Hill Carter) and "High Style in Palm Beach" (Irene Benson Williams) now resolve correctly
+
+### Database
+
+- Added 9 score columns to `features`: `score_grandeur`, `score_material_warmth`, `score_maximalism`, `score_historicism`, `score_provenance`, `score_hospitality`, `score_formality`, `score_curation`, `score_theatricality`
+- Added `scoring_version TEXT` and `scored_at TIMESTAMPTZ` to features
+- Created `feature_images` table (feature_id, page_number, storage_path, public_url)
+- Created `feature-images` Supabase Storage bucket (public)
+
+### Initial Scoring Results (38 features)
+
+- 38 features scored with Opus Vision at ~$0.08/feature
+- Average scores: Grandeur 3.2, Material Warmth 4.5, Maximalism 3.3, Historicism 3.4, Provenance 4.4, Hospitality 2.6, Formality 2.6, Curation 2.6, Theatricality 1.9
+- STAGE composite ranges from 3 (Vonnegut, Updike) to 12 (Nile Rodgers, Cecil Hayes)
+- These 38 will be re-scored with full image sets (originally capped at 6 images)
+
+---
+
+## 2026-02-14 (Session 34)
+
+### Added — 9-Axis Aesthetic Scoring Instrument v2
+
+- **`docs/aesthetic-scoring-instrument.md`** — NEW: Complete specification for the v2 scoring system replacing the v1 categorical taxonomy
+- **9 axes in 3 groups**: SPACE (Grandeur, Material Warmth, Maximalism), STORY (Historicism, Provenance, Hospitality), STAGE (Formality, Curation, Theatricality)
+- Numeric 1-5 scales replace single-select categorical values — enables statistical analysis (t-tests, effect sizes, clustering, PCA)
+- Each axis has concrete scoring anchors calibrated through Q&A with licensed architect/designer
+- 8 academic citations grounding methodology in Bourdieu, Veblen, Shabrina et al., semantic differential theory, and LLM-as-a-Judge reliability
+- Previous "Eclecticism" axis removed — redundant with Historicism (same dimension, opposite ends)
+- New "Hospitality" axis added — private retreat vs. social venue. Critical for Epstein investigation (homes as venues)
+- Predicted Epstein signature: STAGE group (Formality + Curation + Theatricality) shows largest divergence from baseline
+- Diagnostic composite formula: `(Theatricality + Curation + Formality) - (Provenance + Material Warmth)`
+- Two edge case exercises validated scoring consistency (Palm Beach mansion, Connecticut farmhouse)
+
+---
+
 ## 2026-02-14 (Session 33)
 
 ### Added — Subject Category Classification (Profession Tags)
