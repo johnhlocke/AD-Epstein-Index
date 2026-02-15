@@ -30,7 +30,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 AD_ARCHIVE_BLOB_BASE = "https://architecturaldigest.blob.core.windows.net/architecturaldigest{date}thumbnails/Pages/0x600/{page}.jpg"
-MODEL = "claude-haiku-4-5-20251001"
+MODEL = "claude-opus-4-6"
 MAX_IMAGES_PER_CALL = 6  # Stay within token limits
 
 
@@ -226,15 +226,19 @@ def extract_with_vision(article_meta, page_images, year, month, name):
 
 
 def update_feature(sb, feature_id, extracted, current):
-    """Update Supabase feature with enriched data. Only fill NULLs, don't overwrite."""
+    """Update Supabase feature with enriched data from deep extract (article pages).
+
+    Deep extract reads actual article page images via Vision, which is strictly
+    more accurate than teaser-only extraction. So we overwrite teaser data when
+    deep extract provides a valid value.
+    """
     update = {}
 
     def maybe_set(db_col, value):
-        """Set column only if it's currently NULL and new value is valid."""
-        if current.get(db_col) is not None:
-            return  # Don't overwrite existing data
+        """Set column if new value is valid. Overwrites teaser data — deep extract is authoritative."""
         if value and str(value).lower() not in ("null", "none", "n/a", "unknown"):
-            update[db_col] = value
+            if value != current.get(db_col):  # Only update if actually different
+                update[db_col] = value
 
     # Extract structural and social data using taxonomy helper
     enriched, social = extract_structural_and_social(extracted)
@@ -250,7 +254,7 @@ def update_feature(sb, feature_id, extracted, current):
 
     # Square footage — extract numeric value
     sqft = enriched.get("square_footage")
-    if sqft and current.get("square_footage") is None:
+    if sqft:
         if isinstance(sqft, (int, float)):
             update["square_footage"] = int(sqft)
         else:
@@ -260,13 +264,19 @@ def update_feature(sb, feature_id, extracted, current):
 
     # Cost — store as string
     cost = enriched.get("cost")
-    if cost and current.get("cost") is None:
+    if cost:
         update["cost"] = str(cost)
 
-    # Parse and store aesthetic profile
+    # Parse and store aesthetic profile — overwrite batch_tag with deep_extract
     profile = parse_aesthetic_response(json.dumps(extracted), source="deep_extract")
-    if profile and not current.get("aesthetic_profile"):
-        update["aesthetic_profile"] = json.dumps(profile)
+    if profile:
+        existing = current.get("aesthetic_profile")
+        existing_source = None
+        if existing:
+            ep = existing if isinstance(existing, dict) else json.loads(existing) if isinstance(existing, str) else None
+            existing_source = ep.get("source") if ep else None
+        if not existing or existing_source != "deep_extract":
+            update["aesthetic_profile"] = json.dumps(profile)
 
     # Store social/network data in notes field as JSON
     if social:

@@ -997,6 +997,29 @@ If the download FAILED, respond:
 
         self.log(f"Deep extracted {name}: {profile.get('envelope', '?')}/{profile.get('atmosphere', '?')}")
 
+        # Upload page images to Supabase Storage for dossier display
+        uploaded_images = []
+        try:
+            from db import upload_to_storage
+            for page_num, img_bytes in page_images:
+                try:
+                    storage_path = f"{feature_id}/page_{page_num}.jpg"
+                    public_url = upload_to_storage(
+                        "dossier-images", storage_path, img_bytes,
+                        content_type="image/jpeg",
+                    )
+                    uploaded_images.append({"page_number": page_num, "storage_path": storage_path, "public_url": public_url})
+                except Exception as e:
+                    # May fail if image already exists — that's fine
+                    if "Duplicate" in str(e) or "already exists" in str(e):
+                        pass
+                    else:
+                        self.log(f"Image upload page {page_num}: {e}", level="WARN")
+            if uploaded_images:
+                self.log(f"Uploaded {len(uploaded_images)} page images for {name}")
+        except Exception as e:
+            self.log(f"Image upload setup failed: {e}", level="WARN")
+
         return TaskResult(
             task_id=task.id, task_type=task.type, status="success",
             result={
@@ -1005,6 +1028,7 @@ If the download FAILED, respond:
                 "aesthetic_profile": profile,
                 "enriched_fields": enriched,
                 "social_data": social,
+                "uploaded_images": uploaded_images,
             },
             agent=self.name,
         )
@@ -1028,7 +1052,7 @@ If the download FAILED, respond:
         return fetched
 
     def _vision_extract_with_taxonomy(self, prompt, page_images):
-        """Send page images to Claude Haiku Vision, batching if needed. Returns merged dict."""
+        """Send page images to Claude Opus Vision, batching if needed. Returns merged dict."""
         import base64
 
         api_key = os.environ.get("ANTHROPIC_API_KEY")
@@ -1056,7 +1080,7 @@ If the download FAILED, respond:
             content.append({"type": "text", "text": prompt})
 
             try:
-                model_id = "claude-haiku-4-5-20251001"
+                model_id = "claude-opus-4-6"  # Opus for deep extract — accuracy matters
                 message = client.messages.create(
                     model=model_id,
                     max_tokens=2048,

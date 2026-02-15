@@ -1349,7 +1349,8 @@ class EditorAgent(Agent):
         # Build update dict
         update = {"aesthetic_profile": _json.dumps(profile) if isinstance(profile, dict) else profile}
 
-        # Fill NULL structural fields from enriched data
+        # Overwrite structural fields — deep extract (Vision on article pages) is
+        # authoritative over teaser-only extraction.
         try:
             sb = get_supabase()
             current = sb.table("features").select("*").eq("id", feature_id).execute()
@@ -1357,22 +1358,22 @@ class EditorAgent(Agent):
                 cur = current.data[0]
                 for col in ["location_city", "location_state", "location_country",
                             "design_style", "designer_name", "architecture_firm"]:
-                    if cur.get(col) is None and enriched.get(col):
+                    if enriched.get(col):
                         val = enriched[col]
-                        if str(val).lower() not in ("null", "none", "n/a"):
+                        if str(val).lower() not in ("null", "none", "n/a") and val != cur.get(col):
                             update[col] = val
 
-                if cur.get("year_built") is None and enriched.get("year_built"):
+                if enriched.get("year_built"):
                     val = enriched["year_built"]
                     if isinstance(val, (int, float)):
                         update["year_built"] = int(val)
 
-                if cur.get("square_footage") is None and enriched.get("square_footage"):
+                if enriched.get("square_footage"):
                     val = enriched["square_footage"]
                     if isinstance(val, (int, float)):
                         update["square_footage"] = int(val)
 
-                if cur.get("cost") is None and enriched.get("cost"):
+                if enriched.get("cost"):
                     val = str(enriched["cost"])
                     if val.lower() not in ("null", "none"):
                         update["cost"] = val
@@ -1393,7 +1394,30 @@ class EditorAgent(Agent):
             # Write to Supabase
             sb.table("features").update(update).eq("id", feature_id).execute()
             self.log(f"Deep extracted: {name} — {profile.get('envelope', '?')}/{profile.get('atmosphere', '?')}")
-            # Graph sync happens periodically via strategic assessment, not per-feature
+
+            # Insert dossier image records if Courier uploaded page images
+            uploaded_images = data.get("uploaded_images", [])
+            if uploaded_images and feature_id:
+                # Find dossier_id for this feature
+                dossier_row = sb.table("dossiers").select("id").eq("feature_id", feature_id).execute()
+                if dossier_row.data:
+                    dossier_id = dossier_row.data[0]["id"]
+                    # Check for existing images to avoid duplicates
+                    existing = sb.table("dossier_images").select("page_number").eq("dossier_id", dossier_id).execute()
+                    existing_pages = {r["page_number"] for r in (existing.data or [])}
+                    inserted = 0
+                    for img in uploaded_images:
+                        if img["page_number"] not in existing_pages:
+                            try:
+                                insert_dossier_image(
+                                    dossier_id, feature_id,
+                                    img["page_number"], img["storage_path"], img["public_url"],
+                                )
+                                inserted += 1
+                            except Exception as e:
+                                self.log(f"Dossier image insert failed (p{img['page_number']}): {e}", level="WARN")
+                    if inserted:
+                        self.log(f"Saved {inserted} dossier images for {name}")
 
         except Exception as e:
             self.log(f"Failed to commit deep extract for {name}: {e}", level="ERROR")

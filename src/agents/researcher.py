@@ -1126,7 +1126,8 @@ Respond with JSON only:
       "source": "black_book | doj_library",
       "match_type": "exact | last_first | last_name_only",
       "evidence": "What was found",
-      "context": "Surrounding text or document reference"
+      "context": "Surrounding text or document reference",
+      "document_urls": ["https://www.justice.gov/epstein/files/DataSet N/EFTA....pdf"]
     }}
   ]
 }}
@@ -1298,7 +1299,7 @@ Respond with the COMPLETE dossier JSON:
   "ad_appearance": {{...from step 2...}},
   "home_analysis": {{...from step 2...}},
   "visual_analysis": {{...from step 2 or null...}},
-  "epstein_connections": [...from step 2...],
+  "epstein_connections": [...from step 2, include document_urls for each...],
   "pattern_analysis": {{
     "shared_designers": [],
     "shared_locations": [],
