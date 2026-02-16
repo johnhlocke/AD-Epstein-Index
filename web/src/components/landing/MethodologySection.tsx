@@ -43,8 +43,10 @@ const phases = [
 ];
 
 const pipelineStats = [
-  { label: "AGENTS DEPLOYED", value: "7" },
-  { label: "MODELS USED", value: "4" },
+  { label: "AGENTS", value: "7" },
+  { label: "AI MODELS: OPUS, SONNET, HAIKU, GEMINI", value: "4" },
+  { label: "DATABASES: SUPABASE, NEO4J, VECTOR", value: "3" },
+  { label: "YEARS: 1988–2025", value: "37" },
   { label: "API COST", value: "~$55" },
   { label: "TOTAL RUNTIME", value: "~18h" },
 ];
@@ -62,36 +64,42 @@ const subAgents = [
     name: "Arthur",
     role: "Scout",
     sprite: "/agents/scout_front_trans.png",
+    accent: "#5B8DEF",
     description: "Discovers and catalogues every AD issue on archive.org. Manages the download queue and prioritizes undiscovered issues.",
   },
   {
     name: "Casey",
     role: "Courier",
     sprite: "/agents/courier_front_trans.png",
+    accent: "#9B7EDB",
     description: "Downloads PDFs and extracts page images. Handles archive.org rate limiting and JWT-based article parsing.",
   },
   {
     name: "Elias",
     role: "Reader",
     sprite: "/agents/reader_front_trans.png",
+    accent: "#4ECDC4",
     description: "Vision AI specialist. Reads magazine pages and extracts homeowner names, designers, locations, styles, and metrics from each feature.",
   },
   {
     name: "Silas",
     role: "Detective",
     sprite: "/agents/detective_front_trans.png",
+    accent: "#E07474",
     description: "Cross-references every name against the Little Black Book and DOJ Epstein Library. Produces match verdicts with confidence tiers.",
   },
   {
     name: "Elena",
     role: "Researcher",
     sprite: "/agents/researcher_front_trans.png",
+    accent: "#E8B84E",
     description: "Builds investigative dossiers on flagged names. Synthesizes evidence from multiple sources into structured reports.",
   },
   {
     name: "Sable",
     role: "Designer",
     sprite: "/agents/designer_front_trans.png",
+    accent: "#D97EC4",
     description: "Designs and builds the public-facing website. Translates pipeline data into interactive visualizations, charts, and searchable interfaces.",
   },
 ];
@@ -259,20 +267,81 @@ export function AgentMethodologySection() {
           Mapping the Names that Appear in both Architectural Digest and the Epstein Files.
         </p>
 
-        {/* Methodology intro — synced from Figma node 32:2702 */}
-        <p
-          className="mt-4 max-w-[620px] text-[13px] leading-[1.8]"
+        {/* Methodology intro — synced from Figma */}
+        <div
+          className="mt-4 flex flex-col gap-4 max-w-[620px] text-[13px] leading-[1.8]"
           style={{ fontFamily: MONO, color: TEXT_MID }}
         >
-          This investigation was conducted entirely by autonomous AI agents
-          &mdash; seven specialized workers coordinated by an editor agent,
-          with zero manual data entry. Every name, date, location, and
-          connection documented on this site was discovered, extracted,
-          cross-referenced, and verified through a three-phase pipeline. The
-          methodology below describes each phase in detail, from initial
-          magazine discovery through Epstein record cross-referencing to final
-          editorial review.
+          <p>
+            This investigation was conducted entirely by autonomous AI agents
+            &mdash; seven specialized workers coordinated by an editor agent,
+            with zero manual data entry. Every name, date, location, and
+            connection documented on this site was discovered, extracted,
+            cross-referenced, and verified through a three-phase pipeline. The
+            methodology below describes each phase in detail, from initial
+            magazine discovery through Epstein record cross-referencing to final
+            editorial review.
+          </p>
+          <p>
+            The pipeline ingested 28 years of Architectural Digest &mdash;
+            nearly 500 issues &mdash; and extracted over 1,600 featured homes
+            with their homeowners, designers, locations, and architectural
+            styles. Each name was then run against two primary Epstein sources:
+            the Little Black Book, a personal address book of approximately
+            1,500 contacts, and the Department of Justice&apos;s Full Epstein
+            Library, millions of pages of released legal documents searchable
+            via OCR. Names that surfaced as potential matches were handed to a
+            researcher agent for deep investigation.
+          </p>
+          <p>
+            The result is not a manual spreadsheet or a journalist&apos;s notes.
+            It is a machine-built dataset, assembled without human bias in name
+            selection, cross-referenced without editorial discretion, and
+            reviewed by an AI editor trained to reject false positives. The
+            methodology is reproducible, the code is open, and every finding can
+            be independently verified against the primary sources.
+          </p>
+        </div>
+
+        {/* THE AGENT PIPELINE — subheader + body text (synced from Figma) */}
+        <p
+          className="mt-10 text-[11px] font-bold tracking-[0.18em]"
+          style={{ fontFamily: MONO, color: GOLD_DIM }}
+        >
+          THE AGENT PIPELINE
         </p>
+        <div
+          className="mt-2 flex flex-col gap-4 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+          style={{ fontFamily: MONO, color: TEXT_MID }}
+        >
+          <p>
+            The entire investigation is run by seven autonomous AI agents
+            coordinated through a hub-and-spoke architecture. No human
+            touches the data. An editor agent &mdash; Miranda &mdash;
+            sits at the center, assigning tasks, reviewing results, and
+            making every final call on whether a connection is confirmed
+            or rejected. The other six agents report to her.
+          </p>
+          <p>
+            The pipeline operates in three sequential phases. First, the
+            AD archive is scraped and every featured home is cataloged
+            with its homeowner, designer, location, and style. Second,
+            every extracted name is cross-referenced against two Epstein
+            sources: the Little Black Book (~1,500 contacts) and the DOJ
+            Epstein Library (millions of pages of released documents).
+            Third, flagged names receive full investigative dossiers,
+            editorial review, and aesthetic scoring before being
+            published to this site.
+          </p>
+          <p>
+            The system uses four different AI models, each chosen for
+            cost and capability: Opus for editorial judgment, Sonnet for
+            research synthesis, Haiku for bulk classification, and Gemini
+            for vision tasks like reading magazine pages. Total API cost
+            for the full run was approximately $55 over ~18 hours of
+            wall-clock time.
+          </p>
+        </div>
 
         <div className="mt-6" style={{ borderTop: `1px solid ${BORDER}` }} />
 
@@ -286,42 +355,8 @@ export function AgentMethodologySection() {
             subtitle="Three phases. Seven agents. Zero manual data entry."
           />
 
-          {/* Pipeline body text — 4 minor columns wide */}
-          <div
-            className="mt-4 flex flex-col gap-4 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
-            style={{ fontFamily: MONO, color: TEXT_MID }}
-          >
-            <p>
-              The entire investigation is run by seven autonomous AI agents
-              coordinated through a hub-and-spoke architecture. No human
-              touches the data. An editor agent &mdash; Miranda &mdash;
-              sits at the center, assigning tasks, reviewing results, and
-              making every final call on whether a connection is confirmed
-              or rejected. The other six agents report to her.
-            </p>
-            <p>
-              The pipeline operates in three sequential phases. First, the
-              AD archive is scraped and every featured home is cataloged
-              with its homeowner, designer, location, and style. Second,
-              every extracted name is cross-referenced against two Epstein
-              sources: the Little Black Book (~1,500 contacts) and the DOJ
-              Epstein Library (millions of pages of released documents).
-              Third, flagged names receive full investigative dossiers,
-              editorial review, and aesthetic scoring before being
-              published to this site.
-            </p>
-            <p>
-              The system uses four different AI models, each chosen for
-              cost and capability: Opus for editorial judgment, Sonnet for
-              research synthesis, Haiku for bulk classification, and Gemini
-              for vision tasks like reading magazine pages. Total API cost
-              for the full run was approximately $55 over ~18 hours of
-              wall-clock time.
-            </p>
-          </div>
-
-          {/* Pipeline stats — moved here from bottom */}
-          <div className="mt-8 grid grid-cols-2 gap-6 md:grid-cols-4">
+          {/* Pipeline stats — 6-col grid aligned with page columns */}
+          <div className="mt-8 grid grid-cols-3 gap-6 md:grid-cols-6">
             {pipelineStats.map((stat) => (
               <div key={stat.label}>
                 <p
@@ -339,6 +374,114 @@ export function AgentMethodologySection() {
               </div>
             ))}
           </div>
+
+          {/* Pipeline flow diagram — interlocking chevron blocks */}
+          {(() => {
+            const PIPE_BG = "#222038";
+            const PIPE_BORDER = "#2e2b45";
+            const NOTCH = 16; // px depth of chevron point/notch
+            const nodes = [
+              { label: "ISSUES", count: "480" },
+              { label: "FEATURES", count: "2,180" },
+              { label: "CROSS-REFS", count: "476" },
+              { label: "DOSSIERS", count: "185" },
+              { label: "VERDICTS", count: "33" },
+              { label: "PUBLISHED", count: "wheretheylive.world" },
+            ];
+            const isFirst = (i: number) => i === 0;
+            const isLast = (i: number) => i === nodes.length - 1;
+            // clip-path for interlocking chevron shapes
+            const clipFor = (i: number) => {
+              if (isFirst(i)) {
+                // flat left, pointed right
+                return `polygon(0 0, calc(100% - ${NOTCH}px) 0, 100% 50%, calc(100% - ${NOTCH}px) 100%, 0 100%)`;
+              }
+              if (isLast(i)) {
+                // notched left, flat right
+                return `polygon(0 0, 100% 0, 100% 100%, 0 100%, ${NOTCH}px 50%)`;
+              }
+              // notched left, pointed right
+              return `polygon(0 0, calc(100% - ${NOTCH}px) 0, 100% 50%, calc(100% - ${NOTCH}px) 100%, 0 100%, ${NOTCH}px 50%)`;
+            };
+            // Down arrow for mobile
+            const DownArrow = () => (
+              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="mx-auto my-1">
+                <path d="M10 4 L10 14" stroke={TEXT_DIM} strokeWidth="1.5" strokeLinecap="round" />
+                <path d="M6 11 L10 16 L14 11" stroke={TEXT_DIM} strokeWidth="1.5" fill="none" strokeLinecap="round" />
+              </svg>
+            );
+            return (
+              <div className="mt-10 mb-8">
+                {/* Desktop: interlocking horizontal pipeline */}
+                <div className="hidden md:flex">
+                  {nodes.map((node, i) => (
+                    <div
+                      key={node.label}
+                      className="flex flex-col items-center justify-center py-4 relative"
+                      style={{
+                        flex: 1,
+                        background: PIPE_BG,
+                        clipPath: clipFor(i),
+                        marginLeft: isFirst(i) ? 0 : -1,
+                        // extra horizontal padding to account for the notch/point
+                        paddingLeft: isFirst(i) ? 12 : NOTCH + 8,
+                        paddingRight: isLast(i) ? 12 : NOTCH + 8,
+                      }}
+                    >
+                      <span
+                        className="text-[13px] tracking-[0.18em] font-bold"
+                        style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                      >
+                        {node.label}
+                      </span>
+                      <span
+                        className="mt-1 text-[10px] tracking-wider"
+                        style={{
+                          fontFamily: MONO,
+                          color: isLast(i) ? GREEN : i >= 3 ? GOLD_DIM : TEXT_DIM,
+                        }}
+                      >
+                        {node.count}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                {/* Mobile: vertical pipeline */}
+                <div className="flex flex-col items-center md:hidden">
+                  {nodes.map((node, i) => (
+                    <div key={node.label} className="flex flex-col items-center w-full">
+                      <div
+                        className="flex items-center justify-center gap-3 py-2.5 w-full"
+                        style={{
+                          background: PIPE_BG,
+                          border: `1px solid ${PIPE_BORDER}`,
+                          borderBottom: isLast(i) ? `1px solid ${PIPE_BORDER}` : "none",
+                          borderRadius: isFirst(i) ? "6px 6px 0 0" : isLast(i) ? "0 0 6px 6px" : "0",
+                        }}
+                      >
+                        <span
+                          className="text-[12px] tracking-[0.18em] font-bold"
+                          style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                        >
+                          {node.label}
+                        </span>
+                        <span
+                          className="text-[10px] tracking-wider"
+                          style={{
+                            fontFamily: MONO,
+                            color: isLast(i) ? GREEN : i >= 3 ? GOLD_DIM : TEXT_DIM,
+                          }}
+                        >
+                          {node.count}
+                        </span>
+                      </div>
+                      {!isLast(i) && <DownArrow />}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Phase cards */}
           <div className="mt-10 grid gap-6 md:grid-cols-3">
@@ -388,7 +531,7 @@ export function AgentMethodologySection() {
           {/* Full 3-phase Architecture SVG — overlaps bottom of phase cards on desktop */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/pipeline-architecture.svg"
+            src="/pipeline-architecture.svg?v=2"
             alt="System Architecture — Phase 01: Scout, Courier, and Reader agents feeding data through the Editor to Supabase. Phase 02: Detective and Researcher cross-referencing names against DOJ Epstein files and Black Book. Phase 03: Deep aesthetic extraction, Designer agent, Neo4j knowledge graph, and website deployment."
             className="relative z-10 mt-6 w-full rounded md:-mt-[480px]"
           />
@@ -404,10 +547,13 @@ export function AgentMethodologySection() {
             subtitle="A hub-and-spoke architecture. Seven autonomous agents, one editor, zero humans in the loop."
           />
 
-          {/* Hub-and-spoke diagram placeholder */}
-          <div className="mt-10">
-            <DiagramPlaceholder label="HUB-AND-SPOKE ARCHITECTURE DIAGRAM" />
-          </div>
+          {/* Hub-and-spoke diagram (synced from Figma) */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/hub-and-spoke.svg?v=3"
+            alt="Hub-and-spoke architecture diagram — Miranda (Editor) at center, connected to six agents: Scout, Courier, Reader, Detective, Researcher, and Designer. Shared systems: Supabase, Neo4j, Memory, and Bulletin Board."
+            className="mt-10 w-full rounded"
+          />
 
           {/* ── Miranda — Editor (hero row) ── */}
           <div
@@ -451,7 +597,11 @@ export function AgentMethodologySection() {
               <div
                 key={agent.name}
                 className="flex flex-col items-center rounded border p-4"
-                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
+                style={{
+                  backgroundColor: CARD_BG,
+                  borderColor: BORDER,
+                  borderTop: `2px solid ${agent.accent}`,
+                }}
               >
                 <div className="relative h-[120px] w-[80px]">
                   <Image
@@ -470,7 +620,7 @@ export function AgentMethodologySection() {
                 </p>
                 <p
                   className="text-[9px] tracking-wider"
-                  style={{ fontFamily: MONO, color: GREEN }}
+                  style={{ fontFamily: MONO, color: agent.accent }}
                 >
                   {agent.role.toUpperCase()}
                 </p>
@@ -482,6 +632,69 @@ export function AgentMethodologySection() {
                 </p>
               </div>
             ))}
+          </div>
+
+          {/* ── Why Personalities? — synced from Figma ── */}
+          <div className="mt-10">
+            <p
+              className="text-[11px] font-bold tracking-[0.18em]"
+              style={{ fontFamily: MONO, color: GOLD_DIM }}
+            >
+              WHY PERSONALITIES?
+            </p>
+            <div
+              className="mt-2 flex flex-col gap-4 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+              style={{ fontFamily: MONO, color: TEXT_MID }}
+            >
+              <p>
+                Why do autonomous AI agents need personalities? The short answer:
+                because personality is a form of architecture.
+              </p>
+              <p>
+                Each of the seven agents in this pipeline has a name, an archetype,
+                and a distinct voice. Miranda is modeled after Miranda Priestly
+                &mdash; demanding, terse, and intolerant of sloppy work. Silas
+                channels Sam Spade &mdash; he reports verdicts, not reasoning, and
+                treats false positives as personal affronts. Elias is Andrew Neiman
+                from <em>Whiplash</em> &mdash; quiet, intense, desperate to prove
+                himself through the quality of his extractions. Elena blends Sacha
+                Pfeiffer with narrative instinct. Arthur is the methodical archivist.
+                Casey is the tireless courier. Sable is the craft-obsessed designer
+                who quotes Vignelli.
+              </p>
+              <p>
+                These are not cosmetic choices. Each personality encodes specific
+                behavioral constraints that shape how the agent processes information
+                and communicates results. When Miranda reviews a dossier, her Priestly
+                persona compels her to reject anything that doesn&apos;t meet her
+                exacting standards &mdash; functioning as a quality gate without
+                explicit rules about rejection thresholds. When Silas delivers a
+                verdict, his Sam Spade persona keeps the output terse and confident,
+                preventing the rambling hedged assessments that plague most AI systems.
+              </p>
+              <p>
+                The personality layer also solved a practical problem: legibility. A
+                pipeline with seven agents generating thousands of tasks produces
+                enormous volumes of log data. When those logs read like character
+                dialogue &mdash; Miranda&apos;s clipped directives, Elena&apos;s
+                methodical research notes, Arthur&apos;s eager status reports &mdash;
+                the system becomes comprehensible to human observers. The Agent Office
+                dashboard, a real-time pixel-art visualization of the pipeline, works
+                precisely because each agent&apos;s speech patterns are instantly
+                recognizable.
+              </p>
+              <p>
+                Perhaps most importantly, the hierarchical personality structure
+                &mdash; Miranda at the top, the other agents reporting to her &mdash;
+                creates a natural quality control cascade. Miranda&apos;s editorial
+                persona means she is constitutionally incapable of rubber-stamping
+                results. Every confirmed connection, every rejected false positive,
+                passes through an agent whose defining character trait is demanding
+                better work. The result is a system that self-corrects not through
+                explicit error-handling code, but through the social dynamics encoded
+                in its personality architecture.
+              </p>
+            </div>
           </div>
 
           {/* Agent Office showcase */}
@@ -540,11 +753,64 @@ export function AgentMethodologySection() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 3: LIMITATIONS AND DISCLAIMERS
+            SECTION 3: UI DESIGN
         ══════════════════════════════════════════════════════════════════ */}
         <div className="mt-24">
           <SectionHeader
             num="3"
+            title="UI DESIGN"
+            subtitle="From Figma to production. How the website was designed and built."
+          />
+
+          <div
+            className="mt-8 flex flex-col gap-4 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+            style={{ fontFamily: MONO, color: TEXT_MID }}
+          >
+            <p>
+              The website was designed in Figma by Sable, the seventh agent in the
+              pipeline. Unlike the other six agents who operate autonomously, Sable
+              works iteratively with the human user &mdash; proposing layouts,
+              refining typography, and building components directly in a shared
+              Figma file. The design system was defined collaboratively: a 6-column
+              grid, JetBrains Mono for the methodology sections, Futura PT for the
+              editorial voice, and a restrained palette of copper, gold, and deep
+              purple.
+            </p>
+            <p>
+              The Figma file serves as the single source of truth for all visual
+              decisions. Every diagram on this page &mdash; the pipeline
+              architecture, the hub-and-spoke system, the aesthetic instrument
+              &mdash; was designed in Figma first, then exported as SVG and
+              embedded directly into the site. When colors, strokes, or layouts
+              change in Figma, the SVGs are re-exported and the site updates to
+              match.
+            </p>
+            <p>
+              The site itself is built with Next.js, Tailwind CSS, and Shadcn UI
+              components, deployed on Vercel. All data is fetched server-side from
+              Supabase &mdash; no API keys are exposed to the client. The
+              searchable index, dossier pages, and interactive charts all pull from
+              the same live pipeline database. Every number on the page is real and
+              current.
+            </p>
+            <p>
+              The design process is recursive: Sable reads the design rules
+              document, proposes layouts that conform to the grid system, and
+              creates components in Figma. The human user reviews, adjusts, and
+              approves. Then the approved designs are translated into production
+              code. The Figma Console MCP server enables direct read/write access
+              to the Figma file from the development environment &mdash; bridging
+              design and code in a single workflow.
+            </p>
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════
+            SECTION 4: LIMITATIONS AND DISCLAIMERS
+        ══════════════════════════════════════════════════════════════════ */}
+        <div className="mt-24">
+          <SectionHeader
+            num="4"
             title="LIMITATIONS"
             subtitle="What this project can and cannot tell you."
           />
@@ -600,11 +866,11 @@ export function AgentMethodologySection() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4: DATA SOURCES
+            SECTION 5: DATA SOURCES
         ══════════════════════════════════════════════════════════════════ */}
         <div className="mt-24">
           <SectionHeader
-            num="4"
+            num="5"
             title="DATA SOURCES"
             subtitle="Primary sources, infrastructure, and the full codebase."
           />

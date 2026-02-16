@@ -6,7 +6,7 @@ import { KeyFindingsIntro } from "@/components/landing/KeyFindingsIntro";
 import { KeyFinding } from "@/components/landing/KeyFinding";
 import { SearchableIndex } from "@/components/landing/SearchableIndex";
 import { ConfirmedTimeline } from "@/components/charts/ConfirmedTimeline";
-import { GraphPreview } from "@/components/graph/GraphPreview";
+// import { GraphPreview } from "@/components/graph/GraphPreview"; // Disabled — Neo4j queries slow down page load
 import { DossierExample } from "@/components/landing/DossierExample";
 import { AestheticPivotBridge } from "@/components/landing/AestheticPivotBridge";
 import { EpsteinAesthetic } from "@/components/landing/EpsteinAesthetic";
@@ -86,7 +86,9 @@ export default async function Home() {
         </section>
       )}
 
-      {/* ── D: How Are They Connected? (Key Finding 01 cont.) ── */}
+      {/* ── D: How Are They Connected? — DISABLED (Neo4j slows page load) ── */}
+      {/* Re-enable by uncommenting this section and the GraphPreview import above */}
+      {/*
       <section className="bg-background pb-20 pt-14" id="graph">
         <div
           className="mx-auto w-full"
@@ -96,7 +98,6 @@ export default async function Home() {
             paddingRight: "var(--grid-margin)",
           }}
         >
-          {/* Section Header */}
           <p
             className="text-[11px] font-bold uppercase tracking-[0.15em]"
             style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
@@ -109,12 +110,11 @@ export default async function Home() {
           >
             How Are They Connected?
           </h2>
-
           <Separator className="mt-5 mb-6" />
-
           <GraphPreview />
         </div>
       </section>
+      */}
 
       {/* ── Dossier Example ── */}
       <DossierExample />
