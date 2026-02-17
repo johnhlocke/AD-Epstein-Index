@@ -368,8 +368,8 @@ async def graph_sync_loop(interval=60):
     while True:
         try:
             from sync_graph import incremental_sync, export_graph_json
-            incremental_sync()
-            export_graph_json()
+            await asyncio.to_thread(incremental_sync)
+            await asyncio.to_thread(export_graph_json)
         except Exception as e:
             # Neo4j not configured or unavailable — skip silently
             print(f"  [GRAPH SYNC] Skipped: {e}")
@@ -387,7 +387,7 @@ async def watercooler_loop(interval=300):
     while True:
         try:
             from agents.watercooler import generate_conversation
-            convo = generate_conversation()
+            convo = await asyncio.to_thread(generate_conversation)
             if convo:
                 print(f"  [WATERCOOLER] {convo['name_a']} & {convo['name_b']} — {len(convo['lines'])} lines")
         except Exception as e:

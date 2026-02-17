@@ -177,3 +177,28 @@ When a training source fails, you MUST move to the next source immediately. Do N
 **Example:** If NYT website fails → switch to Scribd. If Scribd fails → switch to local_images. And so on.
 
 This ensures you make progress every cycle even when individual sources are down.
+
+
+## Update — 2026-02-16 09:39
+
+## Training Source Rotation
+When a source fails 3+ consecutive times with the same error pattern:
+1. Mark source as temporarily unavailable
+2. Skip to next source type (websites → Notion → local → Figma)
+3. Don't retry failed source until full rotation complete
+4. Log skip reason for Editor review
+
+NYT election page (anti-scraping + JS) → skip for now, try Notion next.
+
+
+## Update — 2026-02-16 09:49
+
+
+## Source Rotation Protocol
+When a source fails 3+ consecutive cycles:
+1. Mark source as `skip_source` in escalation
+2. Rotate to next source in priority list
+3. Do NOT retry same source until full rotation completes
+4. NYT pages requiring JavaScript → skip until Phase 3 browser automation
+
+Current skip list: nytimes.com/intera*

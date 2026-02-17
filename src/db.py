@@ -537,20 +537,22 @@ def list_cross_references(combined_verdict=None):
 
 
 def get_xrefs_needing_doj_retry():
-    """Get cross-references with doj_status='pending' that need DOJ retry.
+    """Get cross-references that need DOJ retry.
 
     Returns list of {feature_id, homeowner_name} for names whose DOJ search
-    was skipped (browser unavailable) but should be retried.
+    was never completed — browser unavailable, timed out, or errored.
+    Includes names that already have detective_verdict='NO' from premature
+    BB-only verdicts (they need DOJ search to confirm the NO).
     """
     sb = get_supabase()
     result = (
         sb.table("cross_references")
         .select("feature_id, homeowner_name")
-        .eq("doj_status", "pending")
+        .in_("doj_status", ["pending", "error"])
         .neq("homeowner_name", "Anonymous")
         .execute()
     )
-    return result.data
+    return result.data or []
 
 
 def get_xref_leads():

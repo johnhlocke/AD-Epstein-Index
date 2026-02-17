@@ -216,14 +216,22 @@ function SectionHeader({
         SECTION {num}
       </p>
       <h3
-        className="mt-3 text-[32px] font-bold leading-[1.1] tracking-tight"
-        style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+        className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
+        style={{
+          fontFamily: MONO,
+          color: TEXT_LIGHT,
+          maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+        }}
       >
         {title}
       </h3>
       <p
-        className="mt-3 text-[20px] leading-[1.4]"
-        style={{ fontFamily: MONO, color: TEXT_MID }}
+        className="mt-3 text-[15px] leading-[1.4]"
+        style={{
+          fontFamily: MONO,
+          color: TEXT_MID,
+          maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+        }}
       >
         {subtitle}
       </p>
@@ -645,6 +653,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     </div>
                   ))}
                 </div>
+                <p
+                  className="mt-2 text-center text-[8px] tracking-wider"
+                  style={{ fontFamily: MONO, color: TEXT_DIM }}
+                >
+                  <span style={{ color: TEXT_MID }}>Fig. 1</span> — Pipeline stages from issue discovery through feature extraction, cross-referencing, investigation, and publication.
+                </p>
               </div>
             );
           })()}
@@ -701,6 +715,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             alt="System Architecture — Phase 01: Scout, Courier, and Reader agents feeding data through the Editor to Supabase. Phase 02: Detective and Researcher cross-referencing names against DOJ Epstein files and Black Book. Phase 03: Deep aesthetic extraction, Designer agent, Neo4j knowledge graph, and website deployment."
             className="relative z-10 mt-6 w-full rounded md:-mt-[480px]"
           />
+          <p
+            className="relative z-10 mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 2</span> — Three-phase system architecture showing data flow from archive discovery through Epstein cross-referencing to website deployment.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -726,6 +746,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             alt="Hub-and-spoke architecture diagram — Miranda (Editor) at center, connected to six agents: Scout, Courier, Reader, Detective, Researcher, and Designer. Shared systems: Supabase, Neo4j, Memory, and Bulletin Board."
             className="mt-10 w-full rounded"
           />
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 3</span> — Hub-and-spoke topology with Miranda at center coordinating six specialist agents via asynchronous task queues.
+          </p>
 
         </div>
 
@@ -742,14 +768,22 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               SECTION 3
             </p>
             <h3
-              className="mt-3 text-[32px] font-bold leading-[1.1] tracking-tight"
-              style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
+              style={{
+                fontFamily: MONO,
+                color: TEXT_LIGHT,
+                maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+              }}
             >
               PERSONALITY AS ARCHITECTURE
             </h3>
             <p
-              className="mt-3 text-[20px] leading-[1.4]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
+              className="mt-3 text-[15px] leading-[1.4]"
+              style={{
+                fontFamily: MONO,
+                color: TEXT_MID,
+                maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+              }}
             >
               Why autonomous AI agents have names, archetypes, and voices &mdash; and why it technically matters.
             </p>
@@ -795,8 +829,16 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 playsInline
                 className="h-[220px] w-[160px] flex-shrink-0 object-contain"
                 style={{ imageRendering: "pixelated" }}
-                src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.webm"
-              />
+              >
+                <source
+                  src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.mov"
+                  type="video/quicktime"
+                />
+                <source
+                  src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite_webm.webm"
+                  type="video/webm"
+                />
+              </video>
               <p
                 className="mt-4 text-[15px] font-bold"
                 style={{ fontFamily: MONO, color: TEXT_LIGHT }}
@@ -817,6 +859,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </p>
             </div>
           </div>
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 4</span> — Miranda, the Editor agent, serves as the central hub — every task, verdict, and database write passes through her review.
+          </p>
 
           <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
 
@@ -881,6 +929,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </div>
             ))}
           </div>
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 5</span> — The six specialist agents, each with a dedicated language model, archetype, and behavioral constraints encoded through personality.
+          </p>
 
           <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
 
@@ -924,6 +978,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 type="video/mp4"
               />
             </video>
+            <p
+              className="mt-3 text-[8px] tracking-wider"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              <span style={{ color: TEXT_MID }}>Fig. 6</span> — The Agent Office: a real-time pixel-art dashboard showing autonomous AI coordination as it happens.
+            </p>
           </div>
         </div>
 
@@ -969,7 +1029,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </p>
               </div>
 
-              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+              {/* Connector: circle → line → arrow */}
+              <svg width="12" height="100%" viewBox="0 0 12 32" preserveAspectRatio="none" className="min-h-3 flex-1">
+                <circle cx="6" cy="3" r="2.5" fill={BORDER} stroke={BORDER} strokeWidth="1" />
+                <line x1="6" y1="6" x2="6" y2="26" stroke={BORDER} strokeWidth="1" />
+                <polyline points="2,25 6,31 10,25" fill="none" stroke={BORDER} strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
 
               {/* Step 2: Sources stacked */}
               <div className="flex w-full gap-1.5">
@@ -997,7 +1062,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </div>
               </div>
 
-              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+              {/* Connector */}
+              <svg width="12" height="100%" viewBox="0 0 12 32" preserveAspectRatio="none" className="min-h-3 flex-1">
+                <circle cx="6" cy="3" r="2.5" fill={BORDER} stroke={BORDER} strokeWidth="1" />
+                <line x1="6" y1="6" x2="6" y2="26" stroke={BORDER} strokeWidth="1" />
+                <polyline points="2,25 6,31 10,25" fill="none" stroke={BORDER} strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
 
               {/* Step 3: Detective */}
               <div
@@ -1044,7 +1114,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </div>
               </div>
 
-              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+              {/* Connector */}
+              <svg width="12" height="100%" viewBox="0 0 12 32" preserveAspectRatio="none" className="min-h-3 flex-1">
+                <circle cx="6" cy="3" r="2.5" fill={BORDER} stroke={BORDER} strokeWidth="1" />
+                <line x1="6" y1="6" x2="6" y2="26" stroke={BORDER} strokeWidth="1" />
+                <polyline points="2,25 6,31 10,25" fill="none" stroke={BORDER} strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
 
               {/* Step 4: Dossier */}
               <div
@@ -1065,7 +1140,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </p>
               </div>
 
-              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+              {/* Connector */}
+              <svg width="12" height="100%" viewBox="0 0 12 32" preserveAspectRatio="none" className="min-h-3 flex-1">
+                <circle cx="6" cy="3" r="2.5" fill={BORDER} stroke={BORDER} strokeWidth="1" />
+                <line x1="6" y1="6" x2="6" y2="26" stroke={BORDER} strokeWidth="1" />
+                <polyline points="2,25 6,31 10,25" fill="none" stroke={BORDER} strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
 
               {/* Step 5: Editor Review */}
               <div
@@ -1086,7 +1166,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </p>
               </div>
 
-              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+              {/* Connector */}
+              <svg width="12" height="100%" viewBox="0 0 12 32" preserveAspectRatio="none" className="min-h-3 flex-1">
+                <circle cx="6" cy="3" r="2.5" fill={BORDER} stroke={BORDER} strokeWidth="1" />
+                <line x1="6" y1="6" x2="6" y2="26" stroke={BORDER} strokeWidth="1" />
+                <polyline points="2,25 6,31 10,25" fill="none" stroke={BORDER} strokeWidth="1.2" strokeLinejoin="round" />
+              </svg>
 
               {/* Step 6: Outcomes */}
               <div className="flex w-full gap-1.5">
@@ -1152,6 +1237,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </p>
                 </div>
               )}
+              {/* Figure caption */}
+              <p
+                className="px-3 pb-3 pt-1.5 text-[8px] tracking-wider"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                <span style={{ color: TEXT_MID }}>Fig. 7</span> — Investigation funnel showing how extracted features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
+              </p>
             </div>
           </div>
 
@@ -1239,6 +1331,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </div>
             </div>
           </div>
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 8</span> — Evidence standards defining what constitutes a confirmed connection versus what does not qualify.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -1414,8 +1512,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   className="mt-5 text-center text-[9px] tracking-[0.15em]"
                   style={{ fontFamily: MONO, color: "rgba(160,160,176,0.35)" }}
                 >
-                  Fig. A &mdash; Agent Internal Architecture: the problem_solve() execution path
-                  from task intake through context assembly to episode storage.
+                  Fig. 9 &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
                 </p>
               </div>
             </div>
@@ -1616,8 +1713,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   className="mt-5 text-center text-[9px] tracking-[0.15em]"
                   style={{ fontFamily: MONO, color: "rgba(160,160,176,0.35)" }}
                 >
-                  Fig. B &mdash; Data Pipeline: the three transformation
-                  stages from archive.org URL to confirmed/rejected verdict.
+                  Fig. 10 &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
                 </p>
               </div>
             </div>
@@ -1861,9 +1957,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   className="mt-4 text-center text-[9px] tracking-[0.15em]"
                   style={{ fontFamily: MONO, color: "rgba(160,160,176,0.35)" }}
                 >
-                  Fig. C &mdash; Memory &amp; Learning Architecture: four feedback
-                  loops operating at different timescales, from per-task episodes
-                  to persistent institutional knowledge.
+                  Fig. 11 &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
                 </p>
               </div>
             </div>
@@ -2064,6 +2158,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </p>
             </div>
           </div>
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 12</span> — The six intelligence subsystems that enable agent coordination, learning, and self-improvement without human intervention.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -2162,7 +2262,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 />
               </div>
 
-              {/* Right annotations (minor column 06) */}
+              {/* Right annotations (minor column 06 ) */}
               <div className="order-3 flex flex-col justify-between gap-6 md:col-span-1">
                 <div>
                   <p
@@ -2211,6 +2311,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </div>
               </div>
             </div>
+            <p
+              className="mt-4 text-[8px] tracking-wider"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              <span style={{ color: TEXT_MID }}>Fig. 13</span> — Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
+            </p>
           </div>
         </div>
 

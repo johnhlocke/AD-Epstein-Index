@@ -954,6 +954,7 @@ class EditorAgent(Agent):
             return
 
         yes_entries = []
+        inconclusive_count = 0
 
         for entry in checked:
             name = entry.get("name", "?")
@@ -964,8 +965,24 @@ class EditorAgent(Agent):
             binary_verdict = entry.get("binary_verdict", "NO")
             combined = entry.get("combined", "unknown")
 
+            # binary_verdict=None means inconclusive (timeout/error) — write xref
+            # for observability but DON'T set detective_verdict on features table,
+            # so the name stays in the unchecked pool and gets re-queued next batch.
+            is_inconclusive = binary_verdict is None
+
             # Write full xref + binary verdict to ALL feature IDs for this name
             write_ok = True
+
+            # Sanitize values to match CHECK constraints in cross_references table
+            doj_status_db = entry.get("doj_verdict", "pending")
+            if doj_status_db not in ("searched", "pending", "error", "skipped"):
+                doj_status_db = "error"  # Map "timeout" etc. → "error"
+            combined_db = combined if combined in (
+                "confirmed_match", "likely_match", "possible_match",
+                "needs_review", "no_match", "pending",
+            ) else "pending"  # Map "timeout", "error", "unknown" → "pending"
+            binary_db = binary_verdict if binary_verdict in ("YES", "NO") else None
+
             for fid in feature_id_list:
                 xref_written = False
                 try:
@@ -974,20 +991,23 @@ class EditorAgent(Agent):
                         "homeowner_name": name,
                         "black_book_status": entry.get("bb_verdict", "no_match"),
                         "black_book_matches": entry.get("bb_matches"),
-                        "doj_status": entry.get("doj_verdict", "pending"),
+                        "doj_status": doj_status_db,
                         "doj_results": entry.get("doj_results"),
-                        "combined_verdict": combined if combined != "unknown" else "pending",
+                        "combined_verdict": combined_db,
                         "confidence_score": float(entry.get("confidence_score") or 0),
                         "verdict_rationale": entry.get("rationale"),
                         "false_positive_indicators": entry.get("false_positive_indicators"),
-                        "binary_verdict": binary_verdict,
+                        "binary_verdict": binary_db,
                         "individuals_searched": entry.get("individuals_searched"),
                     }
                     upsert_cross_reference(fid, xref_data)
                     xref_written = True
 
-                    # Also write binary verdict to features table for compat
-                    update_detective_verdict(fid, binary_verdict)
+                    # Only write final verdict to features table if conclusive.
+                    # Inconclusive (timeout/error) names keep detective_verdict=NULL
+                    # so they get re-queued by _fill_detective_queue().
+                    if not is_inconclusive:
+                        update_detective_verdict(fid, binary_verdict)
                 except Exception as e:
                     write_ok = False
                     if xref_written:
@@ -1004,7 +1024,10 @@ class EditorAgent(Agent):
                     )
                     self.log(f"Failed to write xref for {name} (fid={fid}): {e} → {decision.get('strategy', '?')}", level="ERROR")
 
-            if binary_verdict == "YES":
+            if is_inconclusive:
+                inconclusive_count += 1
+                self.log(f"INCONCLUSIVE: {name} ({combined}) — will retry next batch", level="WARN")
+            elif binary_verdict == "YES":
                 self.log(f"YES: {name} ({combined})")
                 self._remember("milestone", f"Detective YES: {name} ({combined})")
                 yes_entries.append(entry)
@@ -1016,16 +1039,18 @@ class EditorAgent(Agent):
                                note=f"{binary_verdict} ({combined})" if write_ok else f"verdict write failed")
 
         # Send verdict summary to inbox
-        no_count = len(checked) - len(yes_entries)
+        conclusive = len(checked) - inconclusive_count
+        no_count = conclusive - len(yes_entries)
         yes_names = [e.get("name", "?") for e in yes_entries]
+        inconclusive_note = f" {inconclusive_count} inconclusive (will retry)." if inconclusive_count else ""
         if yes_entries:
             names_str = ", ".join(yes_names)
             self._narrate_event(
-                f"Detective checked {len(checked)} names against Epstein records. {no_count} cleared (NO). {len(yes_entries)} flagged YES: {names_str}. Sending YES names to Researcher for investigation.",
+                f"Detective checked {len(checked)} names against Epstein records. {no_count} cleared (NO). {len(yes_entries)} flagged YES: {names_str}.{inconclusive_note} Sending YES names to Researcher for investigation.",
                 msg_type="alert",
             )
         else:
-            self._narrate_event(f"Detective checked {len(checked)} names against Epstein records. All cleared — zero hits.")
+            self._narrate_event(f"Detective checked {len(checked)} names against Epstein records. {no_count} cleared — zero hits.{inconclusive_note}")
 
         # Queue YES names for Researcher investigation
         if yes_entries:
@@ -1039,6 +1064,15 @@ class EditorAgent(Agent):
 
         self.ledger.save()
         self._request_status_refresh()
+
+        # Immediately re-queue detective if there are more unchecked names.
+        # This prevents the 5-15 hour gap between batches that occurred when
+        # waiting for the next 30s planning heartbeat → _fill_detective_queue().
+        try:
+            self._fill_detective_queue()
+            self._dispatch_next("detective")
+        except Exception as e:
+            self.log(f"Detective re-queue after batch failed: {e}", level="WARN")
 
     def _queue_researcher_tasks(self, yes_entries):
         """Queue Researcher investigation for YES-verdict names (one at a time)."""
@@ -1235,24 +1269,20 @@ class EditorAgent(Agent):
                     except Exception:
                         self.log(f"Retry also failed for {name} verdict", level="ERROR")
 
-        # ── Step 5: Propagate verdict to knowledge graph + refresh export ──
+        # ── Step 5: Propagate verdict to knowledge graph ──
+        # NOTE: We only update the verdict node here. Full analytics recomputation
+        # (PageRank, betweenness, communities — ~140s) is deferred to avoid
+        # blocking the asyncio event loop (which freezes Playwright's DOJ browser).
+        # Analytics run periodically via graph_sync_loop or manually.
         try:
-            # Sync latest features to Neo4j first (ensures Person node + relationships exist)
-            try:
-                from sync_graph import incremental_sync, export_graph_json
-                incremental_sync()
-            except Exception:
-                pass  # Sync failure is non-critical; MERGE below creates node if needed
-
-            from graph_analytics import update_person_verdict, recompute_after_verdict
+            from graph_analytics import update_person_verdict
             update_person_verdict(name, verdict, connection_strength=strength)
-            recompute_after_verdict()
-            self.log(f"Graph updated: {name} → {verdict}, analytics recomputed")
-            # Refresh the dashboard knowledge graph export so new dossier appears
+            self.log(f"Graph updated: {name} → {verdict}")
             try:
+                from sync_graph import export_graph_json
                 export_graph_json()
             except Exception:
-                pass  # Graph export is non-critical
+                pass
         except ImportError:
             pass  # Graph analytics not available
         except Exception as e:
@@ -1966,22 +1996,24 @@ Respond with JSON only:
             feature_ids.setdefault(name, []).append(feat["id"])
 
         # Add DOJ retry names (reset their xref first so detective re-checks)
-        # Cap total batch at 50 names to avoid overflowing LLM name analysis
+        # Cap total batch at 50 unique names to avoid overflowing LLM name analysis
         for xr in doj_retry:
-            if len(names) >= 50:
-                break
             name = (xr.get("homeowner_name") or "").strip()
             fid = xr.get("feature_id")
-            if not name or name in seen_names:
+            if not name:
                 continue
             # Reset the xref so detective treats it as fresh
             try:
                 reset_xref_doj(fid)
             except Exception:
                 pass
-            names.append(name)
-            seen_names.add(name)
+            # Always collect the feature_id (even if name is already in batch)
             feature_ids.setdefault(name, []).append(fid)
+            if name not in seen_names:
+                if len(names) >= 50:
+                    break
+                names.append(name)
+                seen_names.add(name)
 
         if not names:
             return

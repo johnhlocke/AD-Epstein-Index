@@ -6,6 +6,47 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-17 (Session 39)
+
+### Changed — Sankey 6-Stage Funnel + Agent Attribution
+
+- **`web/src/components/charts/VerdictSankey.tsx`** — Added DOSSIER BUILT node as new Researcher stage, expanding from 5-stage to 6-stage funnel (Features → Cross-Refs → Detective Tiers → Dossier Built → Editor Verdict → Connection Strength). Added agent attribution labels (italic, dimmed) on every Sankey node showing which agent handles that stage (Reader+Courier, Detective, Researcher, Editor). Agent names also appear in tooltips. Purple color scheme for Dossier Built node. Right margin reduced 120→80px.
+
+### Changed — Methodology Section Visual Polish
+
+- **`web/src/components/landing/MethodologySection.tsx`** — Section subhead fonts reduced (32→24px titles, 20→15px subtitles) and constrained to 2 major columns width via `maxWidth: calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)`. Applied to both SectionHeader component and manual Section 3 header. Added figure captions (Fig. 1–6) for pipeline flow, architecture SVG, hub-and-spoke diagram, Miranda card, agent grid, and Agent Office video. Replaced plain div connectors in verdict flow with SVG directional arrows (circle → line → arrowhead). Miranda sprite video now uses `<source>` elements: .mov (Safari) primary, .webm (Chrome/Firefox) fallback via Supabase Storage.
+
+### Changed — Dossier Aesthetic Radar
+
+- **`web/src/components/dossier/DossierDetail.tsx`** — Replaced design_style Badge card with new DossierAestheticRadar component showing per-feature 9-axis radar chart.
+- **`web/src/components/dossier/DossierAestheticRadar.tsx`** — NEW: Recharts radar chart for individual feature aesthetic scores.
+
+### Fixed — Editor Inconclusive Verdict Handling
+
+- **`src/agents/editor.py`** — Inconclusive detective verdicts (timeout/error) no longer prematurely write `binary_verdict=NO` to features table. Instead, xref is written for observability but `detective_verdict` stays NULL, keeping the name in the unchecked pool for re-queuing. Sanitizes doj_status and combined_verdict values to match Supabase CHECK constraints before writing. Immediate detective re-queue after batch completion (eliminates 5-15 hour gap between batches). Deferred graph analytics: `recompute_after_verdict()` removed from dossier confirm path to avoid blocking Playwright DOJ searches (~140s freeze). DOJ retry now collects all feature_ids for duplicate names.
+
+### Fixed — Pipeline Event Loop Blocking
+
+- **`src/orchestrator.py`** — `graph_sync_loop` and `watercooler_loop` now use `asyncio.to_thread()` to run sync functions off the main event loop, preventing Playwright CDP contention.
+- **`src/db.py`** — `get_xrefs_needing_doj_retry()` now includes `doj_status='error'` (not just 'pending'), returns `or []` fallback for empty results.
+- **`src/agents/tasks.py`** — Cross-reference task deduplication uses sorted name hash instead of missing identifier (fixes duplicate batches).
+
+### Changed — Scoring v2.2 (Per-Axis Rationale)
+
+- **`src/score_features.py`** — Bumped to v2.2: LLM now provides 1-sentence rationale for each of the 9 scoring axes. Added CRITICAL scoring clarifications for hospitality (intent not room size), formality (lived-in aristocratic homes ≠ formal), curation (personal collections ≠ designer-curated), theatricality (inherited wealth ≠ performance). max_tokens increased 1024→2048 for rationale output. Rationale stored as JSONB in `scoring_rationale` column. Updated cost estimates for v2.2 output size.
+
+### Changed — Agent Skills Updates
+
+- **`src/agents/skills/reader.md`** — 7 meta-commentary discipline interventions for Elias (keeps writing proposals instead of extracting).
+- **`src/agents/skills/scout.md`** — Claude Code session handling workaround (don't launch claude_code inside claude_code).
+- **`src/agents/skills/designer.md`** — Source rotation protocol for failed training sources.
+
+### Changed — Agent Office
+
+- **`tools/agent-office/agent-office.html`** — Disabled Neo4j knowledge graph panel (queries were slowing dashboard refresh).
+
+---
+
 ## 2026-02-16 (Session 38)
 
 ### Changed — Sankey Diagram & Methodology Visual Polish

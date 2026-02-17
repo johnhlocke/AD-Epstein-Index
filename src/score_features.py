@@ -37,7 +37,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleW
 AD_ARCHIVE_BLOB = "https://architecturaldigest.blob.core.windows.net/architecturaldigest{date}thumbnails/Pages/0x600/{page}.jpg"
 DEFAULT_MODEL = "claude-opus-4-6"
 MAX_IMAGES = 20  # No practical cap — longest AD articles are ~12 pages
-SCORING_VERSION = "v2.0"
+SCORING_VERSION = "v2.2"  # Added per-axis rationale (1-sentence explanation per score)
 
 # Score columns in the features table
 SCORE_COLUMNS = [
@@ -335,8 +335,11 @@ Whether the home is designed for its residents or for their guests.
   3 = Balanced — comfortable for daily life but can host a dinner party
   4 = Public rooms dominate. Guest rooms, large entertaining spaces, circulation designed for flow
   5 = Social venue. Catering kitchen, guest wings, ballrooms, outdoor terraces for events. The home feels empty with just its owners — waiting for the party
+CRITICAL: Score the INTENT, not the room size. A large living room in a private person's home is still 2. Read the article text — does it describe dinner parties and guests, or solitude and personal retreat? A recluse in a mansion scores low. A socialite in a cottage scores high.
 
 ═══ GROUP 3: STAGE — Who It's Performing For ═══
+
+IMPORTANT: STAGE measures intent and audience, NOT visual intensity. A visually bold, expensive, maximalist space can score LOW on all three STAGE axes if the boldness serves the occupant's genuine personality rather than an outside audience. Ask: "Who is this for?" If the answer is "the person who lives here," STAGE is low — regardless of how much it cost or how dense it looks.
 
 7. FORMALITY (1-5)
 The behavioral rules the room enforces on its occupants.
@@ -345,6 +348,7 @@ The behavioral rules the room enforces on its occupants.
   3 = Quality and considered but not intimidating. You respect the space without feeling small
   4 = Clearly formal. Careful surfaces, deliberate arrangement. Rules implied
   5 = Overscaled, expensive, uncomfortable-looking furniture. The room makes you feel small. It tells you that you are the visitor, you are beneath it
+CRITICAL: An aristocratic family home with grand rooms that have been LIVED IN for generations scores 2-3, not 4-5. Formality requires that the room disciplines its occupants. If the family treats the ballroom like a living room, it's low formality despite its scale.
 
 8. CURATION (1-5)
 Who directed this room and for whom.
@@ -354,6 +358,7 @@ Who directed this room and for whom.
   4 = Designer-directed with styled vignettes. Symmetrical orientations, composed sight lines
   5 = Fully designer-directed for editorial lifestyle. Designed for how it looks in a photo, not how it's used. Could be a Soho House lobby — publishable, placeless
 The tell: Symmetry is a design decision, not an organic outcome. Styled vignettes (lamp + side chair + three perfectly placed objects) are the smoking gun.
+CRITICAL: Visual density ≠ high curation. A musician's home full of instruments, records, and art they personally collected is SELF-CURATED (1-2) even if it looks like a gallery. A collector's maximalism is personal, not editorial. High curation means a designer arranged things for visual effect, not that the owner has a lot of stuff.
 
 9. THEATRICALITY (1-5)
 How loudly the room performs wealth for an outside audience.
@@ -362,6 +367,7 @@ How loudly the room performs wealth for an outside audience.
   3 = Some recognizable designer pieces but restrained. The room has taste but also wants credit
   4 = Brand names prominent. Statement furniture, recognizable art. The room is starting to perform
   5 = Full performance. Brand-name everything, statement art by globally known artists (Koons, Warhol, Hirst) with no consistent theme, pictures of homeowner with celebrities, gilding, overdone classicism. Everything needs you to know its price
+CRITICAL: Inherited wealth scores LOW. A centuries-old estate with Old Masters paintings scores 1-2 on theatricality — the wealth wasn't chosen to impress, it was inherited. Theatricality requires INTENTION to perform. Similarly, a personal collection amassed over decades (even if valuable) serves the collector, not the audience — score low.
 """.strip()
 
 
@@ -393,20 +399,30 @@ Extract these fields from what you can read in the article pages:
 
 RULES:
 - Score EVERY axis 1-5. No nulls for scores. If uncertain, use your best judgment.
+- For EACH score, write a 1-sentence rationale explaining WHY you chose that number for THIS specific home. Reference what you see in the images or read in the text. Be specific — name materials, rooms, objects, or article quotes that informed your score.
 - Extract structural data ONLY from what is stated or visible in the images. Use null for missing fields.
 - Read captions and small text — they contain designer credits, locations, and photographer names.
 
 Respond with ONLY a JSON object:
 {{
   "grandeur": <1-5>,
+  "grandeur_rationale": "1 sentence why",
   "material_warmth": <1-5>,
+  "material_warmth_rationale": "1 sentence why",
   "maximalism": <1-5>,
+  "maximalism_rationale": "1 sentence why",
   "historicism": <1-5>,
+  "historicism_rationale": "1 sentence why",
   "provenance": <1-5>,
+  "provenance_rationale": "1 sentence why",
   "hospitality": <1-5>,
+  "hospitality_rationale": "1 sentence why",
   "formality": <1-5>,
+  "formality_rationale": "1 sentence why",
   "curation": <1-5>,
+  "curation_rationale": "1 sentence why",
   "theatricality": <1-5>,
+  "theatricality_rationale": "1 sentence why",
   "homeowner_name": "Name or null",
   "designer_name": "Name or null",
   "architecture_firm": "Firm or null",
@@ -446,7 +462,7 @@ def score_with_vision(page_images, name, article_title, year, month, model):
     try:
         message = client.messages.create(
             model=model,
-            max_tokens=1024,
+            max_tokens=2048,
             messages=[{"role": "user", "content": content}],
         )
 
@@ -543,13 +559,27 @@ def parse_structural(parsed, current_feature):
     return update
 
 
-def update_feature_scores(sb, feature_id, scores, structural, social_data):
-    """Write scores + structural enrichment to Supabase."""
+def parse_rationale(parsed):
+    """Extract per-axis rationale strings from parsed response."""
+    rationale = {}
+    for json_key in SCORE_KEY_MAP:
+        rat = parsed.get(f"{json_key}_rationale")
+        if rat and str(rat).lower() not in ("null", "none", ""):
+            rationale[json_key] = str(rat)
+    return rationale
+
+
+def update_feature_scores(sb, feature_id, scores, structural, social_data, rationale=None):
+    """Write scores + structural enrichment + rationale to Supabase."""
     update = {}
     update.update(scores)
     update.update(structural)
     update["scoring_version"] = SCORING_VERSION
     update["scored_at"] = datetime.now(timezone.utc).isoformat()
+
+    # Store per-axis rationale as JSONB
+    if rationale:
+        update["scoring_rationale"] = rationale
 
     # Store social data in notes if present
     if social_data:
@@ -625,9 +655,10 @@ def main():
         print(f"  {len(images)} pages from {source}")
 
         if args.dry_run:
-            # Estimate cost: ~4000 tokens per image + 2000 prompt + 500 output
-            est_in = len(images) * 4000 + 2000
-            est_out = 500
+            # Estimate cost: ~550 tokens per image + 2000 prompt + 700 output
+            # v2.2: output ~doubled from v2.1 due to per-axis rationale sentences
+            est_in = len(images) * 550 + 2000
+            est_out = 700
             est_cost = (est_in / 1_000_000) * pricing["input"] + (est_out / 1_000_000) * pricing["output"]
             total_cost += est_cost
             scored += 1
@@ -663,6 +694,14 @@ def main():
         if structural:
             print(f"  ENRICHED: {', '.join(f'{k}={v}' for k, v in structural.items())}")
 
+        # Parse per-axis rationale
+        rationale = parse_rationale(parsed)
+        if rationale:
+            print(f"  RATIONALE: {len(rationale)}/9 axes explained")
+            if len(rationale) < 9:
+                missing = [k for k in SCORE_KEY_MAP if k not in rationale]
+                print(f"  WARNING: Missing rationale for: {', '.join(missing)}")
+
         # Parse social data
         social = {}
         for key in ["notable_guests", "social_circle", "previous_owners"]:
@@ -671,7 +710,7 @@ def main():
                 social[key] = val
 
         # Update DB
-        if update_feature_scores(sb, fid, scores, structural, social):
+        if update_feature_scores(sb, fid, scores, structural, social, rationale=rationale):
             scored += 1
         else:
             errors += 1

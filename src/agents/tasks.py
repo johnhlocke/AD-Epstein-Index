@@ -186,5 +186,11 @@ class ExecutionPlan:
 
     def _task_key(self, task):
         p = task.params
+        # cross_reference tasks carry a "names" list, not "identifier" or "name".
+        # Use a sorted hash of names to deduplicate correctly (different batches
+        # should have different keys, same batch should dedup).
+        if task.type == "cross_reference" and "names" in p:
+            names_key = ",".join(sorted(p["names"][:5]))  # First 5 names as key
+            return f"{task.type}:{names_key}"
         ident = p.get("identifier") or p.get("name") or str(p.get("missing_months", ""))
         return f"{task.type}:{ident}"

@@ -1779,13 +1779,14 @@ body {
 
   <!-- ── Right Panel ── -->
   <div class="panel-right">
-    <div class="panel-section" id="graph-section">
+    <!-- Knowledge Graph DISABLED — Neo4j queries slow down dashboard -->
+    <div class="panel-section" id="graph-section" style="display:none;">
       <div class="graph-panel-header" id="graph-panel-toggle">
         <h3>SUSPECTED NAMES KNOWLEDGE GRAPH</h3>
         <span class="graph-toggle-icon">&#9660;</span>
       </div>
       <div id="graph-panel-body">
-        <div id="graph-container"><div class="graph-empty">Waiting for graph data...</div></div>
+        <div id="graph-container"><div class="graph-empty">Disabled</div></div>
         <div class="graph-stats-bar">
           <span id="graph-stat-nodes">0 nodes</span>
           <span id="graph-stat-edges">0 edges</span>
@@ -1981,10 +1982,10 @@ function init() {
   initEditorBehavior();
   initSkillsModal();
   initAgentControlsPopup();
-  initKnowledgeGraph();
+  // initKnowledgeGraph();  // DISABLED — Neo4j slows dashboard
   fetchStatus();
   setInterval(fetchStatus, POLL_MS);
-  setInterval(fetchGraphData, POLL_MS * 3); // Poll graph less often (6s)
+  // setInterval(fetchGraphData, POLL_MS * 3);  // DISABLED — graph off
   document.getElementById('sound-toggle').addEventListener('click', toggleSound);
   document.getElementById('inbox-send').addEventListener('click', sendInboxMessage);
   document.getElementById('inbox-input').addEventListener('keydown', (e) => {

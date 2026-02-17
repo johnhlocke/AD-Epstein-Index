@@ -1,11 +1,11 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { SectionContainer } from "@/components/layout/SectionContainer";
 import { VerdictBadge } from "./VerdictBadge";
 import { EvidenceSection } from "./EvidenceSection";
+import { DossierAestheticRadar } from "./DossierAestheticRadar";
 import type { DossierWithContext } from "@/lib/types";
 
 const MONTH_NAMES = [
@@ -74,14 +74,6 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
             </CardContent>
           </Card>
         )}
-        {feature?.design_style && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Design Style</p>
-              <Badge variant="secondary" className="mt-1">{feature.design_style}</Badge>
-            </CardContent>
-          </Card>
-        )}
       </div>
 
       {/* Editor review */}
@@ -99,6 +91,14 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
               </p>
             )}
           </div>
+        </>
+      )}
+
+      {/* Aesthetic profile */}
+      {feature && (
+        <>
+          <Separator className="my-8" />
+          <DossierAestheticRadar feature={feature} />
         </>
       )}
 

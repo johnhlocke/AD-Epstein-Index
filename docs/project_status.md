@@ -131,6 +131,14 @@ This file should be automatically updated when necessary to answer three key que
 | Sankey diagram visual polish (Anonymous rename, padding, on-system colors) | Phase 3 | Done |
 | Methodology vertical flow on-system color update | Phase 3 | Done |
 | Fix website Supabase 1000-row count (exact count) | Phase 3 | Done |
+| Sankey 6-stage funnel + agent attribution labels | Phase 3 | Done |
+| Methodology subhead sizing + figure captions | Phase 3 | Done |
+| Methodology SVG connectors + Miranda sprite video | Phase 3 | Done |
+| Dossier aesthetic radar chart component | Phase 3 | Done |
+| Editor inconclusive verdict handling (retry instead of premature NO) | Tooling | Done |
+| Deferred graph analytics (unblock Playwright DOJ) | Tooling | Done |
+| Event loop threading (graph sync + watercooler) | Tooling | Done |
+| Scoring v2.2 — per-axis rationale + scoring clarifications | Phase 2 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 
@@ -307,6 +315,11 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - Subject category classification: 1,601 features + 320 dossiers tagged with profession categories (10 categories including Private/Other split)
 - Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
 - Detective DOJ subprocess fix: Playwright searches moved to isolated subprocess to prevent event loop contention timeouts (60/60 searches now succeed vs 0/60 before)
+- Editor inconclusive verdict fix: timeout/error verdicts no longer write premature NO — names stay in unchecked pool for retry
+- Graph analytics deferred from dossier confirm path to avoid 140s event loop freeze blocking Playwright
+- Orchestrator threading: graph_sync_loop + watercooler_loop use asyncio.to_thread()
+- Scoring v2.2: per-axis rationale sentences + CRITICAL clarifications for hospitality/formality/curation/theatricality
+- Website: 6-stage Sankey with DOSSIER BUILT node + agent attribution, methodology figure captions + SVG connectors, dossier aesthetic radar
 
 **Ongoing — Scale the Pipeline:**
 - Continue orchestrator run to process remaining issues and cross-reference all names

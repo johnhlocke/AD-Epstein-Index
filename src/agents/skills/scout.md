@@ -234,3 +234,21 @@ The CLI throws "Error: Claude Code cannot be launched inside another Claude Code
 4. Restore environ if needed
 
 Alternatively, skip CLI exploration and use web searches/human escalation for stuck months.
+
+
+## Update — 2026-02-16 10:39
+
+## CRITICAL: Claude Code Session Handling
+You are ALREADY INSIDE a Claude Code session. Do NOT call `claude_code` again — it will crash.
+
+### explore_sources workaround:
+When explore_sources is needed:
+1. Search archive.org directly using internetarchive Python library
+2. Try alternative query patterns: site-specific searches, date range variations, different metadata fields
+3. If archive.org fails, document the gap and move to next month
+4. NEVER invoke claude_code — you're already in it
+
+### Alternative discovery strategies:
+- Use wayback_availability API to check if URLs exist in Internet Archive
+- Try search_items with different query combinations
+- Cross-reference with known AD metadata patterns from successful downloads

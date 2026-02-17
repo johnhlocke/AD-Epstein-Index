@@ -34,7 +34,9 @@ const NODE_THEME: Record<string, { fill: string; stroke: string }> = {
   "NEEDS REVIEW":      { fill: SLATE_DIM, stroke: SLATE },
   "NO MATCH":          { fill: RED_DIM, stroke: RED },
   "PENDING":           { fill: NEUTRAL_DIM, stroke: NEUTRAL },
-  // Stage 2: editor verdict
+  // Stage 2: researcher dossier
+  "DOSSIER BUILT":     { fill: "rgba(130, 100, 180, 0.2)", stroke: "rgba(130, 100, 180, 0.7)" },
+  // Stage 3: editor verdict
   "CONFIRMED":         { fill: GREEN_DIM, stroke: GREEN },
   "REJECTED":          { fill: RED_DIM, stroke: RED },
   // Stage 3: connection strength
@@ -54,12 +56,33 @@ const LINK_THEME: Record<string, string> = {
   "NEEDS REVIEW":      "rgba(74, 124, 143, 0.10)",
   "NO MATCH":          "rgba(155, 34, 38, 0.10)",
   "PENDING":           "rgba(160, 160, 176, 0.08)",
+  "DOSSIER BUILT":     "rgba(130, 100, 180, 0.12)",
   "CONFIRMED":         "rgba(45, 106, 79, 0.18)",
   "REJECTED":          "rgba(155, 34, 38, 0.12)",
   "HIGH":              "rgba(45, 106, 79, 0.18)",
   "MEDIUM":            "rgba(184, 115, 51, 0.14)",
   "LOW":               "rgba(184, 134, 11, 0.10)",
   "COINCIDENCE":       "rgba(74, 124, 143, 0.08)",
+};
+
+// Agent attribution by node name — correlates with vertical flow diagram
+const NODE_AGENT: Record<string, string> = {
+  "FEATURES EXTRACTED":      "Reader + Courier",
+  "CROSS-REFERENCED NAMES":  "Detective",
+  "DISMISSED":               "Detective",
+  "CONFIRMED MATCH":         "Detective",
+  "LIKELY MATCH":            "Detective",
+  "POSSIBLE MATCH":          "Detective",
+  "NEEDS REVIEW":            "Detective",
+  "NO MATCH":                "Detective",
+  "PENDING":                 "Detective",
+  "DOSSIER BUILT":            "Researcher",
+  "CONFIRMED":               "Editor",
+  "REJECTED":                "Editor",
+  "HIGH":                    "Editor",
+  "MEDIUM":                  "Editor",
+  "LOW":                     "Editor",
+  "COINCIDENCE":             "Editor",
 };
 
 const DEFAULT_NODE = { fill: NEUTRAL_DIM, stroke: "rgba(160, 160, 176, 0.4)" };
@@ -81,6 +104,7 @@ function CustomNode(props: NodeProps) {
   const name = (payload as { name?: string })?.name ?? "";
   const value = (payload as { value?: number })?.value ?? 0;
   const colors = NODE_THEME[name] ?? DEFAULT_NODE;
+  const agent = NODE_AGENT[name];
 
   const labelX = x + width + 8;
 
@@ -99,7 +123,7 @@ function CustomNode(props: NodeProps) {
       {/* Value */}
       <text
         x={labelX}
-        y={y + height / 2 - 1}
+        y={y + height / 2 - (agent ? 4 : 1)}
         textAnchor="start"
         dominantBaseline="central"
         fontSize={10}
@@ -113,7 +137,7 @@ function CustomNode(props: NodeProps) {
       {/* Name */}
       <text
         x={labelX}
-        y={y + height / 2 + 11}
+        y={y + height / 2 + (agent ? 8 : 11)}
         textAnchor="start"
         dominantBaseline="central"
         fontSize={7}
@@ -123,6 +147,22 @@ function CustomNode(props: NodeProps) {
       >
         {name}
       </text>
+      {/* Agent attribution */}
+      {agent && (
+        <text
+          x={labelX}
+          y={y + height / 2 + 19}
+          textAnchor="start"
+          dominantBaseline="central"
+          fontSize={6.5}
+          fontFamily={MONO}
+          fill="rgba(160, 160, 176, 0.3)"
+          letterSpacing="0.06em"
+          fontStyle="italic"
+        >
+          {agent}
+        </text>
+      )}
     </g>
   );
 }
@@ -171,6 +211,7 @@ function CustomTooltip({ active, payload }: any) {
 
   // Node tooltip
   if (item.payload?.name && !item.payload?.source) {
+    const agent = NODE_AGENT[item.payload.name];
     return (
       <div
         className="rounded border px-3 py-2 shadow-lg"
@@ -188,6 +229,14 @@ function CustomTooltip({ active, payload }: any) {
         >
           {Number(item.payload.value ?? 0).toLocaleString()} names
         </p>
+        {agent && (
+          <p
+            className="mt-1 text-[9px]"
+            style={{ fontFamily: MONO, color: "rgba(160, 160, 176, 0.4)" }}
+          >
+            {agent}
+          </p>
+        )}
       </div>
     );
   }
@@ -245,12 +294,12 @@ export function VerdictSankey({
   const anonymous = featuresTotal - crossRefsTotal;
   const dismissed = crossRefsTotal - dossiersTotal;
 
-  // Build nodes and links for a 5-stage funnel:
-  // Stage -1: FEATURES EXTRACTED → ANONYMOUS + CROSS-REFERENCED NAMES
-  // Stage 0:  CROSS-REFERENCED NAMES → DISMISSED + detective tiers
-  // Stage 1:  detective tiers (CONFIRMED MATCH, LIKELY MATCH, etc.)
-  // Stage 2:  CONFIRMED + REJECTED (editor verdict)
-  // Stage 3:  HIGH + MEDIUM + LOW + COINCIDENCE (connection strength)
+  // Build nodes and links for a 6-stage funnel:
+  // Stage 0: FEATURES EXTRACTED → ANONYMOUS + CROSS-REFERENCED NAMES (Reader + Courier)
+  // Stage 1: CROSS-REFERENCED NAMES → DISMISSED + detective tiers (Detective)
+  // Stage 2: detective tiers → DOSSIER BUILT (Researcher)
+  // Stage 3: DOSSIER BUILT → CONFIRMED + REJECTED (Editor)
+  // Stage 4: CONFIRMED → HIGH + MEDIUM + LOW + COINCIDENCE (Editor)
 
   const nodes: { name: string }[] = [];
   const links: { source: number; target: number; value: number }[] = [];
@@ -286,23 +335,31 @@ export function VerdictSankey({
     links.push({ source: xrefIdx, target: idx, value: total });
   }
 
-  // Stage 2: editor verdicts
-  const confirmedIdx = nodes.length;
-  nodes.push({ name: "CONFIRMED" });
-  const rejectedIdx = nodes.length;
-  nodes.push({ name: "REJECTED" });
+  // Stage 2: DOSSIER BUILT — Researcher investigates each lead
+  const dossierIdx = nodes.length;
+  nodes.push({ name: "DOSSIER BUILT" });
 
-  // Link each tier to CONFIRMED / REJECTED
+  // Link each tier to DOSSIER BUILT (pass-through)
   for (const { key } of TIER_ORDER) {
     const tierIdx = tierIndices[key];
     if (tierIdx === undefined) continue;
     const conf = tierToConfirmed[key] ?? 0;
     const rej = tierToRejected[key] ?? 0;
-    if (conf > 0) links.push({ source: tierIdx, target: confirmedIdx, value: conf });
-    if (rej > 0) links.push({ source: tierIdx, target: rejectedIdx, value: rej });
+    const total = conf + rej;
+    if (total > 0) links.push({ source: tierIdx, target: dossierIdx, value: total });
   }
 
-  // Stage 3: connection strength from CONFIRMED
+  // Stage 3: editor verdicts
+  const confirmedIdx = nodes.length;
+  nodes.push({ name: "CONFIRMED" });
+  const rejectedIdx = nodes.length;
+  nodes.push({ name: "REJECTED" });
+
+  // Link DOSSIER BUILT to CONFIRMED / REJECTED
+  if (confirmed > 0) links.push({ source: dossierIdx, target: confirmedIdx, value: confirmed });
+  if (rejected > 0) links.push({ source: dossierIdx, target: rejectedIdx, value: rejected });
+
+  // Stage 4: connection strength from CONFIRMED
   const strengthIndices: Record<string, number> = {};
   for (const s of STRENGTH_ORDER) {
     const count = strengthCounts[s] ?? 0;
@@ -345,7 +402,7 @@ export function VerdictSankey({
             linkCurvature={0.5}
             iterations={64}
             sort={false}
-            margin={{ top: 12, right: 120, bottom: 32, left: 10 }}
+            margin={{ top: 12, right: 80, bottom: 32, left: 10 }}
             node={CustomNode}
             link={CustomLink}
           >
