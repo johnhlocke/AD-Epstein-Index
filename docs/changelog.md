@@ -6,6 +6,22 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-16 (Session 37)
+
+### Fixed — Detective DOJ Search Timeouts (Subprocess Architecture)
+
+- **`src/doj_search_worker.py`** — NEW: Standalone subprocess that runs Playwright DOJ searches in its own clean asyncio event loop. Accepts JSON names on stdin, returns results on stdout, sends progress to stderr. Isolates Playwright's CDP protocol from orchestrator event loop contention.
+- **`src/agents/detective.py`** — Major refactor: DOJ searches now run in a subprocess instead of in-process. New `_search_doj_subprocess()` launches worker via `asyncio.create_subprocess_exec()`, collects all individual names first, searches them in one batch, then processes verdicts from cached results. Removes per-name browser retry/relaunch complexity and `problem_solve()` DOJ recovery logic.
+- **`src/doj_search.py`** — Removed timing instrumentation (`[DOJ-TIMING]` debug prints)
+- **Root cause**: Orchestrator event loop contention from watercooler, graph sync, reflections, curiosity, and LLM calls blocked Playwright's CDP pipe, preventing `wait_for_selector` timeout callbacks from firing. Subprocess gives Playwright a dedicated event loop immune to contention.
+- **Result**: First batch of 60/60 names searched successfully (was 0/60 with timeouts before)
+
+### Fixed — Undefined `timeouts` Variable
+
+- Fixed `NameError` in detective.py batch completion log — `timeouts` variable was referenced but never defined after subprocess refactor removed per-name timeout tracking
+
+---
+
 ## 2026-02-15 (Session 36)
 
 ### Added — Aesthetic Methodology Section (Warm Dark-Cream Palette)

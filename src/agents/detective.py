@@ -19,6 +19,7 @@ import asyncio
 import json
 import os
 import sys
+import time as _time
 from datetime import datetime
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -38,6 +39,8 @@ DETECTIVE_INTERVAL = 180              # Seconds between cycles
 MAX_NAME_FAILURES = 3                 # After 3 failures on same name, skip it
 CONSECUTIVE_FAILURE_THRESHOLD = 3     # After 3 consecutive DOJ failures, escalate
 ESCALATION_COOLDOWN_HOURS = 1
+PER_NAME_TIMEOUT = 180                # Max seconds per name (DOJ search + verdict)
+BATCH_TIMEOUT = 3600                  # Max seconds per batch (60 min for 50 names)
 
 
 class DetectiveAgent(Agent):
@@ -89,17 +92,48 @@ class DetectiveAgent(Agent):
         # Step 0: Analyze names with LLM — split compounds, flag skips
         name_analysis = await asyncio.to_thread(self._analyze_names, names, briefing)
 
-        # Pre-warm DOJ browser so it's ready for the loop
-        try:
-            await self._ensure_browser()
-        except Exception:
-            self.log("DOJ browser failed to launch — will retry per-name", level="WARN")
+        # Step 1: Collect all individual names that need DOJ search
+        all_individuals = []  # flat list of individual names for subprocess
+        name_to_individuals = {}  # original name → [individual, ...]
+        for name in names:
+            analysis = name_analysis.get(name, {})
+            if analysis.get("skip"):
+                continue
+            individuals = analysis.get("search_names", [name])
+            if not individuals:
+                individuals = [name]
+            name_to_individuals[name] = individuals
+            all_individuals.extend(individuals)
+
+        # Step 2: Batch DOJ search via subprocess (isolated event loop)
+        doj_results_cache = {}
+        if all_individuals:
+            unique_individuals = list(dict.fromkeys(all_individuals))  # dedup, preserve order
+            self.log(f"DOJ subprocess: searching {len(unique_individuals)} individuals...")
+            self._current_task = f"DOJ subprocess: {len(unique_individuals)} names..."
+            doj_results_cache = await self._search_doj_subprocess(unique_individuals)
+            self.log(
+                f"DOJ subprocess complete: {sum(1 for r in doj_results_cache.values() if r.get('search_successful'))}/"
+                f"{len(unique_individuals)} successful"
+            )
+
+        # Step 3: Process each name (BB + DOJ verdict + glance)
+        batch_start = _time.time()
 
         for name in names:
+            # Enforce batch timeout — return partial results if exceeded
+            if _time.time() - batch_start > BATCH_TIMEOUT:
+                self.log(
+                    f"BATCH TIMEOUT after {len(checked)}/{len(names)} names "
+                    f"({BATCH_TIMEOUT}s) — returning partial results",
+                    level="WARN",
+                )
+                break
+
             analysis = name_analysis.get(name, {})
             individuals = analysis.get("search_names", [name])
             if not individuals:
-                individuals = [name]  # Fallback
+                individuals = [name]
 
             # Skip if LLM says not a real person
             if analysis.get("skip"):
@@ -120,129 +154,45 @@ class DetectiveAgent(Agent):
                 })
                 continue
 
-            # Search each individual, take the strongest result
-            best_bb_matches = None
-            best_doj_result = None
-            best_verdict_info = None
-            best_bb_verdict = "no_match"
-            best_doj_verdict = "pending"
-
-            for individual in individuals:
-                bb_matches = search_black_book(individual, book_text)
-                if bb_matches:
-                    best_bb_matches = bb_matches
-                    best_bb_verdict = "match"
-
-                # DOJ search (if browser available)
-                doj_result = None
-                doj_verdict = "pending"
-                try:
-                    if await self._ensure_browser():
-                        doj_result = await self._doj_client.search_name_variations(individual)
-                        if doj_result.get("search_successful"):
-                            doj_verdict = "searched"
-                            verdict_info = assess_combined_verdict(individual, bb_matches, doj_result)
-                        else:
-                            doj_verdict = "error"
-                            fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
-                            verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.5,
-                                            "rationale": f"DOJ search failed for {individual}; BB match pending DOJ confirmation" if best_bb_verdict == "match" else f"DOJ search failed for {individual}",
-                                            "false_positive_indicators": []}
-                    else:
-                        # BB match + DOJ unavailable → needs_review so Researcher investigates
-                        fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
-                        verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.5,
-                                        "rationale": "DOJ browser unavailable; BB match pending DOJ confirmation" if best_bb_verdict == "match" else "DOJ browser unavailable",
-                                        "false_positive_indicators": []}
-                except Exception as e:
-                    # Diagnose DOJ failure and decide recovery
-                    decision = await asyncio.to_thread(
-                        self.problem_solve,
-                        error=str(e)[:200],
-                        context={
-                            "name": individual,
-                            "bb_verdict": best_bb_verdict,
-                            "search_type": "DOJ browser search",
-                        },
-                        strategies={
-                            "skip_doj": "DOJ unavailable — use BB verdict only (lower confidence)",
-                            "retry_with_backoff": "Possible rate limit — wait and retry",
-                            "restart_browser": "Browser may have crashed — close and relaunch",
-                            "escalate": "DOJ site down or WAF blocking — needs Editor attention",
-                        },
-                    )
-                    self.log(f"DOJ problem: {decision.get('diagnosis', '?')} → {decision.get('strategy', '?')}")
-
-                    recovered = False
-                    if decision.get("strategy") == "restart_browser":
-                        try:
-                            await self._stop_browser()
-                            await asyncio.sleep(5)
-                            await self._ensure_browser()
-                            doj_result = await self._doj_client.search_name_variations(individual)
-                            if doj_result.get("search_successful"):
-                                doj_verdict = "searched"
-                                verdict_info = assess_combined_verdict(individual, bb_matches, doj_result)
-                                recovered = True
-                        except Exception:
-                            pass  # Fall through to BB-only verdict
-
-                    if not recovered:
-                        doj_verdict = "error"
-                        fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
-                        verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.3,
-                                        "rationale": f"DOJ error: {decision.get('diagnosis', str(e))}; BB match pending DOJ confirmation" if best_bb_verdict == "match" else f"DOJ error: {decision.get('diagnosis', str(e))}",
-                                        "false_positive_indicators": []}
-
-                # Keep the strongest result across individuals
-                if best_verdict_info is None or verdict_info.get("confidence_score", 0) > best_verdict_info.get("confidence_score", 0):
-                    best_verdict_info = verdict_info
-                    best_doj_result = doj_result
-                    best_doj_verdict = doj_verdict
-
-                await asyncio.sleep(0.5)  # Rate limiting between individuals
-
-            if best_verdict_info is None:
-                best_verdict_info = {"verdict": "no_match", "confidence_score": 0, "rationale": "No results", "false_positive_indicators": []}
-
-            # Contextual glance for ambiguous cases only (not strong verdicts)
-            combined = best_verdict_info["verdict"]
-            glance_result = None
-            if combined in ("possible_match", "needs_review"):
-                glance_result = await asyncio.to_thread(
-                    contextual_glance, name, best_bb_matches, best_doj_result
+            # Process this name (BB + cached DOJ results + verdict)
+            try:
+                result = await self._process_single_name(
+                    name, individuals, feature_ids,
+                    search_black_book, book_text, assess_combined_verdict,
+                    contextual_glance, verdict_to_binary,
+                    doj_results_cache=doj_results_cache,
                 )
-
-            # Map to binary YES/NO
-            binary_verdict = verdict_to_binary(
-                combined,
-                best_verdict_info.get("confidence_score", 0),
-                glance_override=glance_result,
-            )
-
-            checked.append({
-                "name": name,
-                "individuals_searched": individuals,
-                "feature_ids": feature_ids.get(name, []),
-                "bb_verdict": best_bb_verdict,
-                "bb_matches": best_bb_matches,
-                "doj_verdict": best_doj_verdict,
-                "doj_results": best_doj_result,
-                "combined": combined,
-                "confidence_score": best_verdict_info.get("confidence_score", 0),
-                "rationale": best_verdict_info.get("rationale", ""),
-                "glance_result": glance_result,
-                "binary_verdict": binary_verdict,
-            })
+                checked.append(result)
+            except Exception as e:
+                self.log(f"ERROR processing '{name}': {e}", level="ERROR")
+                checked.append({
+                    "name": name,
+                    "individuals_searched": individuals,
+                    "feature_ids": feature_ids.get(name, []),
+                    "bb_verdict": "no_match",
+                    "bb_matches": None,
+                    "doj_verdict": "error",
+                    "doj_results": None,
+                    "combined": "error",
+                    "confidence_score": 0,
+                    "rationale": f"Processing error: {str(e)[:200]}",
+                    "glance_result": None,
+                    "binary_verdict": None,
+                })
 
             # Progress logging
             self.log(
-                f"[{len(checked)}/{len(names)}] {name[:30]} → {binary_verdict} "
-                f"(BB:{best_bb_verdict}, DOJ:{best_doj_verdict})",
+                f"[{len(checked)}/{len(names)}] {name[:30]} → {checked[-1]['binary_verdict']} "
+                f"(BB:{checked[-1]['bb_verdict']}, DOJ:{checked[-1]['doj_verdict']})",
                 level="DEBUG",
             )
 
-            await asyncio.sleep(1)  # Rate limiting between names
+            await asyncio.sleep(0.2)  # Brief yield between names
+
+        batch_elapsed = _time.time() - batch_start
+        self.log(
+            f"Batch complete: {len(checked)}/{len(names)} names in {batch_elapsed:.0f}s",
+        )
 
         # Commit episodes for significant findings
         yes_names = [c["name"] for c in checked if c.get("binary_verdict") == "YES"]
@@ -292,6 +242,162 @@ class DetectiveAgent(Agent):
             task_id=task.id, task_type=task.type, status="success",
             result={"checked": checked}, agent=self.name,
         )
+
+    # ── Subprocess DOJ Search ─────────────────────────────────────
+
+    async def _search_doj_subprocess(self, names: list[str]) -> dict:
+        """Run DOJ searches in a separate subprocess with its own event loop.
+
+        This isolates Playwright's CDP communication from the orchestrator's
+        busy event loop, preventing timeout failures caused by event loop
+        contention from other agents' LLM calls, graph sync, watercooler, etc.
+
+        Args:
+            names: List of individual names to search (already split from compounds)
+
+        Returns:
+            Dict mapping name → DOJ search result dict
+        """
+        worker_path = os.path.join(os.path.dirname(__file__), "..", "doj_search_worker.py")
+
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                sys.executable, worker_path,
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+
+            input_data = json.dumps(names).encode()
+            stdout, stderr = await asyncio.wait_for(
+                proc.communicate(input=input_data),
+                timeout=PER_NAME_TIMEOUT * len(names) + 60,  # generous timeout
+            )
+
+            # Log worker progress messages from stderr
+            if stderr:
+                for line in stderr.decode().strip().split("\n"):
+                    if line.strip():
+                        try:
+                            msg = json.loads(line)
+                            status = msg.get("status", "")
+                            if status == "searched":
+                                self.log(
+                                    f"DOJ: {msg.get('name', '?')} → "
+                                    f"{msg.get('total', 0)} results in {msg.get('elapsed', '?')}s",
+                                    level="DEBUG",
+                                )
+                            elif status == "error":
+                                self.log(
+                                    f"DOJ error: {msg.get('name', '?')} — {msg.get('error', '?')}",
+                                    level="WARN",
+                                )
+                            elif status == "browser_ready":
+                                self.log("DOJ subprocess: browser ready")
+                            elif status == "fatal":
+                                self.log(f"DOJ subprocess fatal: {msg.get('error', '?')}", level="ERROR")
+                        except json.JSONDecodeError:
+                            self.log(f"DOJ worker: {line[:100]}", level="DEBUG")
+
+            if proc.returncode != 0:
+                self.log(f"DOJ worker exited with code {proc.returncode}", level="WARN")
+                return {}
+
+            # Parse results from stdout
+            results_list = json.loads(stdout.decode())
+            return {item["name"]: item["result"] for item in results_list}
+
+        except asyncio.TimeoutError:
+            self.log(f"DOJ subprocess timed out for {len(names)} names", level="WARN")
+            try:
+                proc.kill()
+            except Exception:
+                pass
+            return {}
+        except Exception as e:
+            self.log(f"DOJ subprocess error: {e}", level="ERROR")
+            return {}
+
+    # ── Per-Name Processing (with timeout support) ──────────────
+
+    async def _process_single_name(
+        self, name, individuals, feature_ids,
+        search_black_book, book_text, assess_combined_verdict,
+        contextual_glance, verdict_to_binary,
+        doj_results_cache=None,
+    ):
+        """Process a single name — BB + DOJ search + verdict. Designed to be wrapped in wait_for()."""
+        best_bb_matches = None
+        best_doj_result = None
+        best_verdict_info = None
+        best_bb_verdict = "no_match"
+        best_doj_verdict = "pending"
+
+        for individual in individuals:
+            bb_matches = search_black_book(individual, book_text)
+            if bb_matches:
+                best_bb_matches = bb_matches
+                best_bb_verdict = "match"
+
+            # DOJ result from subprocess cache (already searched in batch)
+            doj_result = None
+            doj_verdict = "pending"
+            if doj_results_cache and individual in doj_results_cache:
+                doj_result = doj_results_cache[individual]
+                if doj_result.get("search_successful"):
+                    doj_verdict = "searched"
+                    verdict_info = assess_combined_verdict(individual, bb_matches, doj_result)
+                else:
+                    doj_verdict = "error"
+                    fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
+                    verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.5,
+                                    "rationale": f"DOJ search failed for {individual}" + ("; BB match pending DOJ confirmation" if best_bb_verdict == "match" else ""),
+                                    "false_positive_indicators": []}
+            else:
+                # No DOJ result available (subprocess didn't search this individual)
+                fallback_verdict = "needs_review" if best_bb_verdict == "match" else "no_match"
+                verdict_info = {"verdict": fallback_verdict, "confidence_score": 0.5,
+                                "rationale": "DOJ search not available" + ("; BB match pending DOJ confirmation" if best_bb_verdict == "match" else ""),
+                                "false_positive_indicators": []}
+
+            # Keep the strongest result across individuals
+            if best_verdict_info is None or verdict_info.get("confidence_score", 0) > best_verdict_info.get("confidence_score", 0):
+                best_verdict_info = verdict_info
+                best_doj_result = doj_result
+                best_doj_verdict = doj_verdict
+
+        if best_verdict_info is None:
+            best_verdict_info = {"verdict": "no_match", "confidence_score": 0, "rationale": "No results", "false_positive_indicators": []}
+
+        # Contextual glance for ambiguous cases only
+        combined = best_verdict_info["verdict"]
+        glance_result = None
+        if combined in ("possible_match", "needs_review"):
+            glance_result = await asyncio.to_thread(
+                contextual_glance, name, best_bb_matches, best_doj_result
+            )
+
+        # Map to binary YES/NO
+        binary_verdict = verdict_to_binary(
+            combined,
+            best_verdict_info.get("confidence_score", 0),
+            glance_override=glance_result,
+        )
+
+        return {
+            "name": name,
+            "individuals_searched": individuals,
+            "feature_ids": feature_ids.get(name, []),
+            "bb_verdict": best_bb_verdict,
+            "bb_matches": best_bb_matches,
+            "doj_verdict": best_doj_verdict,
+            "doj_results": best_doj_result,
+            "combined": combined,
+            "confidence_score": best_verdict_info.get("confidence_score", 0),
+            "rationale": best_verdict_info.get("rationale", ""),
+            "glance_result": glance_result,
+            "binary_verdict": binary_verdict,
+        }
 
     # ── Name Analysis (LLM) ──────────────────────────────────────
 
@@ -358,10 +464,10 @@ Respond with JSON only. Format:
             # Fallback: return each name as-is, no skips
             return {n: {"search_names": [n], "skip": False} for n in names}
 
-    # ── Browser Lifecycle ────────────────────────────────────────
+    # ── Browser Lifecycle (legacy — kept for _pass_doj fallback) ──
 
     async def _start_browser(self):
-        """Launch DOJ search client (lazy — called first time DOJ search is needed)."""
+        """Launch DOJ search client (legacy — subprocess is preferred)."""
         if self._doj_client is not None:
             return
         from doj_search import DOJSearchClient

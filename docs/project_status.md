@@ -127,6 +127,7 @@ This file should be automatically updated when necessary to answer three key que
 | "What's Next" section + contact email | Phase 3 | Done |
 | Subject category classification (profession tags) | Phase 2 | Done |
 | Fix Supabase 1000-row pagination in db.py | Tooling | Done |
+| Detective subprocess DOJ search (event loop isolation) | Tooling | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 
@@ -288,7 +289,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — In Progress (Clean Slate Rebuild):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
-- Current stats: ~1,396 issues, ~1,602 features, ~1,056 cross-references (243 YES), ~259 dossiers, 64 confirmed connections
+- Current stats: ~1,396 issues, ~1,600 features, ~1,163 cross-references (322 YES), ~361 dossiers, 72 confirmed connections
 - Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
 - Total API cost: ~$94 (Miranda $70 at 74%, Courier $11, Researcher $5, Detective + others ~$8)
 - Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified
@@ -302,6 +303,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - Stale task purge fix: cross_reference tasks exempted from 60-min cleanup (DOJ searches take hours)
 - Subject category classification: 1,601 features + 320 dossiers tagged with profession categories (10 categories including Private/Other split)
 - Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
+- Detective DOJ subprocess fix: Playwright searches moved to isolated subprocess to prevent event loop contention timeouts (60/60 searches now succeed vs 0/60 before)
 
 **Ongoing — Scale the Pipeline:**
 - Continue orchestrator run to process remaining issues and cross-reference all names

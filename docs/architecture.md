@@ -93,7 +93,7 @@ The system runs as 7 autonomous agents coordinated by the Editor via asyncio.Que
 | Scout | 60s | None (API calls) | Three-tier discovery: AD Archive HTTP → archive.org API → Claude CLI |
 | Courier | 5s | Haiku (scraping) | Downloads PDFs + scrapes AD Archive via HTTP/JWT + Anthropic API |
 | Reader | 30s | Claude Sonnet | Extracts homeowner data via Vision API, TOC + article pages |
-| Detective | 180s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright (batched) |
+| Detective | 180s | None (search) | Two-pass: BB grep (instant) → DOJ Playwright subprocess (isolated event loop) |
 | Researcher | 120s | Claude Haiku | Builds dossiers with pattern analysis + home analysis |
 | Editor | event-driven | Sonnet (routine) / Opus (human+quality) | Central coordinator: event queue, plans tasks, validates results, commits to Supabase |
 | Designer | 600s | Claude Haiku | Learns design patterns from training sources |
