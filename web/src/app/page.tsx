@@ -138,7 +138,7 @@ export default async function Home() {
       <WhatsNext />
 
       {/* ── Methodology: Agent AI ── */}
-      <AgentMethodologySection />
+      <AgentMethodologySection stats={stats} />
 
       {/* ── Methodology: Aesthetic Metric ── */}
       <AestheticMethodologySection />

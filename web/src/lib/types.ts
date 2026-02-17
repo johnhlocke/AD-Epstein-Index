@@ -126,6 +126,9 @@ export interface StatsResponse {
     confirmed: number;
     rejected: number;
     pending: number;
+    tierToConfirmed: Record<string, number>;
+    tierToRejected: Record<string, number>;
+    strengthCounts: Record<string, number>;
   };
   confirmedTimeline: {
     personName: string;

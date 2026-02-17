@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { VerdictSankey } from "@/components/charts/VerdictSankey";
 
 // ── Shared style constants ──────────────────────────────────────────────────
 const MONO = "JetBrains Mono, monospace";
@@ -10,11 +11,16 @@ const BORDER = "#2a2a3a";
 const TEXT_LIGHT = "#E0E0E5";
 const TEXT_MID = "#A0A0B0";
 const TEXT_DIM = "rgba(160, 160, 176, 0.6)";
-const GREEN = "rgba(46, 204, 113, 0.7)";
-const GREEN_BG = "rgba(46, 204, 113, 0.1)";
-const GOLD = "rgba(245, 200, 66, 0.8)";
-const GOLD_DIM = GOLD; // Unified — was 0.7, now matches GOLD at 0.8
+const GREEN = "rgba(45, 106, 79, 0.95)";       // #2D6A4F — forest green (on-system)
+const GREEN_BG = "rgba(45, 106, 79, 0.1)";
+const GOLD = "rgba(184, 134, 11, 0.9)";           // #B8860B — on-system gold
+const GOLD_DIM = "rgba(184, 134, 11, 0.25)";
+const RED = "rgba(155, 34, 38, 0.85)";             // #9B2226 — on-system red
+const RED_DIM = "rgba(155, 34, 38, 0.2)";
+const COPPER = "rgba(184, 115, 51, 0.85)";         // #B87333 — on-system copper
 const COPPER_DIM = "rgba(184, 115, 51, 0.25)";
+const SLATE = "rgba(74, 124, 143, 0.85)";          // #4A7C8F — on-system slate
+const SLATE_DIM = "rgba(74, 124, 143, 0.2)";
 
 // ── Code Box component for technical diagrams ───────────────────────────────
 function CodeBox({
@@ -261,7 +267,23 @@ function SectionHeader({
  *
  * Clean. Minimal. As it should be. — Sable
  */
-export function AgentMethodologySection() {
+interface MethodologyProps {
+  stats?: {
+    features: { total: number };
+    crossReferences: { total: number };
+    dossiers: {
+      total: number;
+      confirmed: number;
+      rejected: number;
+      pending: number;
+      tierToConfirmed: Record<string, number>;
+      tierToRejected: Record<string, number>;
+      strengthCounts: Record<string, number>;
+    };
+  };
+}
+
+export function AgentMethodologySection({ stats }: MethodologyProps) {
   return (
     <section
       className="relative overflow-hidden"
@@ -921,224 +943,215 @@ export function AgentMethodologySection() {
             summary="The investigation methodology prioritizes precision over recall. Every confirmed connection has passed through automated cross-referencing, detective triage, deep research, and editorial review. The 93% rejection rate reflects the system's commitment to minimizing false positives."
           />
 
-          {/* ── Verdict Flow Diagram ── */}
-          <div className="mt-10 flex flex-col items-center gap-0">
-            {/* Step 1: Name Extracted */}
-            <div
-              className="w-full max-w-[500px] rounded border px-6 py-4 text-center"
-              style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
-            >
-              <p
-                className="text-[12px] font-bold tracking-[0.15em]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                NAME EXTRACTED
-              </p>
-              <p
-                className="mt-1 text-[10px] tracking-wider"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                from Architectural Digest feature
-              </p>
-            </div>
-
-            {/* Connector */}
-            <div className="h-8 w-px" style={{ backgroundColor: BORDER }} />
-
-            {/* Step 2: Two sources side by side */}
-            <div className="flex w-full max-w-[500px] gap-3">
+          {/* ── Verdict Flow + Sankey — two-column layout ── */}
+          <div
+            className="mt-10 grid items-stretch gap-6"
+            style={{ gridTemplateColumns: "188px 1fr" }}
+          >
+            {/* ── Left: Compact Verdict Flow (minor column 01) ── */}
+            <div className="flex flex-col items-center justify-between">
+              {/* Step 1: Name Extracted */}
               <div
-                className="flex-1 rounded border px-4 py-3 text-center"
-                style={{ backgroundColor: CARD_BG, borderColor: GOLD_DIM }}
+                className="w-full rounded border px-3 py-2.5 text-center"
+                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
               >
                 <p
-                  className="text-[11px] font-bold tracking-[0.12em]"
-                  style={{ fontFamily: MONO, color: GOLD }}
+                  className="text-[9px] font-bold tracking-[0.12em]"
+                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
                 >
-                  BLACK BOOK
+                  NAME EXTRACTED
                 </p>
                 <p
-                  className="mt-1 text-[10px]"
+                  className="mt-0.5 text-[7.5px] tracking-wider"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
-                  ~1,500 contacts
+                  from AD feature
                 </p>
               </div>
+
+              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+
+              {/* Step 2: Sources stacked */}
+              <div className="flex w-full gap-1.5">
+                <div
+                  className="flex-1 rounded border px-2 py-1.5 text-center"
+                  style={{ backgroundColor: CARD_BG, borderColor: COPPER_DIM }}
+                >
+                  <p
+                    className="text-[8px] font-bold tracking-[0.1em]"
+                    style={{ fontFamily: MONO, color: COPPER }}
+                  >
+                    BLACK BOOK
+                  </p>
+                </div>
+                <div
+                  className="flex-1 rounded border px-2 py-1.5 text-center"
+                  style={{ backgroundColor: CARD_BG, borderColor: COPPER_DIM }}
+                >
+                  <p
+                    className="text-[8px] font-bold tracking-[0.1em]"
+                    style={{ fontFamily: MONO, color: COPPER }}
+                  >
+                    DOJ LIBRARY
+                  </p>
+                </div>
+              </div>
+
+              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+
+              {/* Step 3: Detective */}
               <div
-                className="flex-1 rounded border px-4 py-3 text-center"
-                style={{ backgroundColor: CARD_BG, borderColor: GOLD_DIM }}
+                className="w-full rounded border px-3 py-2.5 text-center"
+                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
               >
                 <p
-                  className="text-[11px] font-bold tracking-[0.12em]"
-                  style={{ fontFamily: MONO, color: GOLD }}
+                  className="text-[9px] font-bold tracking-[0.12em]"
+                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
                 >
-                  DOJ LIBRARY
+                  DETECTIVE VERDICT
+                </p>
+                <div className="mt-1.5 flex flex-wrap justify-center gap-1">
+                  <span
+                    className="rounded-sm px-1.5 py-px text-[7px] tracking-wider"
+                    style={{ fontFamily: MONO, backgroundColor: "rgba(45,106,79,0.18)", color: GREEN }}
+                  >
+                    CONFIRMED
+                  </span>
+                  <span
+                    className="rounded-sm px-1.5 py-px text-[7px] tracking-wider"
+                    style={{ fontFamily: MONO, backgroundColor: COPPER_DIM, color: COPPER }}
+                  >
+                    LIKELY
+                  </span>
+                  <span
+                    className="rounded-sm px-1.5 py-px text-[7px] tracking-wider"
+                    style={{ fontFamily: MONO, backgroundColor: GOLD_DIM, color: GOLD }}
+                  >
+                    POSSIBLE
+                  </span>
+                  <span
+                    className="rounded-sm px-1.5 py-px text-[7px] tracking-wider"
+                    style={{ fontFamily: MONO, backgroundColor: SLATE_DIM, color: SLATE }}
+                  >
+                    NEEDS REVIEW
+                  </span>
+                  <span
+                    className="rounded-sm px-1.5 py-px text-[7px] tracking-wider"
+                    style={{ fontFamily: MONO, backgroundColor: RED_DIM, color: RED }}
+                  >
+                    NO MATCH
+                  </span>
+                </div>
+              </div>
+
+              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+
+              {/* Step 4: Dossier */}
+              <div
+                className="w-full rounded border px-3 py-2.5 text-center"
+                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
+              >
+                <p
+                  className="text-[9px] font-bold tracking-[0.12em]"
+                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                >
+                  RESEARCHER DOSSIER
                 </p>
                 <p
-                  className="mt-1 text-[10px]"
+                  className="mt-0.5 text-[7.5px] tracking-wider"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
-                  millions of pages
+                  deep investigation
                 </p>
               </div>
-            </div>
 
-            {/* Connector */}
-            <div className="h-8 w-px" style={{ backgroundColor: BORDER }} />
+              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
 
-            {/* Step 3: Detective Verdict */}
-            <div
-              className="w-full max-w-[500px] rounded border px-6 py-4 text-center"
-              style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
-            >
-              <p
-                className="text-[12px] font-bold tracking-[0.15em]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                DETECTIVE VERDICT
-              </p>
-              <p
-                className="mt-1 text-[10px] tracking-wider"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                confidence tier assigned based on match quality
-              </p>
-              {/* Verdict tier badges */}
-              <div className="mt-3 flex flex-wrap justify-center gap-2">
-                <span
-                  className="rounded-sm px-2 py-0.5 text-[10px] tracking-wider"
-                  style={{
-                    fontFamily: MONO,
-                    backgroundColor: "rgba(46,204,113,0.15)",
-                    color: GREEN,
-                  }}
-                >
-                  CONFIRMED
-                </span>
-                <span
-                  className="rounded-sm px-2 py-0.5 text-[10px] tracking-wider"
-                  style={{
-                    fontFamily: MONO,
-                    backgroundColor: "rgba(245,200,66,0.12)",
-                    color: GOLD,
-                  }}
-                >
-                  LIKELY
-                </span>
-                <span
-                  className="rounded-sm px-2 py-0.5 text-[10px] tracking-wider"
-                  style={{
-                    fontFamily: MONO,
-                    backgroundColor: "rgba(160,160,176,0.08)",
-                    color: TEXT_DIM,
-                  }}
-                >
-                  POSSIBLE
-                </span>
-                <span
-                  className="rounded-sm px-2 py-0.5 text-[10px] tracking-wider"
-                  style={{
-                    fontFamily: MONO,
-                    backgroundColor: "rgba(155,34,38,0.12)",
-                    color: "rgba(255,120,120,0.7)",
-                  }}
-                >
-                  NO MATCH
-                </span>
-              </div>
-            </div>
-
-            {/* Connector */}
-            <div className="h-8 w-px" style={{ backgroundColor: BORDER }} />
-
-            {/* Step 4: Dossier */}
-            <div
-              className="w-full max-w-[500px] rounded border px-6 py-4 text-center"
-              style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
-            >
-              <p
-                className="text-[12px] font-bold tracking-[0.15em]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                RESEARCHER DOSSIER
-              </p>
-              <p
-                className="mt-1 text-[10px] tracking-wider"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                deep investigation — public records, graph analytics, evidence
-                synthesis
-              </p>
-            </div>
-
-            {/* Connector */}
-            <div className="h-8 w-px" style={{ backgroundColor: BORDER }} />
-
-            {/* Step 5: Editor Review */}
-            <div
-              className="w-full max-w-[500px] rounded border px-6 py-4 text-center"
-              style={{ backgroundColor: CARD_BG, borderColor: "#B87333" }}
-            >
-              <p
-                className="text-[12px] font-bold tracking-[0.15em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                EDITOR REVIEW
-              </p>
-              <p
-                className="mt-1 text-[10px] tracking-wider"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                Miranda confirms or rejects — no data enters the database without
-                her sign-off
-              </p>
-            </div>
-
-            {/* Connector */}
-            <div className="h-8 w-px" style={{ backgroundColor: BORDER }} />
-
-            {/* Step 6: Outcomes */}
-            <div className="flex w-full max-w-[500px] gap-3">
+              {/* Step 5: Editor Review */}
               <div
-                className="flex-1 rounded border px-4 py-3 text-center"
-                style={{
-                  backgroundColor: "rgba(46,204,113,0.05)",
-                  borderColor: "rgba(46,204,113,0.3)",
-                }}
+                className="w-full rounded border px-3 py-2.5 text-center"
+                style={{ backgroundColor: CARD_BG, borderColor: "#B87333" }}
               >
                 <p
-                  className="text-[12px] font-bold tracking-[0.15em]"
-                  style={{ fontFamily: MONO, color: GREEN }}
+                  className="text-[9px] font-bold tracking-[0.12em]"
+                  style={{ fontFamily: MONO, color: "#B87333" }}
                 >
-                  CONFIRMED
+                  EDITOR REVIEW
                 </p>
                 <p
-                  className="mt-1 text-[10px]"
+                  className="mt-0.5 text-[7.5px] tracking-wider"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
-                  published to site
+                  final sign-off
                 </p>
               </div>
+
+              <div className="min-h-3 w-px flex-1" style={{ backgroundColor: BORDER }} />
+
+              {/* Step 6: Outcomes */}
+              <div className="flex w-full gap-1.5">
+                <div
+                  className="flex-1 rounded border px-2 py-2 text-center"
+                  style={{ backgroundColor: "rgba(45,106,79,0.08)", borderColor: "rgba(45,106,79,0.35)" }}
+                >
+                  <p
+                    className="text-[9px] font-bold tracking-[0.12em]"
+                    style={{ fontFamily: MONO, color: GREEN }}
+                  >
+                    YES
+                  </p>
+                </div>
+                <div
+                  className="flex-1 rounded border px-2 py-2 text-center"
+                  style={{ backgroundColor: "rgba(155,34,38,0.05)", borderColor: "rgba(155,34,38,0.3)" }}
+                >
+                  <p
+                    className="text-[9px] font-bold tracking-[0.12em]"
+                    style={{ fontFamily: MONO, color: RED }}
+                  >
+                    NO
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* ── Right: Live Sankey Diagram ── */}
+            <div
+              className="overflow-hidden rounded border"
+              style={{ backgroundColor: "#111118", borderColor: BORDER }}
+            >
               <div
-                className="flex-1 rounded border px-4 py-3 text-center"
-                style={{
-                  backgroundColor: "rgba(155,34,38,0.05)",
-                  borderColor: "rgba(155,34,38,0.3)",
-                }}
+                className="px-3 py-2"
+                style={{ borderBottom: `1px solid ${BORDER}` }}
               >
                 <p
-                  className="text-[12px] font-bold tracking-[0.15em]"
-                  style={{ fontFamily: MONO, color: "rgba(255,120,120,0.7)" }}
+                  className="text-[9px] font-bold tracking-[0.12em]"
+                  style={{ fontFamily: MONO, color: TEXT_MID }}
                 >
-                  REJECTED
-                </p>
-                <p
-                  className="mt-1 text-[10px]"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  false positive dismissed
+                  {"// INVESTIGATION FUNNEL — LIVE DATA"}
                 </p>
               </div>
+              {stats ? (
+                <VerdictSankey
+                  featuresTotal={stats.features.total}
+                  crossRefsTotal={stats.crossReferences.total}
+                  dossiersTotal={stats.dossiers.total}
+                  confirmed={stats.dossiers.confirmed}
+                  rejected={stats.dossiers.rejected}
+                  tierToConfirmed={stats.dossiers.tierToConfirmed}
+                  tierToRejected={stats.dossiers.tierToRejected}
+                  strengthCounts={stats.dossiers.strengthCounts}
+                />
+              ) : (
+                <div className="flex h-[600px] items-center justify-center">
+                  <p
+                    className="text-[10px] tracking-wider"
+                    style={{ fontFamily: MONO, color: TEXT_DIM }}
+                  >
+                    LOADING PIPELINE DATA...
+                  </p>
+                </div>
+              )}
             </div>
           </div>
 
@@ -1190,7 +1203,7 @@ export function AgentMethodologySection() {
             >
               <p
                 className="text-[11px] font-bold"
-                style={{ fontFamily: MONO, color: "rgba(255,120,120,0.7)" }}
+                style={{ fontFamily: MONO, color: RED }}
               >
                 {"// WHAT DOES NOT COUNT"}
               </p>
@@ -1902,7 +1915,7 @@ export function AgentMethodologySection() {
               style={{
                 backgroundColor: CARD_BG,
                 borderColor: BORDER,
-                borderTop: "2px solid rgba(245,200,66,0.5)",
+                borderTop: "2px solid rgba(184,134,11,0.5)",
               }}
             >
               <p

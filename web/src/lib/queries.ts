@@ -24,15 +24,16 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .from("issues")
     .select("id, status, month, year");
 
-  // Fetch features with homeowner presence
-  const { data: features } = await sb
+  // Fetch all features (override default 1000 row limit)
+  const { data: features, count: featuresCount } = await sb
     .from("features")
-    .select("id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built, subject_category");
+    .select("id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built, subject_category", { count: "exact" })
+    .range(0, 4999);
 
   // Fetch dossiers verdict counts + confirmed timeline data
   const { data: dossiers } = await sb
     .from("dossiers")
-    .select("id, editor_verdict, subject_name, feature_id, connection_strength");
+    .select("id, editor_verdict, subject_name, feature_id, connection_strength, combined_verdict");
 
   // Fetch cross-reference count
   const { count: xrefCount } = await sb
@@ -93,6 +94,22 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     if (d.editor_verdict === "CONFIRMED") confirmed++;
     else if (d.editor_verdict === "REJECTED") rejected++;
     else pending++;
+  }
+
+  // Detective tier breakdown (combined_verdict → editor_verdict counts)
+  const tierToConfirmed: Record<string, number> = {};
+  const tierToRejected: Record<string, number> = {};
+  const strengthCounts: Record<string, number> = {};
+  for (const d of allDossiers) {
+    const tier = (d.combined_verdict as string) ?? "unknown";
+    const ev = d.editor_verdict as string;
+    if (ev === "CONFIRMED") {
+      tierToConfirmed[tier] = (tierToConfirmed[tier] ?? 0) + 1;
+      const cs = (d.connection_strength as string) ?? "unknown";
+      strengthCounts[cs] = (strengthCounts[cs] ?? 0) + 1;
+    } else if (ev === "REJECTED") {
+      tierToRejected[tier] = (tierToRejected[tier] ?? 0) + 1;
+    }
   }
 
   // Coverage heatmap: year → month statuses
@@ -184,7 +201,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
       target: 456,
     },
     features: {
-      total: allFeatures.length,
+      total: featuresCount ?? allFeatures.length,
       withHomeowner: allFeatures.filter((f) => f.homeowner_name).length,
       byYear,
       topStyles,
@@ -195,6 +212,9 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
       confirmed,
       rejected,
       pending,
+      tierToConfirmed,
+      tierToRejected,
+      strengthCounts,
     },
     confirmedTimeline,
     categoryBreakdown,
@@ -203,7 +223,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     },
     coverage,
   };
-}, ["stats"], { revalidate: 300 });
+}, ["stats-v2"], { revalidate: 300 });
 
 // ── Features ───────────────────────────────────────────────
 

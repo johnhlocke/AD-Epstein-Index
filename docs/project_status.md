@@ -73,7 +73,7 @@ This file should be automatically updated when necessary to answer three key que
 | Agent Office embedded knowledge graph | Tooling | Done |
 | Courier deep scraping (Azure Blob page images) | Phase 1 | Done |
 | Miranda speech system overhaul (LLM-driven sprite speech) | Tooling | Done |
-| Deploy website publicly | Phase 3 | Ready to Deploy |
+| Deploy website publicly | Phase 3 | Done |
 | Designer agent → spec generator | Tooling | Done |
 | Watercooler conversations (agent-to-agent dialogue) | Tooling | Done |
 | Newsroom Chatter panel (bulletin board + watercooler) | Tooling | Done |
@@ -128,6 +128,9 @@ This file should be automatically updated when necessary to answer three key que
 | Subject category classification (profession tags) | Phase 2 | Done |
 | Fix Supabase 1000-row pagination in db.py | Tooling | Done |
 | Detective subprocess DOJ search (event loop isolation) | Tooling | Done |
+| Sankey diagram visual polish (Anonymous rename, padding, on-system colors) | Phase 3 | Done |
+| Methodology vertical flow on-system color update | Phase 3 | Done |
+| Fix website Supabase 1000-row count (exact count) | Phase 3 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 

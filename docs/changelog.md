@@ -6,6 +6,16 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-16 (Session 38)
+
+### Changed — Sankey Diagram & Methodology Visual Polish
+
+- **`web/src/components/charts/VerdictSankey.tsx`** — Renamed "NOT CROSS-REFERENCED" node to "ANONYMOUS" throughout (NODE_THEME, LINK_THEME, node construction). Increased chart height from 560px to 600px and bottom margin from 12 to 32 to prevent COINCIDENCE node from being cut off.
+- **`web/src/components/landing/MethodologySection.tsx`** — Updated vertical flow diagram colors to on-system palette: GOLD (`#B8860B`), RED (`#9B2226`), COPPER (`#B87333`), SLATE (`#4A7C8F`). BLACK BOOK/DOJ boxes now copper instead of gold. Detective verdict badges updated: NEEDS REVIEW (slate), LIKELY (copper), POSSIBLE (gold), NO MATCH (red). Fixed bright-yellow borders and bright-red headers to on-system colors.
+- **`web/src/lib/queries.ts`** — Fixed Supabase 1,000-row limit for features count: added `{ count: "exact" }` to `.select()` and use `featuresCount` instead of `allFeatures.length`. Stats now correctly report ~1,600 features instead of capping at 1,000.
+
+---
+
 ## 2026-02-16 (Session 37)
 
 ### Fixed — Detective DOJ Search Timeouts (Subprocess Architecture)
