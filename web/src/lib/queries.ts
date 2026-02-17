@@ -6,6 +6,8 @@ import type {
   Dossier,
   DossierWithContext,
   DossierImage,
+  FeatureImage,
+  FeatureReport,
   PaginatedResponse,
   AestheticRadarData,
 } from "./types";
@@ -533,4 +535,51 @@ export async function getDossier(id: number): Promise<DossierWithContext | null>
     issue,
     images: (images ?? []) as DossierImage[],
   } as DossierWithContext;
+}
+
+// ── Feature Report (all features) ──────────────────────────
+
+export async function getFeatureReport(featureId: number): Promise<FeatureReport | null> {
+  const sb = getSupabase();
+
+  // Fetch feature
+  const { data: feature } = await sb
+    .from("features")
+    .select("*")
+    .eq("id", featureId)
+    .single();
+
+  if (!feature) return null;
+
+  // Fetch issue
+  let issue = null;
+  if (feature.issue_id) {
+    const { data: issueData } = await sb
+      .from("issues")
+      .select("*")
+      .eq("id", feature.issue_id)
+      .single();
+    issue = issueData;
+  }
+
+  // Fetch article images from feature_images
+  const { data: images } = await sb
+    .from("feature_images")
+    .select("id, feature_id, page_number, public_url, created_at")
+    .eq("feature_id", featureId)
+    .order("page_number");
+
+  // Fetch optional dossier (may not exist)
+  const { data: dossier } = await sb
+    .from("dossiers")
+    .select("*")
+    .eq("feature_id", featureId)
+    .maybeSingle();
+
+  return {
+    feature: feature as Feature,
+    issue,
+    images: (images ?? []) as FeatureImage[],
+    dossier: dossier as Dossier | null,
+  };
 }

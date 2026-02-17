@@ -201,7 +201,7 @@ export function SearchableIndex() {
               <TableHead className="font-serif">Designer</TableHead>
               <TableHead className="font-serif">Category</TableHead>
               <TableHead className="font-serif">Location</TableHead>
-              <TableHead className="font-serif">Dossier Link</TableHead>
+              <TableHead className="font-serif">Report</TableHead>
               <TableHead className="whitespace-nowrap font-serif">Style</TableHead>
             </TableRow>
           </TableHeader>
@@ -248,18 +248,19 @@ export function SearchableIndex() {
                     {[f.location_city, f.location_state].filter(Boolean).join(", ") || "\u2014"}
                   </TableCell>
                   <TableCell className="max-w-0 truncate font-serif">
-                    {f.dossier_id ? (
-                      <Link
-                        href={`/dossier/${f.dossier_id}`}
-                        className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] font-medium leading-tight no-underline transition-colors hover:opacity-80"
-                        style={{ backgroundColor: "#4A4A4A", color: "#D4D4D4" }}
-                      >
-                        Dossier {f.dossier_id}
-                        <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
-                          <path d="M3 1.5H8.5V7M8.5 1.5L1.5 8.5" stroke="#9A9A9A" strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
-                        </svg>
-                      </Link>
-                    ) : "\u2014"}
+                    <Link
+                      href={`/report/${f.id}`}
+                      className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] font-medium leading-tight no-underline transition-colors hover:opacity-80"
+                      style={f.dossier_id
+                        ? { backgroundColor: "#4A4A4A", color: "#D4D4D4" }
+                        : { backgroundColor: "#E8E4DF", color: "#6B6560" }
+                      }
+                    >
+                      {f.dossier_id ? "Dossier" : "Report"}
+                      <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
+                        <path d="M3 1.5H8.5V7M8.5 1.5L1.5 8.5" stroke={f.dossier_id ? "#9A9A9A" : "#8B8580"} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                      </svg>
+                    </Link>
                   </TableCell>
                   <TableCell className="whitespace-nowrap font-serif">
                     {f.design_style ? (

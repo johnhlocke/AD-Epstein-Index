@@ -38,6 +38,19 @@ export interface Feature {
   page_number: number | null;
   notes: string | null;
   created_at: string;
+  // v2 aesthetic scores (1–5 scale)
+  score_grandeur: number | null;
+  score_material_warmth: number | null;
+  score_maximalism: number | null;
+  score_historicism: number | null;
+  score_provenance: number | null;
+  score_hospitality: number | null;
+  score_formality: number | null;
+  score_curation: number | null;
+  score_theatricality: number | null;
+  scoring_version: string | null;
+  scoring_rationale: Record<string, string> | null;
+  scored_at: string | null;
 }
 
 export interface Dossier {
@@ -150,6 +163,23 @@ export interface AestheticRadarData {
   axes: RadarAxisData[];
   epsteinCount: number;
   baselineCount: number;
+}
+
+/** Image from the feature_images table (article page scans) */
+export interface FeatureImage {
+  id: number;
+  feature_id: number;
+  page_number: number | null;
+  public_url: string | null;
+  created_at: string;
+}
+
+/** Unified report for any feature — dossier is null for non-Epstein features */
+export interface FeatureReport {
+  feature: Feature;
+  issue: Issue | null;
+  images: FeatureImage[];
+  dossier: Dossier | null;
 }
 
 /** Paginated response wrapper */
