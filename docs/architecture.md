@@ -456,6 +456,8 @@ Editor._commit_investigation()
 | Agent Status | Generate status.json from pipeline data | Python (`src/agent_status.py`) |
 | DOJ Search | Playwright-based DOJ Epstein Library search | Python, Playwright (`src/doj_search.py`) |
 | Feature Extraction | Extract homeowner data from PDF pages | Python, Claude Sonnet, pdftoppm (`src/extract_features.py`) |
+| Feature Re-Extraction | Full archive spread-data pipeline: parse all articles, classify via Haiku, insert + download images | Python, Haiku (`src/reextract_features.py`) |
+| Aesthetic Scoring | Opus Vision v2.2 scoring: 9-axis rubric + structural enrichment | Python, Opus (`src/score_features.py`) |
 | Cross-Reference Engine | Batch name matching | Python, Playwright, grep (`src/cross_reference.py`) |
 | Database Loader | Load JSON into Supabase | Python, supabase-py (`src/load_features.py`) |
 | Pipeline CLI | Legacy CLI orchestrator | Python (`src/pipeline.py`) |
@@ -560,4 +562,6 @@ researcher.py → get_person_analytics() → dossier synthesis
 ### Pending
 - ~~Additional PDF sources beyond archive.org~~ **Done** (AD Archive covers all 456 issues via JWT scraping)
 - ~~Phase 2 Supabase tables~~ **Done** (`cross_references` table added; dossiers already in Supabase)
-- Vercel production deployment
+- ~~Vercel production deployment~~ **Done** (https://www.wheretheylive.world)
+- Cross-reference + investigate ~2,300 new features from re-extraction
+- Feature report pages for all 4,081 features (plan exists)

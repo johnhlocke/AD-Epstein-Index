@@ -6,6 +6,26 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-17 (Session 40)
+
+### Added — Full Archive Re-Extraction Pipeline
+
+- **`src/reextract_features.py`** — NEW: Complete re-extraction pipeline that reads the full AD Archive spread data (not just JWT `featured` array). Parses all article metadata from spread JSON embedded in each issue page, aggregates pages per article across spreads, filters by section (SKIP_SECTIONS) + page count (>=3), then classifies remaining candidates via Haiku. Pipeline modes: `--scan` (preview counts), `--extract` (full pipeline with image download), `--images` (backfill images for existing stubs). Processes all 470 issues.
+- **Result**: 2,305 new features extracted and inserted with images (6 pages each from Azure Blob), bringing total from ~1,600 to **4,081 features**. Haiku classification cost: $0.57. ~81-90% coverage of actual home tours (misses are designer-name-only titles and themed specials).
+
+### Changed — Manual Dossier Overrides (DOJ Evidence Review)
+
+- **Diane von Furstenberg** (dossier #416): REJECTED → CONFIRMED (HIGH). DOJ document EFTA00758094 shows her on a Yom Kippur guest list with Jeffrey Epstein. Original rejection was based on surname-only BB match + marketing email false positives.
+- **Sharon Stone** (dossier #466): REJECTED → CONFIRMED (MEDIUM). DOJ evidence indicates attendance at event with someone close to Epstein, with plans to meet up.
+- **Nat Rothschild** (dossier #414): Added 8th finding — DOJ document EFTA02426782 showing email chain with Peter Mandelson, Epstein cc'd.
+- **Total confirmed**: 73 → 75
+
+### Changed — Opus Vision Scoring (Batch 2 In Progress)
+
+- **`src/score_features.py`** — Batch 1 complete (254 scored, $36.31). Batch 2 launched for 1,649 new features. Scoring includes 9-axis v2.2 rubric + structural data enrichment (homeowner name, designer, location, style, year built).
+
+---
+
 ## 2026-02-17 (Session 39)
 
 ### Changed — Sankey 6-Stage Funnel + Agent Attribution

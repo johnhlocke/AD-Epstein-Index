@@ -220,7 +220,7 @@ function SectionHeader({
         style={{
           fontFamily: MONO,
           color: TEXT_LIGHT,
-          maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+          maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
         }}
       >
         {title}
@@ -230,7 +230,7 @@ function SectionHeader({
         style={{
           fontFamily: MONO,
           color: TEXT_MID,
-          maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+          maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
         }}
       >
         {subtitle}
@@ -772,7 +772,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               style={{
                 fontFamily: MONO,
                 color: TEXT_LIGHT,
-                maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+                maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
               }}
             >
               PERSONALITY AS ARCHITECTURE
@@ -782,7 +782,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               style={{
                 fontFamily: MONO,
                 color: TEXT_MID,
-                maxWidth: "calc(2 * (100% - 5 * 24px) / 6 + 1 * 24px)",
+                maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
               }}
             >
               Why autonomous AI agents have names, archetypes, and voices &mdash; and why it technically matters.
@@ -829,16 +829,8 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 playsInline
                 className="h-[220px] w-[160px] flex-shrink-0 object-contain"
                 style={{ imageRendering: "pixelated" }}
-              >
-                <source
-                  src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.mov"
-                  type="video/quicktime"
-                />
-                <source
-                  src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite_webm.webm"
-                  type="video/webm"
-                />
-              </video>
+                src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.webm"
+              />
               <p
                 className="mt-4 text-[15px] font-bold"
                 style={{ fontFamily: MONO, color: TEXT_LIGHT }}

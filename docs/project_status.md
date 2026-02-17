@@ -57,8 +57,8 @@ This file should be automatically updated when necessary to answer three key que
 | Fix verdict pipeline (4 bugs: precedence, scope, prompt, DOJ retry) | Tooling | Done |
 | Fix Miranda inbox (human messages not visible) | Tooling | Done |
 | Miranda cost optimization (Opus gate tightened) | Tooling | Done |
-| Batch process all archive.org issues (~57 PDFs extracted) | Phase 1 | In Progress |
-| Batch scrape AD Archive issues | Phase 1 | In Progress |
+| Batch process all archive.org issues (~57 PDFs extracted) | Phase 1 | Done |
+| Batch scrape AD Archive issues | Phase 1 | Done |
 | Investigation policy: BB=confirmed, no fame dismissal | Phase 2 | Done |
 | Fix Detective BB match verdict bug | Tooling | Done |
 | Build cross-reference engine | Phase 2 | Done |
@@ -105,9 +105,11 @@ This file should be automatically updated when necessary to answer three key que
 | Aesthetic comparison: Epstein orbit vs general AD | Phase 2 | Done (v1 — superseded by v2) |
 | Deep extract confirmed names (Vision + taxonomy) | Phase 2 | Done |
 | 9-axis aesthetic scoring instrument v2 (design) | Phase 2 | Done |
-| Feature image backfill (Azure Blob → Supabase Storage) | Phase 2 | In Progress |
-| Opus Vision scoring pipeline (score_features.py) | Phase 2 | In Progress (38/1,600) |
-| Run Opus Vision on all ~1,600 features (v2 scoring) | Phase 2 | Not Started |
+| Feature image backfill (Azure Blob → Supabase Storage) | Phase 2 | Done |
+| Opus Vision scoring pipeline (score_features.py) | Phase 2 | Done |
+| Run Opus Vision on all ~1,600 features (v2 scoring) | Phase 2 | Done (1,590 scored) |
+| Full archive re-extraction (spread data, 2,305 new features) | Phase 1 | Done |
+| Opus Vision scoring batch 2 (new features) | Phase 2 | In Progress |
 | Validation: test-retest + human calibration set | Phase 2 | Not Started |
 | Aesthetic Methodology section (warm dark-cream, 9-axis radar) | Phase 3 | Done |
 | Methodology split (Agent AI + Aesthetic Metric) | Phase 3 | Done |
@@ -298,53 +300,38 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 ## 3. What's Next
 
-**Run 4 — In Progress (Clean Slate Rebuild):**
-- All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilding from scratch.
-- Current stats: ~1,396 issues, ~1,600 features, ~1,163 cross-references (322 YES), ~361 dossiers, 72 confirmed connections
+**Run 4 — Complete (Database Built):**
+- All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
+- **Final stats**: 1,396 issues, **4,081 features** (1,600 original + 2,305 re-extracted + 176 from reextraction test), 1,106 cross-references (309 YES), 420 dossiers, **75 confirmed connections**
+- Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
+- Opus Vision v2.2 scoring: 1,590 original features scored ($145). Batch 2 in progress for ~2,140 new features (~$300 projected)
+- Manual DOJ evidence review: Diane von Furstenberg + Sharon Stone overridden to CONFIRMED
 - Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
-- Total API cost: ~$94 (Miranda $70 at 74%, Courier $11, Researcher $5, Detective + others ~$8)
-- Sonnet re-extraction completed: 237 Anonymous names recovered, 497 non-home content classified
-- Episodic memory cap increased 2K → 10K to prevent oldest memories from being trimmed
-- Agent error fixes: Casey NoneType crash, Arthur slice error, traceback logging added
-- Cost control toggles added: `IDLE_LLM_ENABLED` and `NARRATE_EVENTS` for reducing LLM spend
-- Future-date scraping fix: pipeline no longer tries to scrape issues beyond current month
-- Miranda strategic assessment interval relaxed from 3min to 10min
-- 23% cross-reference hit rate (243 YES out of 1,056 checked)
-- Rejected dossier audit: 154 reviewed, 3 wrongly rejected (Mica Ertegun, David Copperfield, Joy & Regis Philbin) — overridden to CONFIRMED
-- Stale task purge fix: cross_reference tasks exempted from 60-min cleanup (DOJ searches take hours)
-- Subject category classification: 1,601 features + 320 dossiers tagged with profession categories (10 categories including Private/Other split)
+- Subject category classification: features + dossiers tagged with profession categories
 - Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
-- Detective DOJ subprocess fix: Playwright searches moved to isolated subprocess to prevent event loop contention timeouts (60/60 searches now succeed vs 0/60 before)
-- Editor inconclusive verdict fix: timeout/error verdicts no longer write premature NO — names stay in unchecked pool for retry
-- Graph analytics deferred from dossier confirm path to avoid 140s event loop freeze blocking Playwright
-- Orchestrator threading: graph_sync_loop + watercooler_loop use asyncio.to_thread()
-- Scoring v2.2: per-axis rationale sentences + CRITICAL clarifications for hospitality/formality/curation/theatricality
-- Website: 6-stage Sankey with DOSSIER BUILT node + agent attribution, methodology figure captions + SVG connectors, dossier aesthetic radar
 
-**Ongoing — Scale the Pipeline:**
-- Continue orchestrator run to process remaining issues and cross-reference all names
-- AD Archive issues (~400+) processed via JWT scraping (~4s each)
-- archive.org issues (~50) processed via PDF download + Reader extraction
-- Review Researcher dossiers and manually confirm/reject matches
+**In Progress — Score + Cross-Reference New Features:**
+- Opus Vision scoring batch 2: ~2,140 features queued, ~350 scored so far ($50)
+- After scoring: cross-reference all new homeowner names against BB + DOJ
+- Run Detective → Researcher → Editor pipeline on new hits
+- Validate with test-retest reliability (20 features) + human calibration set (25-30 features)
 
-**Phase 1 — Complete the AD Database:**
+**Phase 1 — AD Database: COMPLETE**
 - ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456+ issues)
 - ~~Re-extract Anonymous features with Sonnet~~ **Done** (237 names recovered, 497 non-homes classified)
+- ~~Full archive re-extraction from spread data~~ **Done** (2,305 new features, 4,081 total)
 - Quality review: validate extracted data, fill in missing fields
 
 **Phase 2 — Cross-Reference at Scale:**
 - ~~Store cross-reference data in Supabase~~ **Done** (`cross_references` table)
-- Complete dossier building for all flagged leads (~259 dossiers, 64 confirmed)
+- ~~6-dimension aesthetic taxonomy for all features~~ **Done** (v1 superseded by v2)
+- ~~9-axis aesthetic scoring instrument v2~~ **Done** (v2.2 with per-axis rationale)
+- ~~Opus Vision scoring on original 1,600 features~~ **Done** ($145, 1,590 scored)
+- ~~Feature image backfill~~ **Done** (11,340 images across 1,590 features + 13,000+ from re-extraction)
+- Opus Vision scoring on new 2,305 features — **In Progress** (~$300 projected)
+- Cross-reference new names → Detective → Researcher → Editor pipeline
+- Complete dossier building for all flagged leads
 - Manual review of HIGH and MEDIUM connection strength dossiers
-- ~~6-dimension aesthetic taxonomy for all features~~ **Done** (v1: 1,622 features tagged, $2.90 cost — superseded by v2)
-- ~~Statistical comparison: Epstein aesthetic vs general AD population~~ **Done** (v1: strong signals found — v2 pending)
-- **9-axis aesthetic scoring instrument v2 designed** — see `docs/aesthetic-scoring-instrument.md`
-- **Opus Vision scoring pipeline built** — `src/score_features.py` scores features, `src/backfill_feature_images.py` downloads page images
-- 38 features scored in initial test (Opus, ~$0.08/feature). Full run pending (~$128 for all 1,600)
-- 146 features backfilled with images (1,102 page images in Supabase Storage)
-- 3-strategy article matching reduces skip rate from ~30% to ~5%
-- Run Opus Vision with v2 rubric on all ~1,600 features
-- Validate with test-retest reliability (20 features) + human calibration set (25-30 features)
 
 **Phase 3 — Interactive Website:**
 - ~~Design and build public-facing visualization website~~ **Done**
