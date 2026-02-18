@@ -69,6 +69,8 @@
   --grid-margin: 24px;
   --grid-slices: 2;
   --grid-columns: 1;
+  /* 4-of-6 column content width (used for prose blocks in methodology) */
+  --content-narrow: calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px);
   --background: #FAFAFA;
   --foreground: #1A1A1A;
   --card: #FFFFFF;

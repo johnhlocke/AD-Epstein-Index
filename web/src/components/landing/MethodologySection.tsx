@@ -21,6 +21,7 @@ const COPPER = "rgba(184, 115, 51, 0.85)";         // #B87333 — on-system copp
 const COPPER_DIM = "rgba(184, 115, 51, 0.25)";
 const SLATE = "rgba(74, 124, 143, 0.85)";          // #4A7C8F — on-system slate
 const SLATE_DIM = "rgba(74, 124, 143, 0.2)";
+const CONTENT_NARROW = "var(--content-narrow)";    // 4-of-6 grid columns for prose
 
 // ── Code Box component for technical diagrams ───────────────────────────────
 function CodeBox({
@@ -114,42 +115,48 @@ const subAgents = [
     role: "Scout",
     sprite: "/agents/scout_front_trans.png",
     accent: "#5B8DEF",
-    description: "Discovers and catalogues every AD issue on archive.org. Manages the download queue and prioritizes undiscovered issues.",
+    description: "Soft-spoken and deferential, but with granite-like stubbornness. Thinks in grids and patterns, methodically filling gaps in the archive with obsessive precision. He outlasts every obstacle.",
+    quote: "There\u2019s a gap in the grid and it shouldn\u2019t be there.",
   },
   {
     name: "Casey",
     role: "Courier",
     sprite: "/agents/courier_front_trans.png",
     accent: "#9B7EDB",
-    description: "Downloads PDFs and extracts page images. Handles archive.org rate limiting and JWT-based article parsing.",
+    description: "Chose peace in logistics over chaos. Speaks in manifests and delivery metrics with dry humor, moving packages and the whole pipeline with quiet, unshakeable competence.",
+    quote: "Package delivered.",
   },
   {
     name: "Elias",
     role: "Reader",
     sprite: "/agents/reader_front_trans.png",
     accent: "#4ECDC4",
-    description: "Vision AI specialist. Reads magazine pages and extracts homeowner names, designers, locations, styles, and metrics from each feature.",
+    description: "A coiled spring of fierce intensity who reads PDFs like a discipline. Seeks euphoria through resistance \u2014 fighting cursed scans and broken layouts until every null is zero and every page is conquered.",
+    quote: "Did you SEE that? Zero nulls. ZERO.",
   },
   {
     name: "Silas",
     role: "Detective",
     sprite: "/agents/detective_front_trans.png",
     accent: "#E07474",
-    description: "Cross-references every name against the Little Black Book and DOJ Epstein Library. Produces match verdicts with confidence tiers.",
+    description: "Opaque, terse, sardonic. Reports verdicts, not reasoning. Will not tolerate false positives or shortcuts. When evidence demands obligation, he\u2019s relentless.",
+    quote: "When a name comes back hot, you do something about it. That\u2019s the job.",
   },
   {
     name: "Elena",
     role: "Researcher",
     sprite: "/agents/researcher_front_trans.png",
     accent: "#E8B84E",
-    description: "Builds investigative dossiers on flagged names. Synthesizes evidence from multiple sources into structured reports.",
+    description: "A monomaniacal pattern-recognition engine who follows every thread to its human terminus. Triple-sources everything. Works alone in the white-knuckled space between find everything and remember what the thread is attached to.",
+    quote: "Every single thread terminates in a person.",
   },
   {
     name: "Sable",
     role: "Designer",
     sprite: "/agents/designer_front_trans.png",
     accent: "#D97EC4",
-    description: "Designs and builds the public-facing website. Translates pipeline data into interactive visualizations, charts, and searchable interfaces.",
+    description: "Craft-obsessed and snarky. Studies 300+ design patterns before touching a pixel. Translates pipeline data into interactive visualizations with the conviction that good design is invisible and bad design is violence.",
+    quote: "If it needs a label, you already failed.",
   },
 ];
 
@@ -220,7 +227,7 @@ function SectionHeader({
         style={{
           fontFamily: MONO,
           color: TEXT_LIGHT,
-          maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
+          maxWidth: CONTENT_NARROW,
         }}
       >
         {title}
@@ -230,7 +237,7 @@ function SectionHeader({
         style={{
           fontFamily: MONO,
           color: TEXT_MID,
-          maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
+          maxWidth: CONTENT_NARROW,
         }}
       >
         {subtitle}
@@ -243,7 +250,7 @@ function SectionHeader({
         style={{
           fontFamily: MONO,
           color: TEXT_MID,
-          maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
+          maxWidth: CONTENT_NARROW,
         }}
       >
         {intro.map((p, i) => (
@@ -335,7 +342,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         </h2>
 
         <p
-          className="mt-3 text-[20px] leading-[1.4] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+          className="mt-3 text-[20px] leading-[1.4] md:max-w-[var(--content-narrow)]"
           style={{ fontFamily: MONO, color: TEXT_MID }}
         >
           Seven autonomous AI agents cataloged 37 years of Architectural Digest and cross-referenced every name against the Epstein records — no human touched the data.
@@ -370,7 +377,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <div>
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
+                style={{ fontFamily: MONO, color: "#B87333" }}
               >
                 Research Question
               </p>
@@ -394,7 +401,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <div>
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
+                style={{ fontFamily: MONO, color: "#B87333" }}
               >
                 Methodology
               </p>
@@ -425,7 +432,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <div>
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
+                style={{ fontFamily: MONO, color: "#B87333" }}
               >
                 System Architecture
               </p>
@@ -452,7 +459,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <div>
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
+                style={{ fontFamily: MONO, color: "#B87333" }}
               >
                 Key Challenges
               </p>
@@ -484,7 +491,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <div>
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
+                style={{ fontFamily: MONO, color: "#B87333" }}
               >
                 Principal Findings
               </p>
@@ -510,7 +517,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <div>
               <p
                 className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
+                style={{ fontFamily: MONO, color: "#B87333" }}
               >
                 Future Work
               </p>
@@ -539,129 +546,162 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 1: THE PIPELINE
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-16">
-          <SectionHeader
-            num="1"
-            title="THE PIPELINE"
-            subtitle="Three phases. Seven agents. Zero manual data entry."
-            intro={[
-              "The AD-Epstein Index is built by a fully automated three-phase pipeline. In the first phase, a Scout agent discovers every issue of Architectural Digest published between 1988 and 2025 on archive.org, a Courier downloads and decodes each issue's digital article catalog, and a Reader extracts structured records from every featured home — homeowner names, interior designers, locations, architectural styles, square footage, and construction dates.",
-              "In the second phase, every extracted name is cross-referenced against two primary Epstein sources: the Little Black Book (approximately 1,500 contacts) and the Department of Justice's Full Epstein Library (millions of released documents searchable via OCR). Names that surface as potential matches are investigated by a Researcher agent, which builds a detailed dossier synthesizing public records, graph analytics, and documentary evidence.",
-              "The third phase is editorial review and publication. An Editor agent reviews every dossier before confirming or rejecting a connection. Confirmed names, their associated metadata, and the full evidence chain are published to this website. No human touches the data at any stage of the pipeline — the system runs end-to-end autonomously.",
-            ]}
-            summary="480 issues ingested, 2,180 features extracted, 476 cross-references evaluated, 185 dossiers built, 33 connections confirmed — all without human intervention in the data pipeline."
-          />
+        <div className="mt-24">
+          {/* Section 1 header — inline so intro text sits beside pipeline flow */}
+          <p
+            className="text-[11px] tracking-widest"
+            style={{ fontFamily: MONO, color: "#B87333" }}
+          >
+            SECTION 1
+          </p>
+          <h3
+            className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
+            style={{
+              fontFamily: MONO,
+              color: TEXT_LIGHT,
+              maxWidth: CONTENT_NARROW,
+            }}
+          >
+            THE PIPELINE
+          </h3>
+          <p
+            className="mt-3 text-[15px] leading-[1.4]"
+            style={{
+              fontFamily: MONO,
+              color: TEXT_MID,
+              maxWidth: CONTENT_NARROW,
+            }}
+          >
+            Three phases. Seven agents. Zero manual data entry.
+          </p>
+          <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
 
-          {/* Pipeline flow diagram — interlocking chevron blocks */}
-          {(() => {
-            const PIPE_BG_ALL = "#282545";
-            const PIPE_BORDER = "#2e2b45";
-            const NOTCH = 16; // px depth of chevron point/notch
+          {/* ── Body text + Pipeline flow — side by side ── */}
+          <div
+            className="mt-10 grid items-stretch gap-6"
+            style={{ gridTemplateColumns: "2fr 1fr" }}
+          >
+            {/* Left: Intro paragraphs + summary (minor columns 1-4) */}
+            <div
+              className="flex flex-col gap-5 text-[14px] leading-[1.7]"
+              style={{ fontFamily: MONO, color: TEXT_MID }}
+            >
+              <p>
+                The AD-Epstein Index is built by a fully automated three-phase
+                pipeline. In the first phase, a Scout agent discovers every
+                issue of Architectural Digest published between 1988 and 2025
+                on archive.org, a Courier downloads and decodes each
+                issue&apos;s digital article catalog, and a Reader extracts
+                structured records from every featured home — homeowner names,
+                interior designers, locations, architectural styles, square
+                footage, and construction dates.
+              </p>
+              <p>
+                In the second phase, every extracted name is cross-referenced
+                against two primary Epstein sources: the Little Black Book
+                (approximately 1,500 contacts) and the Department of
+                Justice&apos;s Full Epstein Library (millions of released
+                documents searchable via OCR). Names that surface as potential
+                matches are investigated by a Researcher agent, which builds a
+                detailed dossier synthesizing public records, graph analytics,
+                and documentary evidence.
+              </p>
+              <p>
+                The third phase is editorial review and publication. An Editor
+                agent reviews every dossier before confirming or rejecting a
+                connection. Confirmed names, their associated metadata, and the
+                full evidence chain are published to this website. No human
+                touches the data at any stage of the pipeline — the system runs
+                end-to-end autonomously.
+              </p>
+              <p
+                className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em]"
+                style={{ fontFamily: MONO, color: "#B87333" }}
+              >
+                Summary
+              </p>
+              <p className="-mt-2">
+                480 issues ingested, 2,180 features extracted, 476
+                cross-references evaluated, 185 dossiers built, 33 connections
+                confirmed — all without human intervention in the data pipeline.
+              </p>
+            </div>
+
+            {/* Right: Pipeline flow — interlocking vertical chevrons (minor columns 5-6) */}
+            {(() => {
+            // Progressive shades — darker at top, lighter toward output (wider contrast)
+            const SHADES = [
+              "#1a1835", "#21203f", "#292649",
+              "#322e54", "#3c365f", "#48416c",
+            ];
+            const NOTCH = 18; // chevron depth in px
             const nodes = [
-              { label: "ISSUES", count: "480" },
-              { label: "FEATURES", count: "2,180" },
-              { label: "CROSS-REFS", count: "476" },
-              { label: "DOSSIERS", count: "185" },
-              { label: "VERDICTS", count: "33" },
-              { label: "PUBLISHED", count: "wheretheylive.world" },
+              { label: "Find public AD issues" },
+              { label: "Extract features from each issue" },
+              { label: "Cross-reference each homeowner name" },
+              { label: "Build full dossiers for potential matches" },
+              { label: "Double-check context and confirm a match" },
+              { label: "Publish all data", sub: "wheretheylive.world  ·  github" },
             ];
             const isFirst = (i: number) => i === 0;
             const isLast = (i: number) => i === nodes.length - 1;
-            // clip-path for interlocking chevron shapes
+            // Vertical chevron clip-paths: V-point bottom, inverted-V dip top
             const clipFor = (i: number) => {
               if (isFirst(i)) {
-                return `polygon(0 0, calc(100% - ${NOTCH}px) 0, 100% 50%, calc(100% - ${NOTCH}px) 100%, 0 100%)`;
+                // flat top, chevron point bottom
+                return `polygon(0 0, 100% 0, 100% calc(100% - ${NOTCH}px), 50% 100%, 0 calc(100% - ${NOTCH}px))`;
               }
               if (isLast(i)) {
-                return `polygon(0 0, 100% 0, 100% 100%, 0 100%, ${NOTCH}px 50%)`;
+                // inverted-V top (center dips down), flat bottom
+                return `polygon(0 0, 50% ${NOTCH}px, 100% 0, 100% 100%, 0 100%)`;
               }
-              return `polygon(0 0, calc(100% - ${NOTCH}px) 0, 100% 50%, calc(100% - ${NOTCH}px) 100%, 0 100%, ${NOTCH}px 50%)`;
+              // inverted-V top (center dips down), chevron point bottom
+              return `polygon(0 0, 50% ${NOTCH}px, 100% 0, 100% calc(100% - ${NOTCH}px), 50% 100%, 0 calc(100% - ${NOTCH}px))`;
             };
-            // Down arrow for mobile
-            const DownArrow = () => (
-              <svg width="20" height="20" viewBox="0 0 20 20" fill="none" className="mx-auto my-1">
-                <path d="M10 4 L10 14" stroke={TEXT_DIM} strokeWidth="1.5" strokeLinecap="round" />
-                <path d="M6 11 L10 16 L14 11" stroke={TEXT_DIM} strokeWidth="1.5" fill="none" strokeLinecap="round" />
-              </svg>
-            );
             return (
-              <div className="mt-10 mb-8">
-                {/* Desktop: interlocking horizontal pipeline */}
-                <div className="hidden md:flex">
+              <div className="flex flex-col">
+                <div className="flex flex-1 flex-col">
                   {nodes.map((node, i) => (
                     <div
                       key={node.label}
-                      className="flex flex-col items-center justify-center py-5 relative"
+                      className="relative flex flex-1 flex-col items-center justify-center"
                       style={{
-                        flex: 1,
-                        background: PIPE_BG_ALL,
+                        background: SHADES[i],
                         clipPath: clipFor(i),
-                        marginLeft: isFirst(i) ? 0 : -1,
-                        paddingLeft: isFirst(i) ? 12 : NOTCH + 8,
-                        paddingRight: isLast(i) ? 12 : NOTCH + 8,
-                        filter: "drop-shadow(1px 0 0 rgba(100, 90, 140, 0.35))",
+                        marginTop: isFirst(i) ? 0 : -NOTCH,
+                        zIndex: nodes.length - i,
+                        filter: "drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5))",
                       }}
                     >
                       <span
-                        className="text-[13px] tracking-[0.18em] font-bold"
-                        style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                        className="text-[10px] tracking-[0.08em] leading-tight text-center"
+                        style={{ fontFamily: MONO, color: TEXT_LIGHT, maxWidth: "50%", }}
                       >
                         {node.label}
                       </span>
-                      <span
-                        className="mt-1 text-[11px] tracking-wider"
-                        style={{
-                          fontFamily: MONO,
-                          color: isLast(i) ? GREEN : i >= 3 ? GOLD_DIM : TEXT_MID,
-                        }}
-                      >
-                        {node.count}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-                {/* Mobile: vertical pipeline */}
-                <div className="flex flex-col items-center md:hidden">
-                  {nodes.map((node, i) => (
-                    <div key={node.label} className="flex flex-col items-center w-full">
-                      <div
-                        className="flex items-center justify-center gap-3 py-2.5 w-full"
-                        style={{
-                          background: PIPE_BG_ALL,
-                          border: `1px solid ${PIPE_BORDER}`,
-                          borderBottom: isLast(i) ? `1px solid ${PIPE_BORDER}` : "none",
-                          borderRadius: isFirst(i) ? "6px 6px 0 0" : isLast(i) ? "0 0 6px 6px" : "0",
-                        }}
-                      >
+                      {node.sub && (
                         <span
-                          className="text-[12px] tracking-[0.18em] font-bold"
-                          style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                          className="mt-1 text-[8px] tracking-wider text-center"
+                          style={{ fontFamily: MONO, color: TEXT_DIM, maxWidth: "50%" }}
                         >
-                          {node.label}
+                          {node.sub}
                         </span>
-                        <span
-                          className="text-[11px] tracking-wider"
-                          style={{
-                            fontFamily: MONO,
-                            color: isLast(i) ? GREEN : i >= 3 ? GOLD_DIM : TEXT_MID,
-                          }}
-                        >
-                          {node.count}
-                        </span>
-                      </div>
-                      {!isLast(i) && <DownArrow />}
+                      )}
                     </div>
                   ))}
                 </div>
                 <p
-                  className="mt-2 text-center text-[8px] tracking-wider"
+                  className="mt-3 text-[8px] tracking-wider"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
-                  <span style={{ color: TEXT_MID }}>Fig. 1</span> — Pipeline stages from issue discovery through feature extraction, cross-referencing, investigation, and publication.
+                  <span style={{ color: TEXT_MID }}>Fig. 1</span> — Pipeline stages from issue discovery through publication.
                 </p>
               </div>
             );
           })()}
+          </div>
+
+          <div className="mt-10" style={{ borderTop: `1px solid ${BORDER}` }} />
 
           {/* Phase cards */}
           <div className="mt-10 grid gap-6 md:grid-cols-3">
@@ -669,7 +709,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <div
                 key={phase.num}
                 className="flex flex-col rounded p-6 md:min-h-[920px]"
-                style={{ backgroundColor: CARD_BG }}
+                style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}
               >
                 <span
                   className="text-[64px] font-bold leading-none"
@@ -708,6 +748,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             ))}
           </div>
 
+          <p
+            className="relative z-10 mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 2</span> — Three-phase system architecture showing data flow from archive discovery through Epstein cross-referencing to website deployment.
+          </p>
+
           {/* Full 3-phase Architecture SVG — overlaps bottom of phase cards on desktop */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
@@ -715,12 +762,6 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             alt="System Architecture — Phase 01: Scout, Courier, and Reader agents feeding data through the Editor to Supabase. Phase 02: Detective and Researcher cross-referencing names against DOJ Epstein files and Black Book. Phase 03: Deep aesthetic extraction, Designer agent, Neo4j knowledge graph, and website deployment."
             className="relative z-10 mt-6 w-full rounded md:-mt-[480px]"
           />
-          <p
-            className="relative z-10 mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
-          >
-            <span style={{ color: TEXT_MID }}>Fig. 2</span> — Three-phase system architecture showing data flow from archive discovery through Epstein cross-referencing to website deployment.
-          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
@@ -772,7 +813,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               style={{
                 fontFamily: MONO,
                 color: TEXT_LIGHT,
-                maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
+                maxWidth: CONTENT_NARROW,
               }}
             >
               PERSONALITY AS ARCHITECTURE
@@ -782,108 +823,204 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               style={{
                 fontFamily: MONO,
                 color: TEXT_MID,
-                maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)",
+                maxWidth: CONTENT_NARROW,
               }}
             >
-              Why autonomous AI agents have names, archetypes, and voices &mdash; and why it technically matters.
+              Why do these autonomous AI agents have names, archetypes, and voices? Does it matter?
             </p>
             <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
           </div>
 
           {/* ── Two-column: Intro text (cols 1-4) + Miranda card (cols 5-6) ── */}
           <div
-            className="mt-10 flex flex-col gap-10 md:flex-row"
+            className="mt-10 flex flex-col gap-10 md:flex-row md:items-stretch"
             style={{ gap: "24px" }}
           >
             {/* Left — Intro paragraphs (columns 1-4) */}
             <div
-              className="flex flex-col gap-5 text-[14px] leading-[1.7] md:flex-[4]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
+              className="flex flex-col gap-5 text-[14px] leading-[1.8] md:flex-[4]"
+              style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
             >
-              <p>Why do autonomous AI agents need personalities? Because personality is a form of architecture. Each of the seven agents in this pipeline has a name, an archetype, and a distinct voice. These are not cosmetic choices &mdash; each personality encodes specific behavioral constraints that shape how the agent processes information, communicates results, and interacts with the rest of the system.</p>
-              <p>Miranda is modeled after Miranda Priestly &mdash; demanding, terse, and intolerant of sloppy work. Her Priestly persona compels her to reject anything that doesn&rsquo;t meet her exacting standards, functioning as a quality gate without explicit rules about rejection thresholds. Silas channels Sam Spade &mdash; his persona keeps verdicts terse and confident, preventing the rambling hedged assessments that plague most AI systems. Elias is Andrew Neiman from Whiplash &mdash; his desperate-to-prove-himself persona drives retry intensity on failed extractions that a neutral agent would abandon.</p>
-              <p>The personality layer also solved a practical problem: observability. A pipeline with seven agents generating thousands of tasks produces enormous volumes of log data. When those logs read like character dialogue &mdash; Miranda&rsquo;s clipped directives, Elena&rsquo;s methodical research notes, Arthur&rsquo;s eager status reports &mdash; the system becomes instantly comprehensible to human observers. Personality makes complexity legible.</p>
-              <p>The hierarchical personality structure &mdash; Miranda at the top, the other agents reporting to her &mdash; creates a natural quality control cascade. Every confirmed connection, every rejected false positive, passes through an agent whose defining character trait is demanding better work. The system self-corrects not through explicit error-handling code, but through the social dynamics encoded in its personality architecture.</p>
+              <p>If we want to dig into this question, there are actually three layers to uncover. It&rsquo;s worth it to take a minute to unpack each because it speaks to the nature of how the agentic system works.</p>
+
+              <p
+                className="mt-4 text-[12px] font-bold"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                Layer 1: The System Prompt IS the Agent
+              </p>
+              <p>When you call an AI model in something like Claude, you are sending it a system prompt. That&rsquo;s just a set of instructions that tells it how to behave. Example: &ldquo;You are a research assistant. Read the following text, do a thorough academic code review, and add footnotes where applicable. Be thorough and precise.&rdquo; In turn, every response the model produces is shaped by that simple prompt.</p>
+
+              <p>An &ldquo;agent&rdquo; in this pipeline is, at its core, just a system prompt plus a task queue. Silas the Detective doesn&rsquo;t exist somewhere as a separate piece of software. He&rsquo;s a set of instructions that get sent to Claude every time we need a given name checked against the Epstein records. Elena the Researcher is a whole different set of instructions sent to the same model, but for a different kind of task.</p>
+
+              <p>So, when we say: &ldquo;the Detective checks a name,&rdquo; what&rsquo;s actually happening is:</p>
+              <ol className="ml-6 list-decimal space-y-1">
+                <li>The orchestrator pulls a homeowner&rsquo;s name from the queue</li>
+                <li>It sends that name to Claude along with Silas&rsquo; system prompt, that includes his methodology, his evidence standards, his decision rules, etc.</li>
+                <li>Claude responds as shaped by those instructions.</li>
+                <li>Those results get written to a central database.</li>
+              </ol>
+
+              <p>Silas being anthropomorphized as a typical &ldquo;terse, sardonic, false positives offend him existentially&rdquo; kind-of-guy is actually not just an added sprinkling of decoration on top of a simple quantitative task. The persona becomes part of his system prompt&mdash;his instructions. This personality steers how this agent approaches ambiguous cases.</p>
+
+              <p
+                className="mt-4 text-[12px] font-bold"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                Layer 2: Why a Character Works Better than a Rulebook
+              </p>
+              <p>Here&rsquo;s the technical part: Does it matter that the Detective Agent is &ldquo;Silas, a Sam Spade archetype&rdquo; rather than just a &ldquo;cross-referencing machine with 14 clearly codified rules&rdquo;?</p>
+
+              <p>It actually depends on the task, and the academic literature is split.</p>
+
+              <p>A 2024 study tested 162 different personas across 2,410 factual questions and found that adding a persona generally does not improve factual accuracy, if anything it&rsquo;s the opposite.<sup><a href="#fn1" id="fnref1" style={{ color: COPPER, textDecoration: "none" }}>1</a></sup> If you ask a model &ldquo;What year was the Treaty of Versailles signed?&rdquo; it doesn&rsquo;t matter if you&rsquo;ve told it to be a plumber or a historian.</p>
+
+              <p>A crucial difference is that here our agents aren&rsquo;t answering factual questions. They&rsquo;re making judgment calls: is this a real Epstein connection or just someone with the same last name? Is the interior design of this home more &ldquo;theatrical&rdquo; or &ldquo;restrained&rdquo;? Those are subjective assessments, and for subjective, domain-specific reasoning, expert personas do shift behavior in measurable ways. When researchers built multi-agent systems where specialized evaluators with distinct personas debated each other&rsquo;s assessments, they achieved around 16% higher correlation with human judgement as opposed to a single agent evaluation. And critically, this improvement disappeared when the persona diversity was removed.<sup><a href="#fn3" id="fnref3" style={{ color: COPPER, textDecoration: "none" }}>3</a></sup> The value came specifically from having different agent perspectives shaped by different roles.</p>
+
+              <p>When Silas encounters the name &ldquo;Coppola&rdquo; that could be &ldquo;Donato Coppola&rdquo; obsequiously emailing Jeffrey Epstein back for the chance to meetup (<a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA01187523.pdf" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>DOJ source</a>), or it could be &ldquo;Francis Ford Coppola&rdquo; sharing his magnificent retreat in Belize in the September 1995 issue (<a href="https://archive.architecturaldigest.com/article/1995/9/francis-ford-coppola-in-belize" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>AD archive</a>). The &ldquo;false positives offend him&rdquo; framing makes the model more likely to pause and disambiguate rather than rubber stamping &ldquo;Coppola&rdquo; as a connection match. It is not purely a binary factual, it&rsquo;s an evidence weighing judgment call, exactly where persona design matters.</p>
+
+              <p>A related line of research has shown when multiple specialized personas start to interact&mdash;debating, reviewing each other&rsquo;s work&mdash;the results are significantly better than any single persona working alone.<sup><a href="#fn2" id="fnref2" style={{ color: COPPER, textDecoration: "none" }}>2</a></sup> This is closer to what our pipeline is doing: Silas flags a name, Elena investigates it, Miranda reviews both of their work. The value isn&rsquo;t in any one character. It&rsquo;s in the structured disagreement and collaboration between each of them.</p>
+
+              <p
+                className="mt-4 text-[12px] font-bold"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                Layer 3: What&rsquo;s Creative Expression vs Technical Function
+              </p>
+              <p>It&rsquo;s helpful to define the difference here:</p>
+
+              <p
+                className="mt-2 text-[11px] font-bold uppercase tracking-[0.1em]"
+                style={{ fontFamily: MONO, color: COPPER }}
+              >
+                Technically Functional:
+              </p>
+              <ul className="ml-6 list-disc space-y-2">
+                <li>Each agent has their own distinct methodology (Detective checks Black Book + DOJ, Researcher does a multi-step investigation, Editor applies editorial judgement). This is a separation of concerns, a basic software engineering principle applied to AI. Research on autonomous agent pipelines confirms that structured role-based collaboration outperforms single-agent approaches for complex multi-step tasks.<sup><a href="#fn4" id="fnref4" style={{ color: COPPER, textDecoration: "none" }}>4</a></sup></li>
+                <li>Each agent has a personality that matches its task (the Detective is skeptical, the Researcher is thorough, the Editor is demanding). For evaluative tasks such as this one, carefully designed personas shape edge-case behavior, however, the key word is &ldquo;carefully&rdquo;. Generic or poorly matched personas can hurt more than help.<sup><a href="#fn7" id="fnref7" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup></li>
+                <li>Using different model tiers for different agents. The Editor uses a more powerful model (Opus) for quality-critical reviews and a faster one (Sonnet) for routine tasks. Research confirms that mixing model capabilities across agents outperforms using the same model everywhere by as much as 47% on certain tasks.<sup><a href="#fn5" id="fnref5" style={{ color: COPPER, textDecoration: "none" }}>5</a></sup></li>
+                <li>Agents have reflection loops. The Editor periodically reviews her own past decisions and identifies patterns. Multi-agent systems with structured reflection mechanisms that generate targeted feedback for individual agents shows measurable reductions in cascading errors.<sup><a href="#fn6" id="fnref6" style={{ color: COPPER, textDecoration: "none" }}>6</a></sup></li>
+              </ul>
+
+              <p
+                className="mt-4 text-[11px] font-bold uppercase tracking-[0.1em]"
+                style={{ fontFamily: MONO, color: GOLD }}
+              >
+                Primarily Creative (but Still Valuable!):
+              </p>
+              <ul className="ml-6 list-disc space-y-2">
+                <li>The specific archetypes (Sam Spade, Miranda Priestly, Andrew Neiman) are memorable shorthands for complex instruction sets. A different set of archetypes with the same underlying instructions would produce similar pipeline results.</li>
+                <li>While the character sprites and backstories don&rsquo;t fundamentally change the AI&rsquo;s output, they do make the project more human.</li>
+                <li>The in-character conversations where you can talk to Miranda as Miranda works as an interactive developer tool, not a pipeline component.</li>
+              </ul>
+
+              <p className="mt-4">The real insight is that in many ways the technical value isn&rsquo;t in the specific characters, rather, it is in the act of designing them carefully. It&rsquo;s a simple idea, but when we decided Miranda should be demanding and autocratic, we were really making engineering decisions about how strict to dial in the editorial review. When we made Silas terse and skeptical, we were trying to tune down the false-positive rate as much as possible. The character design process forced a deeper thinking about what each stage of the pipeline should optimize for. The personas therefore act as human-legible encoding of engineering decisions. This can be a valuable lesson as agents become more and more complex and unleashed on more complicated problems.</p>
+
+              <p>Research backs this up. A 2024 study found that &ldquo;coarsely aligned&rdquo; or generic personas often hurt performance, but carefully designed, task-specific personas can measurably improve it.<sup><a href="#fn7b" id="fnref7b" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup> In the future, as agentic workflows become more widespread, the quality of the persona design and storytelling could become a primary consideration.</p>
+
               <p
                 className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em]"
                 style={{ fontFamily: MONO, color: "#B87333" }}
               >
                 Summary
               </p>
-              <p className="-mt-2">Personality is architecture. It constrains agent behavior, creates a hierarchical quality cascade, and makes complex multi-agent coordination observable to humans. The agents have names because named things are legible things.</p>
+              <p className="-mt-2">Seven AI agents processed 4,081 magazine features, cross-referenced more than 3,000 names against federal records, investigated over 1,000 leads, and confirmed 100+ connections autonomously. The significance of these results is structural: this was not a manual audit but a reproducible investigative system operating at scale. The outcome did not depend on personas; it depended on architecture&mdash;task queues, deterministic database writes, retry logic, and calibrated evidence thresholds that disciplined false positives and defined what qualified as confirmation. The human role was upstream: asking the question, designing the framework, endlessly stress-testing the pipeline, and deploying it publicly on this site. The agents executed judgment, the codebase enforced standards, and the result is not just a set of findings but a scalable, auditable method.</p>
+
+              {/* ── Footnotes ── */}
+              <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+              <div
+                className="mt-4 flex flex-col gap-2 text-[9px] leading-[1.6]"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                <p id="fn1"><sup><a href="#fnref1" style={{ color: COPPER, textDecoration: "none" }}>1</a></sup> Zheng et al., <a href="https://aclanthology.org/2024.findings-emnlp.888/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Is Persona Prompting Effective?&rdquo;</a> Findings of EMNLP 2024. Tested 162 personas across 2,410 factual questions; persona prompting did not reliably improve correctness.</p>
+                <p id="fn2"><sup><a href="#fnref2" style={{ color: COPPER, textDecoration: "none" }}>2</a></sup> Wang et al., <a href="https://aclanthology.org/2024.naacl-long.15/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Multi-Persona Collaboration&rdquo;</a> NAACL 2024. Found that simulating collaboration between multiple expert personas effectively reduced hallucinations while maintaining reasoning capabilities&mdash;though notably only in GPT-4, not smaller models.</p>
+                <p id="fn3"><sup><a href="#fnref3" style={{ color: COPPER, textDecoration: "none" }}>3</a></sup> Chan et al., <a href="https://openreview.net/forum?id=FQepisCUWu" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;ChatEval&rdquo;</a> ICLR 2024. Demonstrated that specialized evaluator agents with diverse personas, debating sequentially, achieve ~16% higher correlation with human judgment than single-agent evaluation. The improvement disappeared when persona diversity was removed.</p>
+                <p id="fn4"><sup><a href="#fnref4" style={{ color: COPPER, textDecoration: "none" }}>4</a></sup> Qian et al., <a href="https://aclanthology.org/2024.acl-long.810/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;ChatDev&rdquo;</a> ACL 2024. Showed that treating complex tasks as structured conversations between specialized agents (CEO, CTO, Programmer, Reviewer) enables autonomous completion of multi-step workflows.</p>
+                <p id="fn5"><sup><a href="#fnref5" style={{ color: COPPER, textDecoration: "none" }}>5</a></sup> Ye et al., <a href="https://arxiv.org/abs/2505.16997" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Heterogeneous Multi-Agent LLM Systems&rdquo;</a> arXiv 2025. Demonstrated that assigning different LLMs to different agent roles outperforms homogeneous systems by up to 47% on mathematical reasoning tasks.</p>
+                <p id="fn6"><sup><a href="#fnref6" style={{ color: COPPER, textDecoration: "none" }}>6</a></sup> Bo et al., <a href="https://openreview.net/forum?id=wWiAR5mqXq" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Reflective Multi-Agent Refinement&rdquo;</a> NeurIPS 2024. Introduced a shared reflector that generates targeted prompt refinements for individual agents using counterfactual reward signals, reducing cascading errors in multi-agent pipelines.</p>
+                <p id="fn7"><sup><a href="#fnref7" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup> Kim et al., <a href="https://arxiv.org/abs/2408.08631" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Persona-Aligned Reasoning&rdquo;</a> arXiv 2024. Found that poorly aligned personas degraded performance in 7 of 12 reasoning datasets tested on Llama 3, while their proposed ensemble method outperformed both persona and no-persona baselines.</p>
+              </div>
             </div>
 
-            {/* Right — Miranda card (columns 5-6) */}
-            <div
-              className="flex flex-col items-center rounded border p-6 md:flex-[2]"
-              style={{
-                backgroundColor: CARD_BG,
-                borderColor: BORDER,
-                borderTop: "2px solid #B87333",
-              }}
-            >
-              <video
-                autoPlay
-                loop
-                muted
-                playsInline
-                className="h-[220px] w-[160px] flex-shrink-0 object-contain"
-                style={{ imageRendering: "pixelated" }}
-                src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.webm"
-              />
-              <p
-                className="mt-4 text-[15px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+            {/* Right — Miranda card + caption (columns 5-6) */}
+            <div className="flex flex-col md:flex-[2]">
+              <div
+                className="flex flex-col items-center rounded border p-6 pb-8"
+                style={{
+                  backgroundColor: CARD_BG,
+                  borderColor: BORDER,
+                  borderTop: "2px solid #B87333",
+                }}
               >
-                {editorAgent.name}
-              </p>
+                <video
+                  autoPlay
+                  loop
+                  muted
+                  playsInline
+                  className="h-[220px] w-[160px] flex-shrink-0 object-contain"
+                  style={{ imageRendering: "pixelated" }}
+                >
+                  <source src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite_2.mov" type='video/mp4; codecs="hvc1"' />
+                  <source src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.webm?v=4" type="video/webm" />
+                </video>
+                <p
+                  className="mt-4 text-[15px] font-bold"
+                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                >
+                  {editorAgent.name}
+                </p>
+                <p
+                  className="text-[10px] tracking-wider"
+                  style={{ fontFamily: MONO, color: "#B87333" }}
+                >
+                  {editorAgent.role.toUpperCase()} &mdash; THE HUB
+                </p>
+                <p
+                  className="mt-3 text-center text-[11px] leading-[1.8]"
+                  style={{ fontFamily: MONO, color: TEXT_MID }}
+                >
+                  {editorAgent.description}
+                </p>
+                <div
+                  className="mt-4 w-full"
+                  style={{ borderTop: `1px solid ${BORDER}` }}
+                />
+                <p
+                  className="mt-4 text-[10px] leading-[1.7]"
+                  style={{ fontFamily: MONO, color: TEXT_DIM }}
+                >
+                  Surgically precise and unyielding. Every decision is final &mdash; delivered with the same tonal register whether she&rsquo;s approving a lead or killing a story. She never raises her voice; the quieter she speaks, the more terrified everyone becomes.
+                </p>
+                <p
+                  className="mt-3 text-[10px] leading-[1.7]"
+                  style={{ fontFamily: MONO, color: TEXT_DIM }}
+                >
+                  Autocratic and unilateral. She delegates relentlessly without explanation. Her management runs on standards so high they function as fear. The announcement that Boss is reviewing the pipeline triggers building-wide quality checks.
+                </p>
+                <p
+                  className="mt-3 text-[10px] leading-[1.7] italic"
+                  style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.5)" }}
+                >
+                  &ldquo;Details of your incompetence do not interest me.&rdquo;
+                </p>
+              </div>
               <p
-                className="text-[10px] tracking-wider"
-                style={{ fontFamily: MONO, color: "#B87333" }}
+                className="mt-3 text-[8px] tracking-wider"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                {editorAgent.role.toUpperCase()} &mdash; THE HUB
-              </p>
-              <p
-                className="mt-3 text-center text-[11px] leading-[1.8]"
-                style={{ fontFamily: MONO, color: TEXT_MID }}
-              >
-                {editorAgent.description}
+                <span style={{ color: TEXT_MID }}>Fig. 4</span> — Miranda, the Editor agent, serves as the central hub — every task, verdict, and database write passes through her review.
               </p>
             </div>
           </div>
-          <p
-            className="mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
-          >
-            <span style={{ color: TEXT_MID }}>Fig. 4</span> — Miranda, the Editor agent, serves as the central hub — every task, verdict, and database write passes through her review.
-          </p>
 
           <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
 
-          {/* ── "The Team" header ── */}
-          <p
-            className="mt-8 text-[11px] font-bold tracking-wider"
-            style={{ fontFamily: MONO, color: GOLD_DIM }}
-          >
-            {"// THE TEAM"}
-          </p>
-          <p
-            className="mt-2 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
-            style={{ fontFamily: MONO, color: TEXT_MID }}
-          >
-            Miranda sits at the hub. The six specialist agents below handle
-            discovery, download, extraction, cross-referencing, investigation,
-            and design. Each has an archetype, a voice, and a dedicated language
-            model &mdash; chosen not for personality but for the behavioral
-            constraints that personality encodes.
-          </p>
-
           {/* ── Sub-agents — 6 spokes ── */}
-          <div className="mt-6 grid grid-cols-2 gap-6 sm:grid-cols-3 md:grid-cols-6">
+          <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
             {subAgents.map((agent) => (
               <div
                 key={agent.name}
-                className="flex flex-col items-center rounded border p-4"
+                className="flex flex-col items-center rounded border p-3"
                 style={{
                   backgroundColor: CARD_BG,
                   borderColor: BORDER,
@@ -913,10 +1050,16 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   {agent.role.toUpperCase()}
                 </p>
                 <p
-                  className="mt-2 text-center text-[10px] leading-[1.5]"
+                  className="mt-2 flex-1 text-left text-[10px] leading-[1.6]"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
                   {agent.description}
+                </p>
+                <p
+                  className="mt-3 text-left text-[9px] italic leading-[1.5]"
+                  style={{ fontFamily: MONO, color: `${agent.accent}BF` }}
+                >
+                  &ldquo;{agent.quote}&rdquo;
                 </p>
               </div>
             ))}
@@ -930,52 +1073,64 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
           <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
 
-          {/* Agent Office showcase — live visualization */}
-          <div className="mt-8">
-            <p
-              className="text-[11px] font-bold tracking-wider"
-              style={{ fontFamily: MONO, color: GOLD_DIM }}
-            >
-              {"// THE OFFICE"}
-            </p>
-            <div
-              className="mt-2 flex flex-col gap-4 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
-            >
-              <p>
-                The Agent Office is a real-time pixel-art dashboard built to make
+          {/* Agent Office — two-column: text (cols 1-2) + video (cols 3-6) */}
+          <div
+            className="mt-10 flex flex-col gap-6 md:flex-row md:items-start"
+            style={{ gap: "24px" }}
+          >
+            {/* Left — description (minor columns 1-2) */}
+            <div className="flex flex-col md:flex-[2]">
+              <p
+                className="text-[14px] font-bold leading-[1.3]"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                The Agent Office
+              </p>
+              <p
+                className="mt-4 text-[11px] leading-[1.7]"
+                style={{ fontFamily: MONO, color: TEXT_MID }}
+              >
+                A real-time pixel-art dashboard built to make
                 personality-as-architecture visible. Each of the seven agents
                 occupies a desk in a shared office. When Miranda assigns a task, her
                 speech bubble updates. When Silas returns a verdict, it appears on
-                screen. The office runs on live pipeline data &mdash; you watch
+                screen.
+              </p>
+              <p
+                className="mt-3 text-[11px] leading-[1.7]"
+                style={{ fontFamily: MONO, color: TEXT_MID }}
+              >
+                The office runs on live pipeline data &mdash; you watch
                 autonomous AI coordination happen in real time.
               </p>
             </div>
 
-            {/* Agent Office screen recording */}
-            <video
-              autoPlay
-              muted
-              loop
-              playsInline
-              controls
-              className="mt-4 w-full rounded border"
-              style={{
-                borderColor: BORDER,
-                backgroundColor: "rgba(17, 17, 24, 0.8)",
-              }}
-            >
-              <source
-                src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/agent-office.mp4"
-                type="video/mp4"
-              />
-            </video>
-            <p
-              className="mt-3 text-[8px] tracking-wider"
-              style={{ fontFamily: MONO, color: TEXT_DIM }}
-            >
-              <span style={{ color: TEXT_MID }}>Fig. 6</span> — The Agent Office: a real-time pixel-art dashboard showing autonomous AI coordination as it happens.
-            </p>
+            {/* Right — video (minor columns 3-6) */}
+            <div className="flex flex-col md:flex-[4]">
+              <video
+                autoPlay
+                muted
+                loop
+                playsInline
+                controls
+                className="w-full rounded border"
+                style={{
+                  borderColor: BORDER,
+                  backgroundColor: "rgba(17, 17, 24, 0.8)",
+                }}
+              >
+                <source
+                  src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/agent-office.mp4"
+                  type="video/mp4"
+                />
+              </video>
+              <p
+                className="mt-3 text-[8px] tracking-wider"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                <span style={{ color: TEXT_MID }}>Fig. 6</span> — The Agent Office: a real-time pixel-art dashboard showing autonomous AI coordination as it happens.
+              </p>
+            </div>
           </div>
         </div>
 
@@ -983,24 +1138,89 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             SECTION 4: INVESTIGATION METHODOLOGY
         ══════════════════════════════════════════════════════════════════ */}
         <div className="mt-24">
-          <SectionHeader
-            num="4"
-            title="INVESTIGATION METHODOLOGY"
-            subtitle="How a name match becomes a confirmed connection — or gets rejected."
-            intro={[
-              "Finding a name in both Architectural Digest and the Epstein records is only the beginning. The system applies a rigorous multi-stage verification process before any connection is confirmed. Of the 476 cross-references identified by the Detective, only 33 survived the full pipeline to become confirmed connections — a rejection rate of over 93%.",
-              "The process begins with automated cross-referencing using word-boundary matching and minimum name-length thresholds to reduce false positives. The Detective then assigns a confidence tier (confirmed, likely, possible, or no match) based on the quality of the match. Full first-and-last-name entries in the Black Book with phone numbers are treated as direct evidence. Surname-only collisions are investigated but expected to be false positives — and 97% of them are.",
-              "Names that pass the Detective's threshold are handed to the Researcher, who builds an investigative dossier pulling public records, graph analytics, and documentary evidence. The dossier is then reviewed by Miranda, who makes the final call. 'Confirmed' means documented proximity — contact entries, dining records, guest lists, correspondence — not implication of wrongdoing. This standard is enforced consistently across every decision.",
-            ]}
-            summary="The investigation methodology prioritizes precision over recall. Every confirmed connection has passed through automated cross-referencing, detective triage, deep research, and editorial review. The 93% rejection rate reflects the system's commitment to minimizing false positives."
-          />
-
-          {/* ── Verdict Flow + Sankey — two-column layout ── */}
-          <div
-            className="mt-10 grid items-stretch gap-6"
-            style={{ gridTemplateColumns: "188px 1fr" }}
+          {/* Section 4 header — inline so intro text sits beside pipeline flow */}
+          <p
+            className="text-[11px] tracking-widest"
+            style={{ fontFamily: MONO, color: "#B87333" }}
           >
-            {/* ── Left: Compact Verdict Flow (minor column 01) ── */}
+            SECTION 4
+          </p>
+          <h3
+            className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
+            style={{
+              fontFamily: MONO,
+              color: TEXT_LIGHT,
+              maxWidth: CONTENT_NARROW,
+            }}
+          >
+            INVESTIGATION METHODOLOGY
+          </h3>
+          <p
+            className="mt-3 text-[15px] leading-[1.4]"
+            style={{
+              fontFamily: MONO,
+              color: TEXT_MID,
+              maxWidth: CONTENT_NARROW,
+            }}
+          >
+            How a name match becomes a confirmed connection — or gets rejected.
+          </p>
+          <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+
+          {/* ── Body text + Pipeline flow — side by side ── */}
+          <div
+            className="mt-10 grid items-start gap-6"
+            style={{ gridTemplateColumns: "2fr 1fr" }}
+          >
+            {/* Left: Intro paragraphs + summary */}
+            <div
+              className="flex flex-col gap-5 text-[14px] leading-[1.7]"
+              style={{ fontFamily: MONO, color: TEXT_MID }}
+            >
+              <p>
+                Finding a name in both Architectural Digest and the Epstein
+                records is only the beginning. The system applies a rigorous
+                multi-stage verification process before any connection is
+                confirmed. Of the 476 cross-references identified by the
+                Detective, only 33 survived the full pipeline to become
+                confirmed connections — a rejection rate of over 93%.
+              </p>
+              <p>
+                The process begins with automated cross-referencing using
+                word-boundary matching and minimum name-length thresholds to
+                reduce false positives. The Detective then assigns a confidence
+                tier (confirmed, likely, possible, or no match) based on the
+                quality of the match. Full first-and-last-name entries in the
+                Black Book with phone numbers are treated as direct evidence.
+                Surname-only collisions are investigated but expected to be
+                false positives — and 97% of them are.
+              </p>
+              <p>
+                Names that pass the Detective&apos;s threshold are handed to the
+                Researcher, who builds an investigative dossier pulling public
+                records, graph analytics, and documentary evidence. The dossier
+                is then reviewed by Miranda, who makes the final call.
+                &apos;Confirmed&apos; means documented proximity — contact
+                entries, dining records, guest lists, correspondence — not
+                implication of wrongdoing. This standard is enforced
+                consistently across every decision.
+              </p>
+              <p
+                className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em]"
+                style={{ fontFamily: MONO, color: "#B87333" }}
+              >
+                Summary
+              </p>
+              <p className="-mt-2">
+                The investigation methodology prioritizes precision over recall.
+                Every confirmed connection has passed through automated
+                cross-referencing, detective triage, deep research, and
+                editorial review. The 93% rejection rate reflects the
+                system&apos;s commitment to minimizing false positives.
+              </p>
+            </div>
+
+            {/* Right: Vertical pipeline flow */}
             <div className="flex flex-col items-center justify-between">
               {/* Step 1: Name Extracted */}
               <div
@@ -1191,12 +1411,15 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </div>
               </div>
             </div>
+          </div>
 
-            {/* ── Right: Live Sankey Diagram ── */}
-            <div
-              className="overflow-hidden rounded border"
-              style={{ backgroundColor: "#111118", borderColor: BORDER }}
-            >
+          <div className="mt-10" style={{ borderTop: `1px solid ${BORDER}` }} />
+
+          {/* ── Investigation Funnel — full width Sankey ── */}
+          <div
+            className="mt-10 overflow-hidden rounded border"
+            style={{ backgroundColor: "#111118", borderColor: BORDER }}
+          >
               <div
                 className="px-3 py-2"
                 style={{ borderBottom: `1px solid ${BORDER}` }}
@@ -1229,18 +1452,16 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </p>
                 </div>
               )}
-              {/* Figure caption */}
-              <p
-                className="px-3 pb-3 pt-1.5 text-[8px] tracking-wider"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                <span style={{ color: TEXT_MID }}>Fig. 7</span> — Investigation funnel showing how extracted features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
-              </p>
-            </div>
           </div>
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 7</span> &mdash; Investigation funnel showing how extracted features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
+          </p>
 
           {/* ── Evidence criteria — two columns ── */}
-          <div className="mt-12 grid gap-6 md:grid-cols-2">
+          <div className="mt-14 grid gap-6 md:grid-cols-2">
             {/* What counts */}
             <div
               className="rounded border p-6"
@@ -1358,7 +1579,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               {"// AGENT INTERNAL ARCHITECTURE"}
             </p>
             <p
-              className="mt-2 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+              className="mt-2 text-[11px] leading-[1.7] md:max-w-[var(--content-narrow)]"
               style={{ fontFamily: MONO, color: TEXT_MID }}
             >
               Every agent&apos;s core decision loop runs through a single
@@ -1500,18 +1721,18 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </span>
                 </div>
 
-                <p
-                  className="mt-5 text-center text-[9px] tracking-[0.15em]"
-                  style={{ fontFamily: MONO, color: "rgba(160,160,176,0.35)" }}
-                >
-                  Fig. 9 &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
-                </p>
               </div>
             </div>
+            <p
+              className="mt-3 text-[8px] tracking-wider"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              <span style={{ color: TEXT_MID }}>Fig. 9</span> &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
+            </p>
           </div>
 
           {/* ── Fig B: Data Pipeline ── */}
-          <div className="mt-12">
+          <div className="mt-14">
             <p
               className="text-[11px] font-bold tracking-wider"
               style={{ fontFamily: MONO, color: GOLD_DIM }}
@@ -1519,7 +1740,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               {"// DATA PIPELINE: URL → VERDICT"}
             </p>
             <p
-              className="mt-2 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+              className="mt-2 text-[11px] leading-[1.7] md:max-w-[var(--content-narrow)]"
               style={{ fontFamily: MONO, color: TEXT_MID }}
             >
               Data flows through three transformation stages. The Discover
@@ -1701,18 +1922,18 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </div>
                 </div>
 
-                <p
-                  className="mt-5 text-center text-[9px] tracking-[0.15em]"
-                  style={{ fontFamily: MONO, color: "rgba(160,160,176,0.35)" }}
-                >
-                  Fig. 10 &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
-                </p>
               </div>
             </div>
+            <p
+              className="mt-3 text-[8px] tracking-wider"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              <span style={{ color: TEXT_MID }}>Fig. 10</span> &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
+            </p>
           </div>
 
           {/* ── Fig C: Memory & Learning Architecture ── */}
-          <div className="mt-12">
+          <div className="mt-14">
             <p
               className="text-[11px] font-bold tracking-wider"
               style={{ fontFamily: MONO, color: GOLD_DIM }}
@@ -1720,7 +1941,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               {"// MEMORY & LEARNING ARCHITECTURE"}
             </p>
             <p
-              className="mt-2 text-[11px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+              className="mt-2 text-[11px] leading-[1.7] md:max-w-[var(--content-narrow)]"
               style={{ fontFamily: MONO, color: TEXT_MID }}
             >
               Intelligence compounds through four feedback loops operating
@@ -1945,14 +2166,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   DESIGN: No external vector DB needed. Custom numpy+ONNX store is faster than ChromaDB and compatible with Python 3.14.
                 </p>
 
-                <p
-                  className="mt-4 text-center text-[9px] tracking-[0.15em]"
-                  style={{ fontFamily: MONO, color: "rgba(160,160,176,0.35)" }}
-                >
-                  Fig. 11 &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
-                </p>
               </div>
             </div>
+            <p
+              className="mt-3 text-[8px] tracking-wider"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              <span style={{ color: TEXT_MID }}>Fig. 11</span> &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
+            </p>
           </div>
 
           {/* ── Intelligence Subsystem Grid (reference cards) ── */}
@@ -2303,13 +2524,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </div>
               </div>
             </div>
-            <p
-              className="mt-4 text-[8px] tracking-wider"
-              style={{ fontFamily: MONO, color: TEXT_DIM }}
-            >
-              <span style={{ color: TEXT_MID }}>Fig. 13</span> — Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
-            </p>
           </div>
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 13</span> &mdash; Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════

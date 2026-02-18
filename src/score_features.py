@@ -391,6 +391,7 @@ Extract these fields from what you can read in the article pages:
 - location_city, location_state, location_country
 - design_style (free text), year_built, square_footage, cost
 - article_author (the writer's name, usually in a byline)
+- subject_category: Classify the homeowner into ONE of: "Business" (CEO, founder, executive, financier), "Celebrity" (actor, musician, athlete, entertainer), "Designer" (interior/fashion/industrial designer's own home), "Socialite" (known for social scene, philanthropy, "old money"), "Royalty" (titled nobility, royal family), "Politician" (elected official, diplomat, government), "Private" (anonymous/unnamed, no public profile), "Other" (writer, artist, academic, or doesn't fit above)
 
 ═══ SOCIAL/NETWORK DATA ═══
 - notable_guests: Names of notable people mentioned visiting or socializing at this home
@@ -434,6 +435,7 @@ Respond with ONLY a JSON object:
   "square_footage": null,
   "cost": "Amount or null",
   "article_author": "Author name or null",
+  "subject_category": "Business|Celebrity|Designer|Socialite|Royalty|Politician|Private|Other",
   "notable_guests": [],
   "social_circle": "text or null",
   "previous_owners": []
@@ -525,6 +527,13 @@ def parse_structural(parsed, current_feature):
     maybe_set("location_country", parsed.get("location_country"))
     maybe_set("design_style", parsed.get("design_style"))
     maybe_set("article_author", parsed.get("article_author"))
+
+    # Subject category
+    cat = parsed.get("subject_category")
+    if cat and str(cat).lower() not in ("null", "none", ""):
+        valid_cats = {"Business", "Celebrity", "Designer", "Socialite", "Royalty", "Politician", "Private", "Other"}
+        if cat in valid_cats:
+            update["subject_category"] = cat
 
     # Homeowner name — only if currently Anonymous/Unknown
     hw = parsed.get("homeowner_name")

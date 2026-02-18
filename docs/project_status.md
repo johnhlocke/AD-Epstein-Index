@@ -109,7 +109,11 @@ This file should be automatically updated when necessary to answer three key que
 | Opus Vision scoring pipeline (score_features.py) | Phase 2 | Done |
 | Run Opus Vision on all ~1,600 features (v2 scoring) | Phase 2 | Done (1,590 scored) |
 | Full archive re-extraction (spread data, 2,305 new features) | Phase 1 | Done |
-| Opus Vision scoring batch 2 (new features) | Phase 2 | In Progress |
+| Opus Vision scoring batch 2 (new features + rescore pre-update) | Phase 2 | In Progress (1,306 remaining) |
+| Subject category extraction for all features | Phase 2 | In Progress (2,785/4,080 done) |
+| Image backfill for features with 0 images | Phase 2 | Done (73 features) |
+| CLAUDE.md modernization (reflect current state) | Docs | Done |
+| Methodology section content overhaul (9 sections, citations) | Phase 3 | Done |
 | Validation: test-retest + human calibration set | Phase 2 | Not Started |
 | Aesthetic Methodology section (warm dark-cream, 9-axis radar) | Phase 3 | Done |
 | Methodology split (Agent AI + Aesthetic Metric) | Phase 3 | Done |
@@ -302,16 +306,18 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 1,396 issues, **4,081 features** (1,600 original + 2,305 re-extracted + 176 from reextraction test), 1,106 cross-references (309 YES), 420 dossiers, **75 confirmed connections**
+- **Final stats**: 1,396 issues, **4,080 features** (1,600 original + 2,305 re-extracted + 176 test - 1 removed), 1,106 cross-references (309 YES), 420 dossiers, **75 confirmed connections**
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
-- Opus Vision v2.2 scoring: 1,590 original features scored ($145). Batch 2 in progress for ~2,140 new features (~$300 projected)
+- Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
 - Manual DOJ evidence review: Diane von Furstenberg + Sharon Stone overridden to CONFIRMED
-- Non-home feature cleanup: 457 features deleted (editorials, columns, museums, designer profiles, hotels)
-- Subject category classification: features + dossiers tagged with profession categories
+- Non-home feature cleanup: 458 features deleted (editorials, columns, museums, designer profiles, hotels, Grand Palais restoration)
+- Subject category classification: 2,785 features tagged with profession categories (remaining in scorer queue)
 - Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
+- CLAUDE.md rewritten to reflect actual project state (multi-agent system, deployment, current stats)
 
 **In Progress — Score + Cross-Reference New Features:**
-- Opus Vision scoring batch 2: ~2,140 features queued, ~350 scored so far ($50)
+- Opus Vision scoring: 1,306 features queued (298 never-scored + 1,008 rescoring for subject_category). Running at ~162/hr, ~$130 projected.
+- ~427 features have genuinely anonymous homeowners (Opus tried with full prompt, no name found). Mostly pre-2010 issues.
 - After scoring: cross-reference all new homeowner names against BB + DOJ
 - Run Detective → Researcher → Editor pipeline on new hits
 - Validate with test-retest reliability (20 features) + human calibration set (25-30 features)
@@ -327,8 +333,9 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - ~~6-dimension aesthetic taxonomy for all features~~ **Done** (v1 superseded by v2)
 - ~~9-axis aesthetic scoring instrument v2~~ **Done** (v2.2 with per-axis rationale)
 - ~~Opus Vision scoring on original 1,600 features~~ **Done** ($145, 1,590 scored)
-- ~~Feature image backfill~~ **Done** (11,340 images across 1,590 features + 13,000+ from re-extraction)
-- Opus Vision scoring on new 2,305 features — **In Progress** (~$300 projected)
+- ~~Feature image backfill~~ **Done** (11,340 images across 1,590 features + 13,000+ from re-extraction + 73 backfilled)
+- Opus Vision scoring all 4,080 features — **In Progress** (2,774 done, 1,306 remaining, ~$130 projected)
+- Subject category tagging — **In Progress** (2,785/4,080 done, rest in scorer queue)
 - Cross-reference new names → Detective → Researcher → Editor pipeline
 - Complete dossier building for all flagged leads
 - Manual review of HIGH and MEDIUM connection strength dossiers

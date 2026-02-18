@@ -6,6 +6,28 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-18 (Session 41)
+
+### Changed — Opus Vision Scoring Completion (v2.2)
+
+- **`src/score_features.py`** — Added `subject_category` extraction to Opus Vision prompt, JSON template, and `parse_structural()`. Categories: Business, Celebrity, Designer, Socialite, Royalty, Politician, Private, Other. This was missing from the first ~1,008 features scored.
+- **`src/backfill_and_rescore.py`** — NEW: Utility script to download missing images from Azure Blob for features without them (73 features), and clear scores for features scored before the subject_category update (1,008 features) so the scorer picks them up again. Two-step: `--images` then `--clear`, or `--all`.
+- **Scorer restarted**: 1,306 features queued (298 never-scored + 1,008 cleared pre-update). Running at ~162/hr, ~$130 projected cost for this batch.
+- **Image backfill**: 73 features that had 0 images now have 6 pages each from Azure Blob.
+- **Non-home feature removed**: Feature #9671 "VIVE LA FRANCE" (Grand Palais restoration article) deleted — not a home feature. Total features: 4,080.
+- **NULL name verification**: Spot-checked 3 random features where Opus returned NULL name with updated prompt. 2/3 confirmed genuinely anonymous, 1/3 was not a home feature (removed). Scorer is extracting names correctly.
+
+### Changed — CLAUDE.md Modernization
+
+- **`CLAUDE.md`** — Complete rewrite to reflect current project state. Removed outdated setup instructions. Added multi-agent system overview, accurate file structure, current stats (4,080 features, 75 confirmed connections), deployment instructions, and Phase 6 statistical analysis preview. Reduced from aspirational template to working-project reference doc.
+
+### Changed — Methodology Section Content Overhaul
+
+- **`web/src/components/landing/MethodologySection.tsx`** — Major content rewrite (+495/-274 lines). New narrative structure with 9 section previews (Pipeline, Hub-and-Spoke, Personality as Architecture, Investigation Methodology, Intelligence Infrastructure, UI Design, Key Challenges, Data Sources, Conclusions). Added academic citations (ICIJ Panama Papers, ReAct, Chain-of-Thought, RAG, LLM-as-Judge). New `--content-narrow` CSS variable for 4-of-6 column prose blocks.
+- **`web/src/app/globals.css`** — Added `--content-narrow` CSS variable for methodology prose width.
+
+---
+
 ## 2026-02-17 (Session 40)
 
 ### Added — Full Archive Re-Extraction Pipeline
