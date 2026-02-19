@@ -36,7 +36,12 @@ interface FGLink {
   relType?: string;
 }
 
-export function ConnectionExplorer() {
+interface ConnectionExplorerProps {
+  /** Height offset for nav bar (default 56px). Set to 0 for standalone pages. */
+  navOffset?: number;
+}
+
+export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps = {}) {
   const mounted = useMounted();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
@@ -278,8 +283,8 @@ export function ConnectionExplorer() {
   if (!mounted) {
     return (
       <div
-        className="flex h-[calc(100vh-56px)] items-center justify-center"
-        style={{ backgroundColor: graphBg }}
+        className="flex h-[calc(100vh-var(--nav-offset))] items-center justify-center"
+        style={{ backgroundColor: graphBg, "--nav-offset": `${navOffset}px` } as React.CSSProperties}
       >
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-2 border-neutral-800 border-t-amber-600" />
@@ -292,7 +297,7 @@ export function ConnectionExplorer() {
   }
 
   return (
-    <div className="flex h-[calc(100vh-56px)]">
+    <div className="flex h-[calc(100vh-var(--nav-offset))]" style={{ "--nav-offset": `${navOffset}px` } as React.CSSProperties}>
       {/* Left sidebar: controls */}
       <div
         className="w-[260px] shrink-0 overflow-y-auto border-r"

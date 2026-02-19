@@ -22,13 +22,16 @@ Seven autonomous AI agents cataloged 37 years of Architectural Digest and cross-
 ### Overview
 
 **Overview**
-AI is a tool, and it is important that our tools don't shape our world, but rather, that they help us undertand it. 
+AI is a tool, and it is important that our tools not shape our world, but rather help us undertand it. 
 
 ### ABSTRACT PARAGRAGH 1
-This project began with a simple enough question: "How many of the people gracing the glossy pages of Architectural Digest are also named in the xeroxed, Justice-Department-cataloged, unredacted public records of Jeffrey Epstein's social network?"
+This project began with a simple enough question: "How many of the of the high-profile people gracing the glossy pages of Architectural Digest are also named in the xeroxed, Justice-Department-cataloged, unredacted public records of Jeffrey Epstein's social network?"
 
 ### ABSTRACT PARAGRAGH 2
 What started as curiosity and pecking around via a manual process of looking up old issues very quickly snowballed into a major logistical nightmare. Going line by line and entering the name into the DOJ website, reading every pdf that came up, then trying to cross off and remember each name in a spreadsheet file somewhere: "Did I look at that one already?" "Which issue did I check yesterday?" It's been 38 years since Jeffrey Epstein started his eponymous financial management firm, J. Epstein & Company.^1 In that time, AD has published over 1,300 issues. With an average of four features per issue, that is over 4,000 homes, the vast majority of them having named homeowners. It was clear that undertaking something like this manually would be measured not in days or even months, but in such an inordinate amount of time that it wasn't even worth attempting to quantify.
+
+### ABSTRACT PARAGRAGH 2
+That realization led to a pivot: less “must use AI,” and more “what is the system design architecture” that could fundamentally accelerate this process. I'm not a software engineer; but I was a researcher breaking the work into repeatable tasks—extract the name, query the record, evaluate the match, log the evidence—steps that could be handed off to a program if they could be articulated and clearly defined. Once the problem became architectural, the scope expanded.
 
 ### ABSTRACT PARAGRAGH 3
 Again, AI is a tool. And a tool was needed to technically answer important questions that would otherwise be too impractical to ask, at scale, and at great speed. It's not feasible by a single researcher. Yet that doesn't make AI smarter than the researcher. It makes the researcher capable of asking bigger questions. In fact, that is what happened, as you can see if you take a look at the "Aesthetic Methodology" section. Working through the technical challenges of making this work, I experienced firsthand what is challenging with "vibe coding", what's actually, you know, pretty amazing, and what at first blush seemed like it should be really easy but actually took hours of frustrating detail to get right, all enhanced my creativity. I questioned some of my initial assumptions, thought deeper about "how" data flows through a pipeline, and moved in scale and scope that I didn't think possible before I started. 
@@ -37,7 +40,7 @@ Again, AI is a tool. And a tool was needed to technically answer important quest
 What follows is a detailed account of this modular, multi-agent workflow that processes document corpora, extracts structured entities, cross-references them against external records, investigates flagged matches, and produces an auditable trail of documentation for every conclusion. This specific case study here concerns a design magazine and a global criminal network. But structurally, the system could be aimed at campaign finance records, nonprofit boards, corporate directorships, university trustees, and cultural institutions gala attendees. That initial question can change; the pipeline remains. 
 
 ### ABSTRACT PARAGRAGH 5
-This document explains how that pipeline works, where it succeeds, where it fails, and where it explores how the borders being drawn between human judgement and machine autonomy are being staked. 
+This document explains how that pipeline works, where it succeeds, where it fails, and where the borders between human judgment and machine autonomy are still being drawn. 
 
 **Research Questions**
 The primary technical question was straightforward:
@@ -74,16 +77,13 @@ Different model tiers are used for different stakes: faster models for routine r
 Why do these autonomous AI agents have names, archetypes, and voices? Does it matter? The short answer is: it depends on the task, and the academic literature is genuinely split.
 
 ### OVERVIEW SECTION PARAGRAPH 4
-Most of the investigative decisions included here are not binary lookups. They are judgment calls. For evaluative judgment calls— which is most of what this pipeline does—carefully designed personas measurably shift behavior in useful ways. When the Detective personality is "terse and skeptical," we were really making an engineering decision about false-positive tolerance. When the Editor is "demanding and autocratic," we were tuning the editorial review threshold. The character design process forced a deeper thinking about what each stage should optimize for. This section unpacks three layers: the system prompt as agent identity, why character outperforms rulebook for judgment tasks, and what's genuinely technical versus what's creative expression.
+Most of the investigative decisions included here are not binary lookups. They are judgment calls. Actually, most of them are  judgement calls requiring reasoning and an understanding of conversational context and semantic meaning. For these types of descision, carefully designed personas measurably shift behavior in useful ways. When the Detective personality is "terse and skeptical," we were really making an engineering decision about false-positive tolerance. When the Editor is "demanding and autocratic," we were tuning the editorial review threshold. The character design process forced a deeper thinking about what each stage should optimize for. This section unpacks the three layers that constitute how the agent personas affect their tasks: the system prompt as agent identity, why character outperforms rulebook for judgment tasks, and what's genuinely technical versus what's creative expression.
 
 **Section 4: Investigation Methodology** 
-Clint Eastwood's Carmel home was featured in Architectural Digest. "Clint Eastwood" shows up in the Epstein files search in a sidebar on a movie ticket Epstein purchased at AMC Theaters. Clint Eastwood the actor is not in the Epstein files. Can an AI know that. Another case: does an indirect mention by Epstein saying in an email that he knows an actress count as a connection, or wishful thinking on Epstein's part? What is a legitimate connection and what is coincidence? 
+Clint Eastwood's Carmel home was featured in Architectural Digest. "Clint Eastwood" also shows up in the Epstein files. His name is listed in an advertisement in the sidebar of a movie ticket Epstein purchased at AMC Theaters. Clint Eastwood the actor is not in the Epstein files. Can an AI differentiate between what is genuine and what is digital noise? Another case: Epstein's PR publicist asks him if he would like to meet a famous actress, yet there is no record of them actually meeting. Are they connected? And another case: a wealthy businessman is on an "confirmed to attend" a dinner event at Epstein's mansion, but there is no follow up. Is that a connection? Can we quantify what is a legitimate connection and what is coincidence? 
 
 ### OVERVIEW SECTION PARAGRAPH 5
-Most of the investigative decisions included here are not binary lookups. They are judgment calls. For evaluative judgment calls— which is most of what this pipeline does—carefully designed personas measurably shift behavior in useful ways. When the Detective personality is "terse and skeptical," we were really making an engineering decision about false-positive tolerance. When the Editor is "demanding and autocratic," we were tuning the editorial review threshold. The character design process forced a deeper thinking about what each stage should optimize for. This section unpacks three layers: the system prompt as agent identity, why character outperforms rulebook for judgment tasks, and what's genuinely technical versus what's creative expression.
-
-### OVERVIEW SECTION PARAGRAPH 4
-The investigation stage is the most sensitive part of the system. When a name is flagged as a possible match, the Researcher agent performs a structured sequence:
+The agent does not guess from memory. It retrieves specific documents and reasons over them in context. Each dossier records what was consulted and why the conclusion followed. The investigation stage is the most sensitive part of the system. When a name is flagged as a possible match, the Researcher agent performs a structured sequence:
 	1.	Triage assessment
 	2.	Document retrieval from DOJ archives and the contact book
 	3.	Knowledge graph queries mapping network connections
@@ -91,19 +91,66 @@ The investigation stage is the most sensitive part of the system. When a name is
 	5.	Verdict with explicit justification
 Each step builds on the previous on, a structured reasoning chain, an approach that research has shown dramatically improves model performance on complex tasks compared to direct question-answering.³
 
-### OVERVIEW SECTION PARAGRAPH 5
-At its core, the investigation is a retrieval-augmented process: the agent retrieves relevant documents (Black Book entries, DOJ search results, graph query outputs) and reasons over them in context. This combinines a language model's reasoning with retrieved external knowledge, a pattern that has become foundational to knowledge-intensive AI applications.⁴ The critical addition in this pipeline is that the Researcher doesn't just retrieve and summarize, she actually evaluates. Each dossier is functionally a judicial verdict, and research on using language models as evaluative judges has shown they can achieve over 80 percent agreement with human judgment, while also exhibiting systematic biases (position bias, verbosity bias, self-enhancement) that must be designed around.⁵
-
 ### OVERVIEW SECTION PARAGRAPH 6
-Even so, default model judgment was insufficient in edge cases. Explicit policy rules were required: what qualifies as “confirmed,” what qualifies as “associated,” and what must be rejected. These standards were refined through adversarial testing—intentionally searching for cases that would trick the system and the human providing definitive responses.
+You can view all of those dossiers here: https://www.wheretheylive.world/fullindex?page=3#index
 
 ### OVERVIEW SECTION PARAGRAPH 7
+At its core, the investigation is a retrieval-augmented process: the agent retrieves relevant documents (Black Book entries, DOJ search results, graph query outputs) and reasons over them in context. This combinines a language model's reasoning with retrieved external knowledge, a pattern that has become foundational to knowledge-intensive AI applications.⁴ The critical addition in this pipeline is that the Researcher doesn't just retrieve and summarize, she actually evaluates. Each dossier is functionally a judicial verdict, and research on using language models as evaluative judges has shown they can achieve over 80 percent agreement with human judgment, while also exhibiting systematic biases (position bias, verbosity bias, self-enhancement) that must be designed around.⁵
+
+### OVERVIEW SECTION PARAGRAPH 8
+Even so, default model judgment was insufficient in edge cases. Explicit policy rules were required: what qualifies as “confirmed,” what qualifies as “associated,” and what must be rejected. These standards were refined through adversarial testing (intentionally searching for cases that would trick the system and the human providing definitive responses).
+
+### OVERVIEW SECTION PARAGRAPH 9
 This section details those evidence standards, the explicit policy rules, and the adversarial testing that refined them. We walk through real case studies: a name that appeared in both the Black Book and DOJ files but was correctly rejected as a different person, and a name that was initially missed but caught on manual review.
 
+**Section 5: Intelligence Infrastructure** 
+Behind the agents sits a shared infrastructure that enables "learning" and coordination:
+*  A knowledge graph that stores all of the extracted names, locations, styles, and other metrics, and maps all of those connections as a searchable network.
+* Episodic memory allows agents to recall prior decisions
+* Reflection loops where the Editor reviews patterns in past outcomes
 
+### OVERVIEW SECTION PARAGRAPH 10
+The knowledge graph is particularly important. It transforms isolated document hits into a relational network that can answer structural questions: which designers appear repeatedly? Which locations cluster? Which individuals bridge otherwise separate communities? The researcher uses this when building a dossier. 
 
+### OVERVIEW SECTION PARAGRAPH 11
+You can view the full knowledge graph of connections here: https://www.wheretheylive.world/fullgraph
 
+### OVERVIEW SECTION PARAGRAPH 12
+This is where the methodology becomes portable. Any domain involving people, institutions, and documents can be modeled as a graph. Once structured, it becomes queryable.
 
+**Section 6: UI Interface and Transparency** 
+In many ways an AI system is a black box. A prompt goes in, and an answer appears. What happens in between is invisible. For a project like this, a simple textual back and forth on a terminal command line becomes challenging. With so many moving pieces you lose sight of the overall big picture. You would have to constantly be spamming the terminal line: "How far along are we?" "What is the Detective working on?" "How many issues have been extracted?" "What is this costing in tokens overall?" "How long has the Courier been error'ed out?" There is too much to keep track of. 
+
+### OVERVIEW SECTION PARAGRAPH 13
+You could keep it a black box. For many problems I would think that that would actually be preferable, just provide prompts in the text box and let the program work behind the scenes. For others though, maybe you do need it to look like the cockpit of a 787, complete with dials and knobs that you're constantly tweaking to zero in on a creative solution. There is no consistent UI design that could be applied to all AI workflows. It's an interesting concept with far reaching implications. Can you build a frontend UI on the fly that responds to your unique, individual problem? Can you spin up a new UI that changes instantly with new tools? Now, the design goals shape the software tools. 
+
+### OVERVIEW SECTION PARAGRAPH 14
+It was important that the system working could be inspected in real-time and that all of the results could be viewed by anyone. The UI Dashboard allowed me to monitor the pipeline state as it progressed, but most importantly, allowed me to make decisions and pivot to new expanded creative directions as information flowed in. Ultimately, two front-ends were built:
+* An internal dashboard monitoring pipeline state, cost, throughput, and error rates
+* A public-facing site where every feature and every verdict can be browsed
+
+### OVERVIEW SECTION PARAGRAPH 15
+This section covers the design decisions behind both the frontend "office" UI and the workflow for creating an interactive searchable index of all 4,081 features with individual dossier pages that present evidence in a structured, readable format.
+
+**Section 7: Key Challenges and Limitations** 
+No system built on language-models is immune to failure.
+
+### OVERVIEW SECTION PARAGRAPH 16
+The largest source of false positives was surname collisions: dozens of apparent matches that dissolved under closer inspection. Automated browsing of DOJ records required workarounds due to bot-detection systems. Hundreds of magazine features lacked named homeowners, limiting cross-referencing.
+
+### OVERVIEW SECTION PARAGRAPH 17
+Most importantly, calibrating autonomy remains an open problem. Approximately 20% of confirmed cases are deliberately routed for manual review. The system is designed to recognize uncertainty and defer rather than guess. However, I thnk that this demonstrates the value of human-in-the-loop decision making and reinforces the role of machine automation and human judgement. 
+
+**Section 8: Data Sources** 
+Every system starts with data. Is it available or do we need to create it? Is it enough? This pipeline draws on three primary data sources, each with different access methods, reliability characteristics, and limitations. The Condé Nast digital archive provides structured article metadata via JWT-encoded payloads and public page images via Azure Blob Storage. Epstein's Little Black Book is a static text file searched locally with regex word-boundary matching. The DOJ Epstein document library is a browser-automated search against an Optical Character Recognition (OCR)-indexed database of tens of thousands of scanned documents. It's powerful but limited by OCR quality (handwritten documents aren't searchable) and the DOJ's bot-detection infrastructure. In this section, we document each source, its coverage, and its known gaps.
+
+**Section 9: Conclusions and Future Work** 
+The pipeline as built is a working proof of concept: seven agents, operating autonomously, processed 37 years of a single magazine and produced a structured, auditable dataset of cross-referenced findings. The methodology is reproducible and the code is documented. As a non-software engineer, it's important to also be clear about what the system is and what it isn't. This is a scalable investigative tool that handles routine cross-referencing at a throughput no human could match. It is not a replacement for human judgement, but it could be described as a force multiplier for it. 
+
+### OVERVIEW SECTION PARAGRAPH 18
+For next steps, two extensions are in progress:
+* Extending the Researcher's ability to dynamically query the knowledge graph for more flexible evidence gathering
+* An aesthetic signature analysis that derives a nine-axis scoring criteria to statistically test whether Epstein-connected homes exhibit a distinguishable design profile compared to the AD baseline. This will use established methods from multivariate statistics to a novel domain. See the following section "Aesthetic Methodology."
 
 
 
@@ -141,22 +188,62 @@ Extending the methodology to additional shelter magazines (Vogue Living, World o
 
 ---
 
+
+
+
+
+
+
+
 ## SECTION 1: THE PIPELINE
 
 ### Subtitle
-Three phases. Seven agents. Zero manual data entry.
+How a magazine URL becomes a confirmed or rejected connection with a full evidentiary trail
 
 ### Body Paragraph 1
-The pipeline operates in three sequential phases. In the first phase, Arthur the Scout discovers Architectural Digest issues on Archive.org. Casey the Courier downloads each issue and extracts the article catalog from JWT-encoded metadata embedded in the digital archive's page structure. Elias the Reader then processes each article — analyzing page images and text to extract homeowner names, designers, locations, design styles, and other structured features.
+The system operates as a six-stage sequential pipeline: data acquisition, feature extraction, cross-referencing, investigation, editorial review, and then report design. Each of these stages has a clearly defined input, a defined output, and a dedicated agent responsible for the work. A magazine issue enters the pipeline as a URL and exits as structured records, each containing a homeowner name, designer, location, aesthetic profile, and—if the name was flagged—a confirmed or rejected cross-reference with a full evidentiary trail. 
 
 ### Body Paragraph 2
-In the second phase, Silas the Detective cross-references every extracted name against two databases: the DOJ's Full Epstein Library (searchable via OCR) and Epstein's Little Black Book (released through civil litigation). The Detective produces a tiered verdict — confirmed match, likely match, possible match, needs review, or no match — based on the strength of the evidence.
+Here's what that actually looks like in practice. The AD Archive (https://archive.architecturaldigest.com/) contains a structured digital version of every issue published. There are other—more challenging, less structured—data sources available: PDFs with incorrect metadata on archive.org, issue scans on random personal websites, some digital features on the main site, eBay back issues, but none of them had what became a gold-standard source of machine readable metadata. Each issue page embeds a JWT-encoded article catalog, a structured JSON object containing the title, teaser, designer credit, and page range for every feature. As a brief aside, some of those articles cataloged as "features" actually weren't a true feature, they were more like roundups of a flahy locations or a focus on one specific architect's work. A review by Haiku AI quickly separated legitimate features from non-features. 
 
 ### Body Paragraph 3
-In the third phase, Elena the Researcher takes every lead that passes the Detective's threshold and builds a comprehensive dossier: verifying the name match, gathering context, and synthesizing a narrative assessment. Miranda the Editor then renders a binary final verdict — confirmed or rejected — applying editorial standards that require direct documentary evidence of contact, not merely shared social circles or surname coincidence.
+The AD archive issue data made this process smoother than expected. In Stage 1, a Scout agent discovered the issue URL. A Courier agent fetches the page, decodes the JWT, and downloads the corresponding article page images from the publisher's content delivery network. No PDF cracking, no OCR. The structured metadata is already there, embedded in the page itself. A Reader agent was originally designed to "read" or extract data from scanned PDFs, but this process proved cumbersome and ultimately unnecessary after discovering the embedded metadata source. 
 
-### Summary
-480 issues ingested, 2,180 features extracted, 476 names cross-referenced, 185+ dossiers investigated, 33 connections confirmed. The three-phase pipeline ensures that every confirmed connection has passed through automated detection, independent investigation, and editorial review.
+### Body Paragraph 4
+In Stage 2, those page images go into an extraction model. Claude Opus examines each set of article pages and extracts the homeowner's name, their designer, the city and country, the architectural style, the article's author, and nine aesthetic scores via a custom scoring instrument developed for this work (more on that in the Aesthetic Methodology section). Let's take an example from the July 1996 AD issue: one of the extracted features showcases the unambiguously lavish, triplex penthouse on the Upper East Side of Manhattan, designed for media mogul Mort Zuckerman, owner of U.S. News & World Report and the New York Daily News. 
+
+### Body Paragraph 5
+In Stage 3, the name "Mort Zuckerman" reaches the Detective's inbox. There, he runs two checks in rapid succession. First, an instant search of Jeffrey Epstein's Little Black Book—a 95-page contact directory seized during the original 2008 investigation. The Black Book contains a "Zuckerman, Mort" entry with phone numbers. That alone constitutes a direct match: Epstein had this person's contact information in his personal address book. Second, the Detective queries the DOJ's Full Epstein Library—a public search interface that spans across millions of pages of unredacted documents. The result of that DOJ search: 1,317 documents containing "Mort Zuckerman." The Detective's verdict: confirmed via presence in the Black Book and extensive documented DOJ references. 
+
+### Body Paragraph 6
+Stage 4 shifts the system from identification to investigation. The Researcher receives the Detective's verdict and the raw evidence and begins the work of constructing a dossier. She queries the DOJ documents for specifics: What was the nature of the documents in the DOJ files? It included scheduled meetings at Epstein's East 71st Street address, coordinated via Lesley Groff—Epstein's chief scheduler (Groff was subpoenaed in 2019, but prosecutors declined to bring charges). The Epstein <> Zuckerman relationship persisted from at least 2010 through 2014—many years after Epstein's 2008 criminal conviction. The Researcher cross-references the knowledge graph and finds that Zuckerman's AD feature documents a friendship with Henry Kissinger, himself another confirmed Epstein associate. She compiles every document reference and finding into a structured dossier. 
+
+### (make this a sidenote) That dossier lives here: https://www.wheretheylive.world/report/4873
+
+### Body Paragraph 7
+Next, in Stage 5, that dossier reaches the Editor for final review. The Editor is the only agent that can write a verdict to the database. She examines the total evidence chain: Black Book entry (direct contact), 1,317 DOJ references (sustained relationship), scheduled meetings at a private residence (not a public event), post-conviction contact (the relationship survived legal disgrace). Clear cut, a confirmed connection with high confidence. The feature, the cross-reference, the dossier, and the verdict are all written to the database as a single auditable record. 
+
+### Body Paragraph 8
+Now consider a false positive. The system checks every name, including "Francis Ford Coppola," who was featured in a September 1995 issue where the director shared his jungle retreat in Belize with AD. The DOJ library *does* return results for "Coppola." However, by reading the context of the individual pdfs, the Detective understands that this is actually Donato Coppola excitedly reaching out to Jeffrey Epstein to set up a meeting. And then there is also Scott Coppola, who was shown emailing Jeffrey Epstein's girlfriend Karina Shuliak in a Facebook message in 2011 (make this a sidenote: https://www.justice.gov/epstein/files/DataSet%209/EFTA00575663.pdf). Same last name, but very different people. The Detective's verdict: no match. The pipeline flags the name, investigates it with the same rigor, and moves on. No human had to intervene to catch the false positive. The system's evidence standards caught it automatically, while a careless system would have stopped at the surname.
+
+### Body Paragraph 9
+In Stage 6, the Designer synthesizes the pipeline’s output into a visual report for every home in the archive, not only those with confirmed connections. Each feature receives a dedicated detail page pairing article imagery with structured data, including nine aesthetic scores plotted on a radar chart. The decision to measure nine axes rather than six, to organize them into clusters—Space, Story, and Stage—and to introduce a “hospitality” dimension distinguishing private retreat from social venue was driven by the analytical need to test divergence from the broader baseline. Presentation and measurement were developed in tandem. The report design pulled the data collection method upstream. How the findings are presented and what was measured are indivisible. 
+
+### Body Paragraph 10
+Separating each of the agents concerns means that an error in extraction doesn't corrupt the cross-reference, a false positive in the Detective stage doesn't bypass the Editor's review, and every stage produces an intermediate output that can be independently audited. If someone questions a particular finding, you can trace the exact path: here's the page the name was extracted from, here's the Black Book entry, here are the DOJ documents, here's the Researcher's analysis, here's the Editor's reasoning. The pipeline doesn't just produce a black-box conclusion, it produces detailed evidence for those conclusions. 
+
+
+### Body Paragraph 11
+This is what the literature calls the ReAct pattern: interleaving reasoning ("this Black Book match is surname-only — probably a coincidence") with actions (search the DOJ library, query the knowledge graph), observing the results, and reasoning again. This loop underlies most modern LLM agent systems, and every agent in this pipeline implements a version of it. The Detective doesn't just pattern-match a name against a database. It reasons about the quality of the match, decides what additional evidence to seek, evaluates what it finds, and produces a verdict with its reasoning attached.
+
+### Body Paragraph 12
+It is important to resist the illusion of infallibility. The DOJ search interface is OCR-based, which means handwritten documents — and there are many in the Epstein archive — are effectively invisible to the system. Name matching always carries edge cases: “Ashley” could refer to Ashley Hicks (confirmed in the Black Book with a London address) or Sir Bernard Ashley (the Laura Ashley co-founder, featured in AD, with no documented Epstein connection). Many features from the 1980s and early 1990s do not name homeowners at all, and no amount of computer vision can extract a name that was never printed on the page. The pipeline is also constrained by the documents it can access: if a relationship was never recorded, remains redacted, or has not been released, this system will never discover it.
+
+
+### Body Paragraph 13
+But what it can do is reliably transform ambiguity into structured, reviewable decisions at a scale no individual researcher could sustain alone. This same pipeline, pointed at a different data set, would run the same way. The question may change but the architecture stays the same. 
+
+
 
 ### Phase Cards
 

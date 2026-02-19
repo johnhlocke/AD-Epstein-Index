@@ -6,6 +6,39 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-19 (Session 43)
+
+### Changed — Radar Chart Visual Overhaul
+
+- **`web/src/components/dossier/DossierAestheticRadar.tsx`** — Complete radar chart redesign:
+  - **Colored sectors**: Replaced solid copper fill with group-colored triangular sectors (indigo=SPACE, amber=STORY, red=STAGE) using custom Recharts `shape` prop
+  - **Smooth blending**: Manual color interpolation at group boundaries (6 subdivided slices per boundary via `lerpColor` + `interpPoint`) — no SVG blur filters
+  - **Radial intensity gradients**: `<radialGradient>` from 0.1 opacity at center to 0.9 at edges
+  - **Group arcs**: Three colored arcs outside the radar polygon marking SPACE/STORY/STAGE regions, with positioned group labels
+  - **White label backgrounds**: `paint-order: stroke` SVG technique for crisp white halos behind axis labels
+  - **Gray perimeter**: Neutral gray polygon outline with colored vertex dots
+  - **Score badges**: Colored fill badges (group color, intensity scaled by score 1-5) with white text, replacing copper number
+  - **Five dots repositioned**: Moved under metric name instead of right-aligned, changed to dark gray
+  - **Increased spacing**: More gap below dots (`mt-5`), larger box padding (`py-4`)
+  - **Centered group headers**: SPACE/STORY/STAGE headers centered in their columns
+
+### Changed — Report Page Card Redesign
+
+- **`web/src/components/report/ReportDetail.tsx`** — Report page stat cards:
+  - Fixed card heights (130px) with inline styles to override Shadcn Card `py-6` default
+  - Combined Year Built + Square Footage into single "Property" card
+  - Combined Connection Strength + Confidence into single "Connection" card
+  - **Connection card coloring**: Red fill (intensity based on confidence) for confirmed connections; desaturated green fill for no connection (95% confidence if investigated/rejected, 40% if not yet investigated)
+  - Design Style card disabled (toggled off)
+  - Added `"use client"` directive for expandable DesignStyleCard component
+- **`web/src/components/dossier/DossierDetail.tsx`** — Applied same card height/padding treatment
+
+### Changed — Confirmed Badge Color
+
+- **`web/src/app/globals.css`** — Changed "Confirmed" verdict badge from green to copper tones (`--color-confirmed: #8B5E34`, `--color-confirmed-bg: #F0DCC8`)
+
+---
+
 ## 2026-02-18 (Session 42)
 
 ### Fixed — Year Sort Data Loss (PostgREST 1000-Row Limit)

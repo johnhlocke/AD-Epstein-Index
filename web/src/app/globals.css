@@ -2,6 +2,10 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+html {
+  scroll-behavior: smooth;
+}
+
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
@@ -50,8 +54,8 @@
   --color-copper: #B87333;
   --color-copper-light: #D4A574;
   --color-copper-muted: #E8D5C0;
-  --color-confirmed: #2D6A4F;
-  --color-confirmed-bg: #D8F3DC;
+  --color-confirmed: #8B5E34;
+  --color-confirmed-bg: #F0DCC8;
   --color-rejected: #9B2226;
   --color-rejected-bg: #FDE8E8;
   --color-pending: #B8860B;

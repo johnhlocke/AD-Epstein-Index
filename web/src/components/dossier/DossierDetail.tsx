@@ -47,16 +47,16 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
       {/* Quick stats */}
       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
         {dossier.connection_strength && (
-          <Card>
-            <CardContent className="p-4">
+          <Card className="!h-[108px] !py-0 overflow-hidden gap-0">
+            <CardContent className="p-3">
               <p className="text-xs text-muted-foreground">Connection Strength</p>
               <p className="mt-1 font-mono font-semibold">{dossier.connection_strength}</p>
             </CardContent>
           </Card>
         )}
         {dossier.confidence_score !== null && (
-          <Card>
-            <CardContent className="p-4">
+          <Card className="!h-[108px] !py-0 overflow-hidden gap-0">
+            <CardContent className="p-3">
               <p className="text-xs text-muted-foreground">Confidence</p>
               <p className="mt-1 font-mono font-semibold">
                 {Math.round(dossier.confidence_score * 100)}%
@@ -65,8 +65,8 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
           </Card>
         )}
         {feature?.location_city && (
-          <Card>
-            <CardContent className="p-4">
+          <Card className="!h-[108px] !py-0 overflow-hidden gap-0">
+            <CardContent className="p-3">
               <p className="text-xs text-muted-foreground">Location</p>
               <p className="mt-1 font-semibold">
                 {[feature.location_city, feature.location_state].filter(Boolean).join(", ")}

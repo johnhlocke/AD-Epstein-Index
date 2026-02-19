@@ -234,20 +234,260 @@ function ChartTooltip({ active, payload }: any) {
   );
 }
 
+/**
+ * Interpolate between two hex colors. t=0 → colorA, t=1 → colorB.
+ */
+function lerpColor(a: string, b: string, t: number): string {
+  const pa = [parseInt(a.slice(1, 3), 16), parseInt(a.slice(3, 5), 16), parseInt(a.slice(5, 7), 16)];
+  const pb = [parseInt(b.slice(1, 3), 16), parseInt(b.slice(3, 5), 16), parseInt(b.slice(5, 7), 16)];
+  const r = Math.round(pa[0] + (pb[0] - pa[0]) * t);
+  const g = Math.round(pa[1] + (pb[1] - pa[1]) * t);
+  const bl = Math.round(pa[2] + (pb[2] - pa[2]) * t);
+  return `rgb(${r},${g},${bl})`;
+}
+
+/**
+ * Compute a point along the line from center to a position between two polygon vertices.
+ * t=0 → vertex a, t=1 → vertex b (both at their full radius).
+ */
+function interpPoint(
+  cx: number, cy: number,
+  a: { x: number; y: number },
+  b: { x: number; y: number },
+  t: number,
+): { x: number; y: number } {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+  };
+}
+
+/**
+ * Custom radar shape: colored triangular sectors with smooth blending at group boundaries.
+ * Uses radial gradients (transparent center → intense edge) and subdivided blend sectors
+ * at each SPACE/STORY/STAGE boundary. No SVG filters — crisp edges guaranteed.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function ColoredRadarShape(props: any) {
+  const { points } = props;
+  if (!points || points.length < 3) return null;
+
+  const cx = points[0].cx;
+  const cy = points[0].cy;
+
+  const maxR = Math.max(
+    ...points.map((p: { x: number; y: number }) =>
+      Math.sqrt((p.x - cx) ** 2 + (p.y - cy) ** 2)
+    )
+  );
+
+  const polyPath =
+    points.map((p: { x: number; y: number }, i: number) =>
+      `${i === 0 ? "M" : "L"}${p.x},${p.y}`
+    ).join(" ") + " Z";
+
+  const GROUPS = ["SPACE", "STORY", "STAGE"] as const;
+
+  // Group boundaries: sector i ends one group and sector i+1 starts another
+  const boundaries = new Set<number>();
+  for (let i = 0; i < AXES.length; i++) {
+    const next = (i + 1) % AXES.length;
+    if (AXES[i].group !== AXES[next].group) {
+      boundaries.add(i);
+    }
+  }
+
+  // Build all triangular sectors, subdividing at boundaries
+  const BLEND_STEPS = 6;
+  const sectors: { d: string; gradId: string }[] = [];
+
+  for (let i = 0; i < points.length; i++) {
+    const next = (i + 1) % points.length;
+    const groupA = AXES[i].group;
+    const groupB = AXES[next].group;
+
+    if (boundaries.has(i)) {
+      // Boundary sector: subdivide into BLEND_STEPS thin slices with interpolated colors
+      for (let s = 0; s < BLEND_STEPS; s++) {
+        const t0 = s / BLEND_STEPS;
+        const t1 = (s + 1) / BLEND_STEPS;
+        const p0 = interpPoint(cx, cy, points[i], points[next], t0);
+        const p1 = interpPoint(cx, cy, points[i], points[next], t1);
+        const tMid = (t0 + t1) / 2;
+        const blendColor = lerpColor(GROUP_COLORS[groupA], GROUP_COLORS[groupB], tMid);
+        sectors.push({
+          d: `M${cx},${cy} L${p0.x},${p0.y} L${p1.x},${p1.y} Z`,
+          gradId: `blend-${i}-${s}`,
+        });
+        // We'll create individual radial gradients for blend sectors below
+        // For now, store the color info
+        (sectors[sectors.length - 1] as { d: string; gradId: string; color: string }).color = blendColor;
+      }
+    } else {
+      // Interior sector: single triangle with group gradient
+      sectors.push({
+        d: `M${cx},${cy} L${points[i].x},${points[i].y} L${points[next].x},${points[next].y} Z`,
+        gradId: `grad-${groupA}`,
+      });
+    }
+  }
+
+  return (
+    <g>
+      <defs>
+        {/* Radial gradients for each group */}
+        {GROUPS.map((group) => (
+          <radialGradient
+            key={group}
+            id={`grad-${group}`}
+            cx={cx}
+            cy={cy}
+            r={maxR}
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0%" stopColor={GROUP_COLORS[group]} stopOpacity={0.1} />
+            <stop offset="100%" stopColor={GROUP_COLORS[group]} stopOpacity={0.9} />
+          </radialGradient>
+        ))}
+        {/* Radial gradients for blend sectors */}
+        {sectors.map((s) => {
+          const blendSector = s as { d: string; gradId: string; color?: string };
+          if (!blendSector.color) return null;
+          return (
+            <radialGradient
+              key={blendSector.gradId}
+              id={blendSector.gradId}
+              cx={cx}
+              cy={cy}
+              r={maxR}
+              gradientUnits="userSpaceOnUse"
+            >
+              <stop offset="0%" stopColor={blendSector.color} stopOpacity={0.1} />
+              <stop offset="100%" stopColor={blendSector.color} stopOpacity={0.9} />
+            </radialGradient>
+          );
+        })}
+      </defs>
+
+      {/* All sectors */}
+      {sectors.map((s, i) => (
+        <path
+          key={`sector-${i}`}
+          d={s.d}
+          fill={`url(#${s.gradId})`}
+        />
+      ))}
+
+      {/* Crisp outer edge — neutral gray */}
+      <path
+        d={polyPath}
+        fill="none"
+        stroke="#999"
+        strokeWidth={2}
+      />
+
+      {/* Crisp vertex dots */}
+      {points.map((_: unknown, i: number) => {
+        const color = GROUP_COLORS[AXES[i].group];
+        return (
+          <circle
+            key={`dot-${i}`}
+            cx={points[i].x} cy={points[i].y}
+            r={3.5}
+            fill={color}
+          />
+        );
+      })}
+
+      {/* Group arcs outside the chart */}
+      {(() => {
+        // Chart outer radius = where score 5 would be.
+        // Derive from outerRadius of the chart: each point is at (score/5)*outerR from center.
+        // Find the maximum possible radius by scaling up from the actual max data point.
+        const maxScore = Math.max(...points.map((p: { value?: number }) => p.value ?? 0), 1);
+        const chartOuterR = (maxR / maxScore) * 5;
+        const arcR = chartOuterR + 18;
+        const baseLabelR = arcR + 38;
+
+        // Axis angle formula: 9 axes evenly spaced, index 0 at top
+        const axisAngle = (idx: number) => -Math.PI / 2 + (idx * 2 * Math.PI / 9);
+
+        const arcs = [
+          { group: "SPACE" as const, startIdx: 0, endIdx: 2 },
+          { group: "STORY" as const, startIdx: 3, endIdx: 5 },
+          { group: "STAGE" as const, startIdx: 6, endIdx: 8 },
+        ];
+
+        return arcs.map(({ group, startIdx, endIdx }) => {
+          const startA = axisAngle(startIdx);
+          const endA = axisAngle(endIdx);
+          // Nudge STAGE label angle upward to avoid overlapping "Curation"
+          const midA = (startA + endA) / 2 + (group === "STAGE" ? 0.1 : group === "STORY" ? -0.1 : 0);
+          const labelR = baseLabelR + (group === "STAGE" ? 14 : group === "STORY" ? -4 : 0);
+
+          const sx = cx + arcR * Math.cos(startA);
+          const sy = cy + arcR * Math.sin(startA);
+          const ex = cx + arcR * Math.cos(endA);
+          const ey = cy + arcR * Math.sin(endA);
+
+          return (
+            <g key={`arc-${group}`}>
+              <path
+                d={`M${sx},${sy} A${arcR},${arcR} 0 0,1 ${ex},${ey}`}
+                fill="none"
+                stroke={GROUP_COLORS[group]}
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeOpacity={0.7}
+              />
+              <text
+                x={cx + labelR * Math.cos(midA)}
+                y={cy + labelR * Math.sin(midA)}
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize={13}
+                fontWeight="bold"
+                fill={GROUP_COLORS[group]}
+                fontFamily="futura-pt, sans-serif"
+                letterSpacing="0.1em"
+              >
+                {group}
+              </text>
+            </g>
+          );
+        });
+      })()}
+    </g>
+  );
+}
+
+/** Map axis label → group color for radar tick labels */
+const LABEL_TO_GROUP_COLOR: Record<string, string> = {};
+for (const axis of AXES) {
+  LABEL_TO_GROUP_COLOR[axis.label] = GROUP_COLORS[axis.group];
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function AxisTick({ payload, x, y, textAnchor }: any) {
-  const lines = (payload.value as string).split("\n");
+  const label = payload.value as string;
+  const lines = label.split("\n");
+  const color = "#666";
+  const yAdj = label === "Grandeur" ? y - 6 : y;
   return (
     <text
       x={x}
-      y={y}
+      y={yAdj}
       textAnchor={textAnchor}
-      fontSize={10}
-      fill="#999"
+      fontSize={12}
+      fill={color}
+      stroke="white"
+      strokeWidth={4}
+      strokeLinejoin="round"
+      paintOrder="stroke"
       fontFamily="futura-pt, sans-serif"
     >
       {lines.map((line: string, i: number) => (
-        <tspan key={i} x={x} dy={i === 0 ? 0 : 13}>
+        <tspan key={i} x={x} dy={i === 0 ? 0 : 15}>
           {line}
         </tspan>
       ))}
@@ -342,7 +582,7 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
               </span>
             )}
           </div>
-          <p className="mt-2 font-serif text-[15px] leading-[1.7] text-foreground/80">
+          <p className="mt-2 font-serif text-base leading-[1.7] text-foreground">
             {summary}
           </p>
         </div>
@@ -355,7 +595,7 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
       >
         {mounted ? (
           <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="70%">
+            <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="65%">
               <PolarGrid stroke="#E0E0E0" strokeWidth={0.5} />
               <PolarAngleAxis dataKey="axisLabel" tick={<AxisTick />} />
               <PolarRadiusAxis
@@ -368,11 +608,7 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
               <Radar
                 name="Score"
                 dataKey="scoreValue"
-                stroke={COPPER}
-                fill={COPPER}
-                fillOpacity={0.2}
-                strokeWidth={2}
-                dot={{ r: 3, fill: COPPER }}
+                shape={<ColoredRadarShape />}
               />
               <Tooltip content={<ChartTooltip />} />
             </RadarChart>
@@ -380,52 +616,70 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
         ) : null}
       </div>
 
-      {/* Scoring rationale — 3-column grid on desktop */}
-      <div className="mt-6 grid gap-5 md:grid-cols-3">
+      {/* Scoring rationale — flat 3-column grid so rows align across groups */}
+      <div className="mt-6 grid gap-x-6 gap-y-3 md:grid-cols-3">
+        {/* Group headers */}
         {(["SPACE", "STORY", "STAGE"] as const).map((groupKey) => {
-          const items = grouped[groupKey];
-          if (!items.length) return null;
+          const [title, subtitle] = groupLabels[groupKey].split(" — ");
           return (
-            <div key={groupKey}>
+            <div key={groupKey} className="mb-1 text-center">
               <p
-                className="mb-2 text-[11px] font-bold uppercase tracking-[0.15em]"
+                className="text-lg font-bold uppercase tracking-[0.1em]"
                 style={{ color: GROUP_COLORS[groupKey] }}
               >
-                {groupLabels[groupKey]}
+                {title}
               </p>
-              <div className="space-y-2">
-                {items.map((item) => (
-                  <div
-                    key={item.label}
-                    className="rounded border border-border bg-muted/30 px-4 py-3"
-                  >
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono text-sm font-semibold" style={{ color: COPPER }}>
-                        {item.scoreValue}
-                      </span>
-                      <span className="text-sm font-medium">{item.label}</span>
-                      <div className="ml-auto flex gap-1">
-                        {[1, 2, 3, 4, 5].map((dot) => (
-                          <div
-                            key={dot}
-                            className="h-2 w-2 rounded-full"
-                            style={{
-                              backgroundColor:
-                                dot <= item.scoreValue ? COPPER : "#E5E5E5",
-                            }}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                    <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground">
-                      {item.anchor}
-                    </p>
-                  </div>
-                ))}
-              </div>
+              {subtitle && (
+                <p className="text-xs italic text-muted-foreground">
+                  {subtitle}
+                </p>
+              )}
             </div>
           );
         })}
+        {/* Axis cards — row by row so CSS grid aligns heights */}
+        {[0, 1, 2].map((rowIdx) =>
+          (["SPACE", "STORY", "STAGE"] as const).map((groupKey) => {
+            const item = grouped[groupKey][rowIdx];
+            if (!item) return <div key={`${groupKey}-${rowIdx}`} />;
+            return (
+              <div
+                key={item.label}
+                className="rounded border border-border bg-muted/30 px-4 py-4"
+              >
+                <div className="flex items-center gap-3">
+                  <span
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded font-mono text-xs font-bold text-white"
+                    style={{
+                      backgroundColor: GROUP_COLORS[item.group as keyof typeof GROUP_COLORS],
+                      opacity: 0.4 + (item.scoreValue - 1) * 0.15,
+                    }}
+                  >
+                    {item.scoreValue}
+                  </span>
+                  <div>
+                    <span className="text-sm font-medium">{item.label}</span>
+                    <div className="mt-1 flex gap-1">
+                      {[1, 2, 3, 4, 5].map((dot) => (
+                        <div
+                          key={dot}
+                          className="h-2 w-2 rounded-full"
+                          style={{
+                            backgroundColor:
+                              dot <= item.scoreValue ? "#555" : "#E5E5E5",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+                <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
+                  {item.anchor}
+                </p>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

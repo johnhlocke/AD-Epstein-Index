@@ -114,7 +114,8 @@ This file should be automatically updated when necessary to answer three key que
 | Image backfill for features with 0 images | Phase 2 | Done (73 features) |
 | CLAUDE.md modernization (reflect current state) | Docs | Done |
 | Methodology section content overhaul (9 sections, citations) | Phase 3 | Done |
-| Validation: test-retest + human calibration set | Phase 2 | Not Started |
+| Validation: test-retest reliability (3 runs, N=100) | Phase 2 | Done |
+| Validation: human calibration set | Phase 2 | Not Started |
 | Aesthetic Methodology section (warm dark-cream, 9-axis radar) | Phase 3 | Done |
 | Methodology split (Agent AI + Aesthetic Metric) | Phase 3 | Done |
 | Simplified page layout (remove 5 charts, reorder) | Phase 3 | Done |
@@ -153,6 +154,9 @@ This file should be automatically updated when necessary to answer three key que
 | Haiku vision designer pass (98 designers found, $0.84) | Phase 2 | Done |
 | Category restructuring (Designer→Design, new Art/Media) | Phase 2 | Done |
 | Full index page (/fullindex) | Phase 3 | Done |
+| Radar chart visual overhaul (colored sectors, group arcs) | Phase 3 | Done |
+| Report card redesign (connection status, combined fields) | Phase 3 | Done |
+| Confirmed badge copper color | Phase 3 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 
@@ -329,7 +333,8 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - ~427 features have genuinely anonymous homeowners (Opus tried with full prompt, no name found). Mostly pre-2010 issues.
 - After scoring: cross-reference all new homeowner names against BB + DOJ
 - Run Detective → Researcher → Editor pipeline on new hits
-- Validate with test-retest reliability (20 features) + human calibration set (25-30 features)
+- Test-retest validation COMPLETE: 3 runs × 100 features, 87% exact agreement, 99.8% within ±1, zero systematic bias
+- Validate with human calibration set (25-30 features)
 
 **Phase 1 — AD Database: COMPLETE**
 - ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456+ issues)

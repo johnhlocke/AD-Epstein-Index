@@ -1,3 +1,6 @@
+"use client";
+
+import { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Card, CardContent } from "@/components/ui/card";
@@ -15,6 +18,30 @@ const MONTH_NAMES = [
 
 interface ReportDetailProps {
   report: FeatureReport;
+}
+
+function DesignStyleCard({ style }: { style: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const needsTruncation = style.length > 60;
+
+  return (
+    <Card className="overflow-hidden gap-0" style={{ height: expanded ? "auto" : 108, paddingTop: 0, paddingBottom: 0 }}>
+      <CardContent className="p-3">
+        <p className="text-xs text-muted-foreground">Design Style</p>
+        <p className={`mt-1 font-semibold ${!expanded && needsTruncation ? "line-clamp-2" : ""}`}>
+          {style}
+        </p>
+        {needsTruncation && (
+          <button
+            onClick={() => setExpanded(!expanded)}
+            className="mt-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        )}
+      </CardContent>
+    </Card>
+  );
 }
 
 export function ReportDetail({ report }: ReportDetailProps) {
@@ -59,73 +86,97 @@ export function ReportDetail({ report }: ReportDetailProps) {
       {/* Quick stats */}
       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
         {locationStr && (
-          <Card>
-            <CardContent className="p-4">
+          <Card className="overflow-hidden gap-0" style={{ height: 130, paddingTop: 0, paddingBottom: 12 }}>
+            <CardContent className="p-3">
               <p className="text-xs text-muted-foreground">Location</p>
               <p className="mt-1 font-semibold">{locationStr}</p>
             </CardContent>
           </Card>
         )}
         {feature.designer_name && (
-          <Card>
-            <CardContent className="p-4">
+          <Card className="overflow-hidden gap-0" style={{ height: 130, paddingTop: 0, paddingBottom: 12 }}>
+            <CardContent className="p-3">
               <p className="text-xs text-muted-foreground">Designer</p>
               <p className="mt-1 font-semibold">{feature.designer_name}</p>
             </CardContent>
           </Card>
         )}
-        {feature.year_built && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Year Built</p>
-              <p className="mt-1 font-mono font-semibold">{feature.year_built}</p>
-            </CardContent>
-          </Card>
-        )}
-        {feature.square_footage && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Square Footage</p>
-              <p className="mt-1 font-mono font-semibold">
-                {feature.square_footage.toLocaleString()} sq ft
-              </p>
+        {(feature.year_built || feature.square_footage) && (
+          <Card className="overflow-hidden gap-0" style={{ height: 130, paddingTop: 0, paddingBottom: 12 }}>
+            <CardContent className="p-3">
+              <p className="text-xs text-muted-foreground">Property</p>
+              {feature.year_built && (
+                <p className="mt-1 font-mono font-semibold">{feature.year_built}</p>
+              )}
+              {feature.square_footage && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <span className="font-mono font-semibold text-foreground">{feature.square_footage.toLocaleString()}</span> sq ft
+                </p>
+              )}
             </CardContent>
           </Card>
         )}
         {feature.cost && (
-          <Card>
-            <CardContent className="p-4">
+          <Card className="overflow-hidden gap-0" style={{ height: 130, paddingTop: 0, paddingBottom: 12 }}>
+            <CardContent className="p-3">
               <p className="text-xs text-muted-foreground">Cost</p>
               <p className="mt-1 font-mono font-semibold">{feature.cost}</p>
             </CardContent>
           </Card>
         )}
+        {/* Design style card — disabled for now
         {feature.design_style && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Design Style</p>
-              <p className="mt-1 font-semibold">{feature.design_style}</p>
+          <DesignStyleCard style={feature.design_style} />
+        )}
+        */}
+        {hasDossier && (dossier.connection_strength || dossier.confidence_score !== null) ? (
+          <Card
+            className="overflow-hidden gap-0 border-red-300"
+            style={{
+              height: 130,
+              paddingTop: 0,
+              paddingBottom: 12,
+              backgroundColor: `rgba(239, 68, 68, ${0.15 + (dossier.confidence_score ?? 0) * 0.55})`,
+            }}
+          >
+            <CardContent className="p-3">
+              <p className="text-xs text-red-900/70">Connection</p>
+              {dossier.connection_strength && (
+                <p className="mt-1 font-mono font-semibold text-red-950">{dossier.connection_strength}</p>
+              )}
+              {dossier.confidence_score !== null && (
+                <p className="mt-1 text-xs text-red-900/70">
+                  Confidence: <span className="font-mono font-semibold text-red-950">{Math.round(dossier.confidence_score * 100)}%</span>
+                </p>
+              )}
             </CardContent>
           </Card>
-        )}
-        {hasDossier && dossier.connection_strength && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Connection Strength</p>
-              <p className="mt-1 font-mono font-semibold">{dossier.connection_strength}</p>
-            </CardContent>
-          </Card>
-        )}
-        {hasDossier && dossier.confidence_score !== null && (
-          <Card>
-            <CardContent className="p-4">
-              <p className="text-xs text-muted-foreground">Confidence</p>
-              <p className="mt-1 font-mono font-semibold">
-                {Math.round(dossier.confidence_score * 100)}%
-              </p>
-            </CardContent>
-          </Card>
-        )}
+        ) : (() => {
+          const investigated = hasDossier && dossier.editor_verdict === "REJECTED";
+          const conf = investigated ? 95 : 40;
+          return (
+            <Card
+              className="overflow-hidden gap-0 border-green-200"
+              style={{
+                height: 130,
+                paddingTop: 0,
+                paddingBottom: 12,
+                backgroundColor: `rgba(134, 176, 134, ${investigated ? 0.25 : 0.12})`,
+              }}
+            >
+              <CardContent className="p-3">
+                <p className="text-xs text-green-900/70">Connection</p>
+                <p className="mt-1 font-mono font-semibold text-green-950">None</p>
+                <p className="mt-1 text-xs text-green-900/70">
+                  Confidence: <span className="font-mono font-semibold text-green-950">{conf}%</span>
+                </p>
+                {!investigated && (
+                  <p className="mt-1 text-[10px] italic text-green-900/50">Not yet investigated</p>
+                )}
+              </CardContent>
+            </Card>
+          );
+        })()}
       </div>
 
       {/* Article title */}
