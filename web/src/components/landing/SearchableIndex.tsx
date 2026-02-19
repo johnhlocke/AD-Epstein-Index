@@ -19,14 +19,30 @@ import Link from "next/link";
 import type { Feature, PaginatedResponse } from "@/lib/types";
 import { CATEGORY_COLORS } from "@/lib/category-colors";
 
-type FeatureRow = Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null };
+type FeatureRow = Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null };
 
 const MONTH_ABBR = [
   "", "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ];
 
-export function SearchableIndex() {
+interface SearchableIndexProps {
+  /** Default rows per page (default: 8) */
+  pageSize?: number;
+  /** Whether to default to confirmed-only (default: true) */
+  defaultConfirmedOnly?: boolean;
+  /** Default sort column (default: none) */
+  defaultSort?: string;
+  /** Default sort order (default: none) */
+  defaultOrder?: "asc" | "desc";
+}
+
+export function SearchableIndex({
+  pageSize = 8,
+  defaultConfirmedOnly = true,
+  defaultSort = "",
+  defaultOrder,
+}: SearchableIndexProps = {}) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -40,19 +56,50 @@ export function SearchableIndex() {
   const category = searchParams.get("category") ?? "";
   const style = searchParams.get("style") ?? "";
   const location = searchParams.get("location") ?? "";
+  const sort = searchParams.get("sort") ?? defaultSort;
+  const order = (searchParams.get("order") ?? defaultOrder ?? "") as "" | "asc" | "desc";
   const dossierOnly = searchParams.get("dossier") === "true";
-  const confirmedOnly = searchParams.get("confirmed") !== "false";
+  const confirmedOnly = defaultConfirmedOnly
+    ? searchParams.get("confirmed") !== "false"
+    : searchParams.get("confirmed") === "true";
+
+  function toggleSort(column: string) {
+    const params = new URLSearchParams(searchParams.toString());
+    if (sort === column && order === "asc") {
+      params.set("sort", column);
+      params.set("order", "desc");
+    } else if (sort === column && order === "desc") {
+      params.delete("sort");
+      params.delete("order");
+    } else {
+      params.set("sort", column);
+      params.set("order", "asc");
+    }
+    params.set("page", "1");
+    router.push(`?${params.toString()}#index`, { scroll: false });
+  }
+
+  function SortCaret({ column }: { column: string }) {
+    if (sort !== column) return <span className="ml-0.5 text-[9px] text-muted-foreground/25">&#9650;</span>;
+    return (
+      <span className="ml-0.5 text-[9px]" style={{ color: "#8B5E2B" }}>
+        {order === "asc" ? "\u25B2" : "\u25BC"}
+      </span>
+    );
+  }
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     const params = new URLSearchParams();
     params.set("page", String(page));
-    params.set("limit", "8");
+    params.set("limit", String(pageSize));
     if (search) params.set("search", search);
     if (year) params.set("year", year);
     if (category) params.set("category", category);
     if (style) params.set("style", style);
     if (location) params.set("location", location);
+    if (sort) params.set("sort", sort);
+    if (order) params.set("order", order);
     if (dossierOnly) params.set("dossier", "true");
     if (confirmedOnly) params.set("confirmed", "true");
 
@@ -65,7 +112,7 @@ export function SearchableIndex() {
     } finally {
       setLoading(false);
     }
-  }, [page, search, year, category, style, location, dossierOnly, confirmedOnly]);
+  }, [page, pageSize, search, year, category, style, location, sort, order, dossierOnly, confirmedOnly]);
 
   useEffect(() => {
     fetchData();
@@ -131,13 +178,21 @@ export function SearchableIndex() {
               <input
                 type="checkbox"
                 checked={confirmedOnly}
-                onChange={(e) => updateParam("confirmed", e.target.checked ? "" : "false")}
+                onChange={(e) => {
+                  if (defaultConfirmedOnly) {
+                    // Default is ON: unchecking sets confirmed=false, checking removes param
+                    updateParam("confirmed", e.target.checked ? "" : "false");
+                  } else {
+                    // Default is OFF: checking sets confirmed=true, unchecking removes param
+                    updateParam("confirmed", e.target.checked ? "true" : "");
+                  }
+                }}
                 className="h-3.5 w-3.5 rounded border-border accent-[#8B5E2B]"
               />
               Confirmed connections only
             </label>
           </div>
-          {(search || year || category || style || location || dossierOnly || !confirmedOnly) && (
+          {(search || year || category || style || location || sort || dossierOnly || !confirmedOnly) && (
             <Button
               variant="ghost"
               size="sm"
@@ -186,8 +241,8 @@ export function SearchableIndex() {
       <div className="scrollbar-visible rounded-lg border border-border">
         <Table className="table-fixed">
           <colgroup>
-            <col style={{ width: "8.5%" }} />
-            <col style={{ width: "25.5%" }} />
+            <col style={{ width: "10%" }} />
+            <col style={{ width: "24%" }} />
             <col style={{ width: "17%" }} />
             <col style={{ width: "17%" }} />
             <col style={{ width: "17%" }} />
@@ -196,11 +251,21 @@ export function SearchableIndex() {
           </colgroup>
           <TableHeader>
             <TableRow>
-              <TableHead className="font-serif">Issue</TableHead>
-              <TableHead className="font-serif">Homeowner</TableHead>
-              <TableHead className="font-serif">Designer</TableHead>
-              <TableHead className="font-serif">Category</TableHead>
-              <TableHead className="font-serif">Location</TableHead>
+              <TableHead className="cursor-pointer select-none whitespace-nowrap font-serif" onClick={() => toggleSort("year")}>
+                Issue<SortCaret column="year" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none font-serif" onClick={() => toggleSort("homeowner")}>
+                Homeowner<SortCaret column="homeowner" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none font-serif" onClick={() => toggleSort("designer")}>
+                Designer<SortCaret column="designer" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none font-serif" onClick={() => toggleSort("category")}>
+                Category<SortCaret column="category" />
+              </TableHead>
+              <TableHead className="cursor-pointer select-none font-serif" onClick={() => toggleSort("location")}>
+                Location<SortCaret column="location" />
+              </TableHead>
               <TableHead className="font-serif">Report</TableHead>
               <TableHead className="whitespace-nowrap font-serif">Style</TableHead>
             </TableRow>
@@ -226,8 +291,10 @@ export function SearchableIndex() {
                     {f.issue_year}
                   </TableCell>
                   <TableCell className="max-w-0 truncate font-serif font-bold text-foreground">
-                    {f.homeowner_name ?? (
-                      <span className="font-normal text-muted-foreground italic">Unknown</span>
+                    {!f.homeowner_name || f.homeowner_name === "Anonymous" ? (
+                      <span className="font-normal text-muted-foreground/60 italic">Anonymous</span>
+                    ) : (
+                      f.homeowner_name
                     )}
                   </TableCell>
                   <TableCell className="max-w-0 truncate font-serif">{f.designer_name ?? "\u2014"}</TableCell>
@@ -251,14 +318,17 @@ export function SearchableIndex() {
                     <Link
                       href={`/report/${f.id}`}
                       className="inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-[11px] font-medium leading-tight no-underline transition-colors hover:opacity-80"
-                      style={f.dossier_id
-                        ? { backgroundColor: "#4A4A4A", color: "#D4D4D4" }
-                        : { backgroundColor: "#E8E4DF", color: "#6B6560" }
+                      style={
+                        f.editor_verdict === "CONFIRMED"
+                          ? { backgroundColor: "#8B5E2B", color: "#FFF" }
+                          : f.dossier_id
+                            ? { backgroundColor: "#4A4A4A", color: "#D4D4D4" }
+                            : { backgroundColor: "#E8E4DF", color: "#6B6560" }
                       }
                     >
                       {f.dossier_id ? "Dossier" : "Report"}
                       <svg width="10" height="10" viewBox="0 0 10 10" fill="none" className="shrink-0">
-                        <path d="M3 1.5H8.5V7M8.5 1.5L1.5 8.5" stroke={f.dossier_id ? "#9A9A9A" : "#8B8580"} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M3 1.5H8.5V7M8.5 1.5L1.5 8.5" stroke={f.editor_verdict === "CONFIRMED" ? "#FFD6A0" : f.dossier_id ? "#9A9A9A" : "#8B8580"} strokeWidth="1.2" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </Link>
                   </TableCell>
@@ -295,8 +365,27 @@ export function SearchableIndex() {
           >
             Previous
           </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {page} of {data.totalPages}
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            Page
+            <input
+              type="number"
+              min={1}
+              max={data.totalPages}
+              defaultValue={page}
+              key={page}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  const val = Math.max(1, Math.min(data.totalPages, Number((e.target as HTMLInputElement).value) || 1));
+                  goToPage(val);
+                }
+              }}
+              onBlur={(e) => {
+                const val = Math.max(1, Math.min(data.totalPages, Number(e.target.value) || 1));
+                if (val !== page) goToPage(val);
+              }}
+              className="w-14 rounded border border-border bg-transparent px-1.5 py-0.5 text-center text-sm font-medium text-foreground"
+            />
+            of {data.totalPages}
           </span>
           <Button
             variant="outline"

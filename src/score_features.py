@@ -388,10 +388,12 @@ Examine every page image carefully. Score this home on each of the 9 axes below 
 ═══ STRUCTURAL DATA (extract from text/captions) ═══
 Extract these fields from what you can read in the article pages:
 - homeowner_name, designer_name, architecture_firm
+  IMPORTANT: designer_name must be a DIFFERENT person than the homeowner. If the homeowner
+  designed their own home (no distinct designer/architect credited), return null for designer_name.
 - location_city, location_state, location_country
 - design_style (free text), year_built, square_footage, cost
 - article_author (the writer's name, usually in a byline)
-- subject_category: Classify the homeowner into ONE of: "Business" (CEO, founder, executive, financier), "Celebrity" (actor, musician, athlete, entertainer), "Designer" (interior/fashion/industrial designer's own home), "Socialite" (known for social scene, philanthropy, "old money"), "Royalty" (titled nobility, royal family), "Politician" (elected official, diplomat, government), "Private" (anonymous/unnamed, no public profile), "Other" (writer, artist, academic, or doesn't fit above)
+- subject_category: Classify the homeowner into ONE of: "Business" (CEO, founder, executive, financier), "Celebrity" (actor, musician, athlete, entertainer), "Design" (interior/fashion/industrial designer, architect — their own home), "Art" (visual artist, painter, sculptor, photographer, filmmaker, director), "Media" (writer, journalist, editor, publisher), "Socialite" (known for social scene, philanthropy, "old money"), "Royalty" (titled nobility, royal family), "Politician" (elected official, diplomat, government), "Private" (anonymous/unnamed, no public profile), "Other" (doesn't fit above categories)
 
 ═══ SOCIAL/NETWORK DATA ═══
 - notable_guests: Names of notable people mentioned visiting or socializing at this home
@@ -531,7 +533,7 @@ def parse_structural(parsed, current_feature):
     # Subject category
     cat = parsed.get("subject_category")
     if cat and str(cat).lower() not in ("null", "none", ""):
-        valid_cats = {"Business", "Celebrity", "Designer", "Socialite", "Royalty", "Politician", "Private", "Other"}
+        valid_cats = {"Business", "Celebrity", "Design", "Art", "Media", "Socialite", "Royalty", "Politician", "Private", "Other"}
         if cat in valid_cats:
             update["subject_category"] = cat
 

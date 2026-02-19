@@ -16,6 +16,8 @@ export async function GET(request: NextRequest) {
       search: searchParams.get("search") ?? undefined,
       confirmedOnly: searchParams.get("confirmed") === "true",
       hasDossier: searchParams.get("dossier") === "true" || undefined,
+      sort: searchParams.get("sort") ?? undefined,
+      order: (searchParams.get("order") as "asc" | "desc") ?? undefined,
     };
 
     const result = await getFeatures(filters);

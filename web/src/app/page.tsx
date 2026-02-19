@@ -51,7 +51,7 @@ export default async function Home() {
           </div>
         }
       >
-        <SearchableIndex />
+        <SearchableIndex defaultSort="year" defaultOrder="desc" />
       </Suspense>
 
       {/* ── C: When and Where Are They (Key Finding 01 cont.) ── */}

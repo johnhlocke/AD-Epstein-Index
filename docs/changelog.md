@@ -6,6 +6,53 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-18 (Session 42)
+
+### Fixed — Year Sort Data Loss (PostgREST 1000-Row Limit)
+
+- **`web/src/lib/queries.ts`** — CRITICAL: PostgREST silently caps `.range(0, 4999)` to 1000 rows by default. Year sort was only seeing ~25% of features, making 80s/90s coverage appear sparse (e.g., May 1993 showed 2 features instead of 13). Fixed with batched pagination loop fetching 1000 rows at a time until exhausted. Also hoisted `confirmedIds` and `dossierIds` filter arrays for reuse in year sort idQuery.
+
+### Fixed — Confirmed Checkbox on Full Index
+
+- **`web/src/components/landing/SearchableIndex.tsx`** — Checkbox toggle logic was inverted on `/fullindex` (where `defaultConfirmedOnly=false`). Checking the box removed the param instead of setting it. Fixed with conditional logic based on `defaultConfirmedOnly` prop.
+
+### Added — Page Jump Input
+
+- **`web/src/components/landing/SearchableIndex.tsx`** — Replaced static "Page X of Y" text with editable page number input. Users can type a page number and press Enter or blur to jump directly (previously had to click Next/Previous through 159+ pages).
+
+### Added — Copper Dossier Tags for Confirmed Connections
+
+- **`web/src/lib/queries.ts`** — Added `editor_verdict` to dossier join: `.select("*, issues!inner(...), dossiers(id, editor_verdict)")`.
+- **`web/src/components/landing/SearchableIndex.tsx`** — Confirmed dossiers now show bright copper (#8B5E2B) background with white text. Unconfirmed dossiers use dark gray. No-dossier features use muted beige.
+
+### Changed — Homepage Default Sort
+
+- **`web/src/app/page.tsx`** — Homepage Searchable Index now defaults to sorting by issue year, newest first (was alphabetical).
+- **`web/src/components/landing/SearchableIndex.tsx`** — Added `defaultSort` and `defaultOrder` props.
+- **`web/src/app/api/features/route.ts`** — Added `sort` and `order` query param passthrough.
+
+### Fixed — Designer Extraction False Positives (202 Features)
+
+- **`src/score_features.py`** — Opus Vision scorer was copying homeowner name into `designer_name` when no distinct designer was credited. Added explicit prompt instruction: "designer_name must be a DIFFERENT person than the homeowner." Updated valid categories to reflect new Art/Media/Design taxonomy.
+- **Database cleanup**: Cleared 202 features where `designer_name` was an exact copy of `homeowner_name` (extraction artifact, not real data).
+
+### Added — Haiku Vision Designer Pass
+
+- **`src/haiku_designer_pass.py`** — NEW: Cheap Haiku vision pass to find real designers in features with no designer_name. Sends first 3 page images with a narrow prompt asking ONLY for designer/architect. Found 98 real designers across 559 candidates for $0.84 (~$0.003/feature vs $0.15 for Opus).
+
+### Changed — Category Restructuring
+
+- **`src/reclassify_categories.py`** — NEW: Reclassified categories in Supabase. "Designer" → "Design" (665 features). Split "Other" (387 features) using regex on scoring rationale + notes text: artists/photographers/filmmakers → "Art" (285), writers/journalists → "Media" (16), architects/fashion → "Design" (67). 19 features remain as "Other".
+- **`web/src/lib/category-colors.ts`** — Renamed "Designer" to "Design", added "Art" (`#DDE4D5`) and "Media" (`#D5DEE4`) colors.
+- **`web/src/lib/queries.ts`** — Updated CATEGORIES array: added Art, Media; renamed Designer to Design.
+- **`src/score_features.py`** — Updated valid categories in prompt and validation to match new taxonomy.
+
+### Fixed — MethodologySection Type Error
+
+- **`web/src/components/landing/MethodologySection.tsx`** — Pre-existing type error: `node.sub` referenced but `nodes` array had no `sub` property in its type. Fixed by adding `sub?: string` to the type annotation.
+
+---
+
 ## 2026-02-18 (Session 41)
 
 ### Changed — Opus Vision Scoring Completion (v2.2)

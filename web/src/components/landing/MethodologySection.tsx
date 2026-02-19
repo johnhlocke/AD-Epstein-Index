@@ -68,30 +68,6 @@ function CodeBox({
 
 // ── Data ────────────────────────────────────────────────────────────────────
 
-const phases = [
-  {
-    num: "01",
-    title: "BUILD THE AD DATABASE",
-    description:
-      "An autonomous multi-agent system discovers, downloads, and extracts every issue of Architectural Digest from 1988 to 2025. A Courier agent scrapes each one, decoding the magazine's digital article catalog and fetching page images from the archive. A Reader agent then extracts the people featured, their designers, locations, architectural styles, and other details from every home. Where structured data is unavailable, a vision model reads the actual magazine pages to fill gaps.",
-    agents: ["Arthur (Scout)", "Casey (Courier)", "Elias (Reader)"],
-  },
-  {
-    num: "02",
-    title: "CROSS-REFERENCE EPSTEIN RECORDS",
-    description:
-      "A Detective agent checks every extracted name against two sources: Epstein's Little Black Book (approximately 1,500 contacts) and the Department of Justice's Full Epstein Library (millions of pages of released documents). Names that surface as potential matches are handed to a Researcher agent, which builds a dossier for each one — pulling public records, graph analytics, and documentary evidence to assess the strength of connection.",
-    agents: ["Silas (Detective)", "Elena (Researcher)"],
-  },
-  {
-    num: "03",
-    title: "REVIEW & VISUALIZE",
-    description:
-      "An Editor agent reviews every dossier before confirming or rejecting. All data is served from a Supabase database via server-side queries. No client-side API keys are exposed. The searchable index, charts, and dossier pages are generated from live pipeline data. All of this data is made visible on a publicly accessible website with compelling visuals created in collaboration with a design agent who actively creates in Figma based on instructions from the human user. The Figma design is automatically converted into a website through Vercel.",
-    agents: ["Miranda (Editor)", "Sable (Designer)"],
-  },
-];
-
 const pipelineStats = [
   { label: "AGENTS", value: "7" },
   { label: "AI MODELS: OPUS, SONNET, HAIKU, GEMINI", value: "4" },
@@ -345,7 +321,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           className="mt-3 text-[20px] leading-[1.4] md:max-w-[var(--content-narrow)]"
           style={{ fontFamily: MONO, color: TEXT_MID }}
         >
-          Seven autonomous AI agents cataloged 37 years of Architectural Digest and cross-referenced every name against the Epstein records — no human touched the data.
+          Seven autonomous AI agents cataloged 37 years of Architectural Digest and cross-referenced every name against the Epstein records in 42 hours.
         </p>
 
         {/* Pipeline stats — 6-col grid aligned with page columns */}
@@ -370,183 +346,490 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
         <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
 
-        {/* ── Abstract: 3-column overview ── */}
-        <div className="mt-10 grid grid-cols-1 gap-x-6 gap-y-10 md:grid-cols-3">
-          {/* Column 1 */}
-          <div className="flex flex-col gap-6">
-            <div>
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                Research Question
+        {/* ── Abstract: Overview + Research Questions (cols 1-4) with margin notes (cols 5-6) ── */}
+        <div className="mt-10">
+          {/* Introduction label + Tagline */}
+          <p
+            className="text-[10px] font-bold uppercase tracking-[0.18em]"
+            style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
+          >
+            Introduction
+          </p>
+          <p
+            className="mt-4 text-[16px] leading-[1.6]"
+            style={{
+              fontFamily: "var(--font-inter), Inter, sans-serif",
+              color: TEXT_LIGHT,
+              maxWidth: CONTENT_NARROW,
+            }}
+          >
+            AI is a tool, and it is important that our tools not shape
+            our world, but rather help us understand it.
+          </p>
+
+          {/* Abstract body — per-paragraph sidenotes via relative/absolute */}
+          <div
+            className="mt-6 flex flex-col gap-6 text-[15px] leading-[1.8]"
+            style={{
+              fontFamily: "var(--font-inter), Inter, sans-serif",
+              color: TEXT_MID,
+            }}
+          >
+            {/* Paragraph 1 + DOJ Library */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                This project began with a simple enough question: &ldquo;How many
+                of the high-profile people gracing the glossy pages of
+                Architectural Digest are also named in the xeroxed,
+                Justice-Department-cataloged, unredacted public records of Jeffrey
+                Epstein&apos;s social network?&rdquo;<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
               </p>
-              <p
-                className="mt-3 text-[14px] leading-[1.65]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              <div
+                className="absolute top-0 z-10 hidden pl-4 md:block"
+                style={{
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
               >
-                This study investigates the degree of overlap between
-                Jeffrey Epstein&apos;s documented social network and the
-                population of individuals featured in Architectural Digest,
-                the preeminent American shelter magazine. AD has profiled
-                the private residences of wealthy and influential figures
-                since 1920. The Epstein document releases &mdash; comprising
-                contact records, flight logs, legal depositions, and
-                correspondence &mdash; name many of those same individuals.
-                The central question is whether this overlap is incidental
-                or structurally significant, and whether it produces a
-                measurable aesthetic signal.
-              </p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  The DOJ Epstein Library
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Millions of pages of depositions, correspondence, flight logs, and contact records released by the U.S. Department of Justice. Searchable via OCR &mdash; handwritten documents are not indexed.
+                </p>
+                <a href="https://www.justice.gov/epstein" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  justice.gov/epstein &rarr;
+                </a>
+              </div>
             </div>
-            <div>
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                Methodology
+
+            {/* Paragraph 2 + Pipeline Cost */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                What started as curiosity and pecking around via a manual process
+                of looking up old issues very quickly snowballed into a major
+                logistical nightmare. Going line by line and entering the name into
+                the DOJ website, reading every PDF that came up, then trying to
+                cross off and remember each name in a spreadsheet file somewhere:
+                &ldquo;Did I look at that one already?&rdquo; &ldquo;Which issue
+                did I check yesterday?&rdquo; It&apos;s been 38 years since Jeffrey
+                Epstein started his eponymous financial management firm, J. Epstein
+                &amp; Company.{" "}
+                In that time, AD has published over 1,300 issues. With an average
+                of four features per issue, that is over 4,000 homes, the vast
+                majority of them having named homeowners. It was clear that
+                undertaking something like this manually would be measured not in
+                days or even months, but in such an inordinate amount of time that
+                it wasn&apos;t even worth attempting to quantify.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
               </p>
-              <p
-                className="mt-3 text-[14px] leading-[1.65]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: "5em",
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
               >
-                The investigation employs a three-phase automated pipeline.
-                In Phase 1, seven autonomous AI agents ingest 37 years of
-                Architectural Digest (1988&ndash;2025), extracting structured
-                records from approximately 480 issues and cataloging over
-                2,100 featured residences with associated homeowners,
-                designers, locations, and architectural styles. In Phase 2,
-                every extracted name undergoes cross-referencing against two
-                primary Epstein sources: the Little Black Book, a personal
-                contact directory of approximately 1,500 entries, and the
-                Department of Justice&apos;s Full Epstein Library, a corpus of
-                millions of released legal documents searchable via OCR.
-                In Phase 3, flagged names receive full investigative dossiers,
-                multi-source evidence synthesis, and editorial review before
-                final confirmation or rejection.
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Pipeline Cost
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  480 issues, 2,180 features, 476 cross-references, 185 dossiers &mdash; approximately $55 in API calls and ~18 hours of wall-clock time. The marginal cost of asking a new question is near zero.
+                </p>
+              </div>
+            </div>
+
+            {/* Paragraph 2b — the pivot (no sidenote) */}
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              That realization led to a pivot: less &ldquo;must use AI,&rdquo;
+              and more &ldquo;what is the system design architecture&rdquo; that
+              could fundamentally accelerate this process. I&apos;m not a
+              software engineer; but I was a researcher breaking the work into
+              repeatable tasks &mdash; extract the name, query the record,
+              evaluate the match, log the evidence &mdash; steps that could be
+              handed off to a program if they could be articulated and clearly
+              defined. Once the problem became architectural, the scope expanded.
+            </p>
+
+            {/* Paragraph 3 + Vibe Coding */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                Again, AI is a tool. And a tool was needed to technically answer
+                important questions that would otherwise be too impractical to ask,
+                at scale, and at great speed. It&apos;s not feasible by a single
+                researcher. Yet that doesn&apos;t make AI smarter than the
+                researcher. It makes the researcher capable of asking bigger
+                questions. In fact, that is what happened, as you can see if you
+                take a look at the &ldquo;Aesthetic Methodology&rdquo; section.
+                Working through the technical challenges of making this work, I
+                experienced firsthand what is challenging with &ldquo;vibe
+                coding&rdquo;<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>, what&apos;s actually, you know, pretty amazing, and
+                what at first blush seemed like it should be really easy but
+                actually took hours of frustrating detail to get right, all
+                enhanced my creativity. I questioned some of my initial
+                assumptions, thought deeper about &ldquo;how&rdquo; data flows
+                through a pipeline, and moved in scale and scope that I
+                didn&apos;t think possible before I started.
               </p>
+              <div
+                className="absolute top-0 z-10 hidden pl-4 md:block"
+                style={{
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  &ldquo;Vibe Coding&rdquo;
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Term coined by Andrej Karpathy (Feb 2025). A style of programming where you describe what you want to an AI and iterate on the output rather than writing every line. The human steers; the AI executes.
+                </p>
+              </div>
+            </div>
+
+            {/* Paragraph 4 + ICIJ — min-height ensures room for tall sidenote before para 5 */}
+            <div className="relative md:min-h-[280px]">
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                What follows is a detailed account of this modular, multi-agent
+                workflow that processes document corpora, extracts structured
+                entities, cross-references them against external records,
+                investigates flagged matches, and produces an auditable trail of
+                documentation for every conclusion. This specific case study here
+                concerns a design magazine and a global criminal network. But
+                structurally, the system could be aimed at campaign finance records,
+                nonprofit boards, corporate directorships, university trustees, and
+                cultural institutions gala attendees. That initial question can
+                change; the pipeline remains.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+              </p>
+              <div
+                className="absolute top-0 z-10 hidden pl-4 md:block"
+                style={{
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/sidenotes/icij-graph.jpg"
+                  alt="ICIJ entity-relationship graph showing persons, companies, and addresses linked by directorship and shareholder relationships"
+                  className="mb-2 grayscale"
+                  style={{
+                    border: `1px solid ${BORDER}`,
+                    maxWidth: "calc(50% - 12px)",
+                    maxHeight: 120,
+                    objectFit: "cover",
+                    filter: "grayscale(1) contrast(1.1)",
+                  }}
+                />
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Precedent: ICIJ Panama Papers
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  The ICIJ&apos;s Panama Papers investigation (2016) used Neo4j, Apache Tika, Tesseract OCR, and NLP entity recognition to process 11.5 million leaked documents across 400 journalists in 80 countries.
+                </p>
+                <a href="https://neo4j.com/case-studies/the-international-consortium-of-investigative-journalists-icij/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  neo4j.com/case-studies/icij &rarr;
+                </a>
+              </div>
+            </div>
+
+            {/* Paragraph 5 + Confirmed ≠ Guilty */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                This document explains how that pipeline works, where it succeeds,
+                where it fails, and where the borders between human judgment and
+                machine autonomy are still being drawn.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+              </p>
+              <div
+                className="absolute top-0 z-10 hidden pl-4 md:block"
+                style={{
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Confirmed &ne; Guilty
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  &ldquo;Confirmed connection&rdquo; means documented proximity &mdash; contact entries, dining records, guest lists, correspondence. It does not imply wrongdoing or a personal relationship with Epstein.
+                </p>
+              </div>
             </div>
           </div>
 
-          {/* Column 2 */}
-          <div className="flex flex-col gap-6">
-            <div>
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                System Architecture
-              </p>
-              <p
-                className="mt-3 text-[14px] leading-[1.65]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                The system implements a hub-and-spoke multi-agent architecture
-                in which a central editor agent coordinates six specialized
-                workers via asynchronous task queues. Each agent maintains
-                episodic memory (384-dimensional vector embeddings with
-                semantic retrieval), periodic self-reflection, and access to
-                a shared inter-agent bulletin board. The system employs four
-                distinct language models selected by cost-capability tradeoff:
-                Claude Opus for editorial judgment, Sonnet for research
-                synthesis, Haiku for bulk classification, and Gemini for
-                vision tasks including magazine page reading and aesthetic
-                tagging. The complete pipeline executes in approximately
-                18 hours of wall-clock time at a total API cost of ~$55,
-                demonstrating that non-trivial investigative journalism
-                workflows can be conducted at minimal marginal cost.
-              </p>
-            </div>
-            <div>
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                Key Challenges
-              </p>
-              <p
-                className="mt-3 text-[14px] leading-[1.65]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                The primary methodological challenge is the disambiguation of
-                name collisions. Of 476 cross-reference matches identified,
-                the majority proved to be surname-only coincidences &mdash;
-                e.g., &ldquo;Goldsmith&rdquo; appearing in a jewelry
-                inventory rather than referencing a specific individual.
-                Rigorous word-boundary matching and minimum name-length
-                thresholds reduce but do not eliminate false positives.
-                The DOJ corpus is searchable only via OCR, rendering
-                handwritten documents invisible to automated search. Each
-                verdict required the operationalization of &ldquo;confirmed
-                connection&rdquo; as documented proximity (contact entries,
-                dining records, guest lists, correspondence) rather than
-                implication of wrongdoing &mdash; a standard that had to be
-                enforced consistently across thousands of automated decisions
-                with explicit rules for edge cases.
-              </p>
-            </div>
-          </div>
+          {/* Research Questions */}
+          <div className="mt-10">
+            <p
+              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ fontFamily: MONO, color: "#B87333", maxWidth: CONTENT_NARROW }}
+            >
+              Research Questions
+            </p>
+            <p
+              className="mt-4 text-[15px] leading-[1.8]"
+              style={{
+                fontFamily: "var(--font-inter), Inter, sans-serif",
+                color: TEXT_LIGHT,
+                maxWidth: CONTENT_NARROW,
+              }}
+            >
+              Can an autonomous AI pipeline read, interpret, and evaluate
+              thousands of documents with enough semantic and contextual
+              understanding to make rapid, defensible investigative judgements at
+              scale, while preserving a transparent, auditable chain of
+              reasoning?
+            </p>
+            <p
+              className="mt-4 text-[15px] leading-[1.8]"
+              style={{
+                fontFamily: "var(--font-inter), Inter, sans-serif",
+                color: TEXT_MID,
+                maxWidth: CONTENT_NARROW,
+              }}
+            >
+              From that flowed more difficult design problems:
+            </p>
+            <div
+              className="mt-3 flex flex-col gap-2 text-[15px] leading-[1.8]"
+              style={{
+                fontFamily: "var(--font-inter), Inter, sans-serif",
+                color: TEXT_MID,
+              }}
+            >
+              {/* Q1 + Society of Mind note */}
+              <div className="relative">
+                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  How do you decompose an open-ended investigation into discrete stages with clean handoffs?<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                </p>
+                <div
+                  className="absolute z-10 hidden pl-4 md:block"
+                  style={{
+                    top: "-3em",
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    Minsky, &ldquo;The Society of Mind&rdquo;
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    Marvin Minsky&apos;s 1986 thesis that intelligence emerges from communities of simple, specialized agents &mdash; not monolithic reasoning. The direct intellectual ancestor of multi-agent pipelines.
+                  </p>
+                  <a href="https://www.simonandschuster.com/books/Society-Of-Mind/Marvin-Minsky/9780671657130" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    Simon &amp; Schuster &rarr;
+                  </a>
+                </div>
+              </div>
 
-          {/* Column 3 */}
-          <div className="flex flex-col gap-6">
-            <div>
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                Principal Findings
+              {/* Q2 — no sidenote */}
+              <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                <span style={{ marginLeft: "-1.25rem", marginRight: "0.55rem", color: TEXT_MID }}>&bull;</span>
+                Can you build an autonomous system, without a human in the loop, that handles ambiguity in names responsibly and avoids false positives?
               </p>
-              <p
-                className="mt-3 text-[14px] leading-[1.65]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                The overlap between the AD-featured population and
-                Epstein&apos;s documented network is statistically
-                non-trivial. Confirmed individuals exhibit a pronounced
-                aesthetic signature: 3.4&times; overrepresentation in
-                classical European grandeur, 2.4&times; in formal
-                symmetry, and near-zero representation in minimalist
-                or industrial styles relative to the general AD
-                population. The dataset is constructed without human
-                editorial discretion in name selection or cross-referencing,
-                and every finding is independently verifiable against
-                the primary source documents. A six-dimension aesthetic
-                taxonomy was developed to quantify these stylistic
-                divergences across the full corpus.
+
+              {/* Q3 + Heuer note */}
+              <div className="relative">
+                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  How do you encode evidentiary standards so the system distinguishes coincidence from confirmation?<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                </p>
+                <div
+                  className="absolute top-0 z-10 hidden pl-4 md:block"
+                  style={{
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    Heuer, &ldquo;Psychology of Intelligence Analysis&rdquo;
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    The CIA&apos;s 1999 manual on cognitive bias in evidence evaluation. Heuer&apos;s &ldquo;Analysis of Competing Hypotheses&rdquo; framework is essentially what the Detective&apos;s verdict tiers encode in code.
+                  </p>
+                  <a href="https://www.cia.gov/resources/csi/static/Pyschology-of-Intelligence-Analysis.pdf" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    CIA.gov (PDF) &rarr;
+                  </a>
+                </div>
+              </div>
+
+              {/* Q4 — no sidenote */}
+              <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                <span style={{ marginLeft: "-1.25rem", marginRight: "0.55rem", color: TEXT_MID }}>&bull;</span>
+                What infrastructure do agents need beyond a system prompt (things like memory, communication, reflection) to sustain quality over thousands of sequential decisions?
               </p>
+
+              {/* Q5 + Shneiderman note */}
+              <div className="relative pb-16 md:pb-0">
+                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  What does a purpose-built interface give you that a terminal can&apos;t &mdash; and does making the system visible change how much you trust it?<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                </p>
+                <div
+                  className="absolute z-10 hidden pl-4 md:block"
+                  style={{
+                    top: "2.5em",
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    Shneiderman, &ldquo;Human-Centered AI&rdquo;
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    Ben Shneiderman&apos;s 2022 argument that AI systems need oversight dashboards, not terminal logs. His two-dimensional framework plots human control against computer automation.
+                  </p>
+                  <a href="https://global.oup.com/academic/product/human-centered-ai-9780192845290" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    Oxford University Press &rarr;
+                  </a>
+                </div>
+              </div>
             </div>
-            <div>
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                Future Work
-              </p>
-              <p
-                className="mt-3 text-[14px] leading-[1.65]"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                The pipeline architecture is designed for extensibility
-                to additional luxury shelter publications &mdash; Elle
-                Decor, World of Interiors, Vogue Living &mdash; and
-                alternative document corpora beyond the DOJ Epstein
-                release. Preliminary feasibility analysis has been
-                conducted for Elle Decor, though its lack of a structured
-                digital archive limits scalability. The codebase is
-                open-source, the methodology is fully reproducible, and
-                the agent infrastructure supports arbitrary
-                cross-referencing tasks against any searchable document
-                library.
-              </p>
-            </div>
+            <p
+              className="mt-4 pb-20 text-[15px] leading-[1.8] md:pb-24"
+              style={{
+                fontFamily: "var(--font-inter), Inter, sans-serif",
+                color: TEXT_MID,
+                maxWidth: CONTENT_NARROW,
+              }}
+            >
+              The following sections describe an attempt to answer those questions:
+            </p>
           </div>
         </div>
 
-        <div className="mt-10" style={{ borderTop: `1px solid ${BORDER}` }} />
+        <div style={{ borderTop: `1px solid ${BORDER}` }} />
+
+        {/* ── Section Previews: 3×3 grid (compact TOC) ── */}
+        <div className="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-3">
+          {[
+            {
+              num: "1",
+              title: "The Pipeline",
+              body: "The system operates as a five-stage sequential pipeline: data acquisition, feature extraction, cross-referencing, investigation, and editorial review. Each stage has a defined input, output, and a specialized agent. The pipeline processed 1,396 magazines and 4,081 features.",
+            },
+            {
+              num: "2",
+              title: "Multi-Agent Architecture",
+              body: "Seven specialized agents coordinated through a central Editor. This hub-and-spoke architecture prevents contradictory updates, ensures a single auditable decision trail, and makes it possible to swap out any agent without affecting the others.",
+            },
+            {
+              num: "3",
+              title: "Personality as Architecture",
+              body: "Why do these agents have names, archetypes, and voices? Does it matter? The short answer: it depends on the task, and the academic literature is genuinely split. For judgment calls, carefully designed personas measurably shift behavior in useful ways.",
+            },
+            {
+              num: "4",
+              title: "Investigation Methodology",
+              body: "Can an AI differentiate between what is genuine and what is digital noise? The investigation stage is the most sensitive part of the system \u2014 each dossier records what was consulted and why the conclusion followed.",
+            },
+            {
+              num: "5",
+              title: "Intelligence Infrastructure",
+              body: "Behind the agents sits shared infrastructure: a knowledge graph mapping all connections, episodic memory allowing agents to recall prior decisions, and reflection loops where the Editor reviews patterns in past outcomes.",
+            },
+            {
+              num: "6",
+              title: "UI Interface and Transparency",
+              body: "In many ways an AI system is a black box. Two front-ends were built: an internal dashboard monitoring pipeline state and cost, and a public-facing site where every feature and every verdict can be browsed.",
+            },
+            {
+              num: "7",
+              title: "Key Challenges and Limitations",
+              body: "No system built on language models is immune to failure. Surname collisions, OCR limitations in handwritten documents, and calibrating autonomy remain open problems. Approximately 20% of confirmed cases are routed for manual review.",
+            },
+            {
+              num: "8",
+              title: "Data Sources",
+              body: "Three primary sources: the Cond\u00e9 Nast digital archive (JWT-encoded metadata + Azure page images), Epstein\u2019s Little Black Book (local regex matching), and the DOJ Epstein document library (browser-automated OCR search).",
+            },
+            {
+              num: "9",
+              title: "Conclusions and Future Work",
+              body: "The pipeline is a working proof of concept: seven agents processed 37 years of a single magazine autonomously. The methodology is reproducible and the code is documented. It is a force multiplier for human judgment, not a replacement for it.",
+            },
+          ].map((sec) => (
+            <div
+              key={sec.num}
+              className="flex flex-col rounded border p-5"
+              style={{
+                backgroundColor: CARD_BG,
+                borderColor: BORDER,
+                borderTop: `2px solid ${COPPER}`,
+              }}
+            >
+              <p
+                className="text-[9px] tracking-widest"
+                style={{ fontFamily: MONO, color: COPPER }}
+              >
+                SECTION {sec.num}
+              </p>
+              <p
+                className="mt-1 text-[13px] font-bold leading-[1.3]"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                {sec.title}
+              </p>
+              <p
+                className="mt-2 text-[12px] leading-[1.65]"
+                style={{ fontFamily: MONO, color: TEXT_MID }}
+              >
+                {sec.body}
+              </p>
+              <a
+                href={`#section-${sec.num}`}
+                className="mt-auto inline-block pt-3 text-[9px] uppercase tracking-[0.12em] no-underline transition-opacity hover:opacity-70"
+                style={{ fontFamily: MONO, color: "rgba(120, 140, 155, 0.8)" }}
+              >
+                Jump to section &darr;
+              </a>
+            </div>
+          ))}
+        </div>
+
+        {/* ── Pull Quote: Knuth ── */}
+        <div className="mt-28 mb-20 flex flex-col items-center px-4 md:mt-36 md:mb-28">
+          <div
+            className="relative w-full max-w-2xl"
+            style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}
+          >
+            <span
+              className="pointer-events-none absolute select-none text-[150px] leading-none md:text-[200px]"
+              style={{ fontFamily: "Georgia, serif", color: `rgba(184, 115, 51, 0.12)`, top: "0.05em", left: "-0.05em" }}
+              aria-hidden="true"
+            >
+              &ldquo;
+            </span>
+            <p
+              className="pt-14 pb-10 px-4 md:px-8 text-center text-[22px] leading-[1.6] italic md:text-[26px]"
+              style={{
+                fontFamily: "var(--font-inter), Inter, sans-serif",
+                color: TEXT_LIGHT,
+              }}
+            >
+              Science is what we understand well enough to explain to a computer.
+            </p>
+            <p
+              className="-mt-6 pb-8 text-center text-[10px] uppercase tracking-[0.2em]"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              Donald Knuth, 1987
+            </p>
+          </div>
+        </div>
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 1: THE PIPELINE
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-1" className="mt-24 scroll-mt-24">
           {/* Section 1 header — inline so intro text sits beside pipeline flow */}
           <p
             className="text-[11px] tracking-widest"
@@ -572,202 +855,657 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               maxWidth: CONTENT_NARROW,
             }}
           >
-            Three phases. Seven agents. Zero manual data entry.
+            How a magazine URL becomes a confirmed or rejected connection with a full evidentiary trail
           </p>
           <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
 
-          {/* ── Body text + Pipeline flow — side by side ── */}
+          {/* ── Body text with floated pipeline diagram ── */}
           <div
-            className="mt-10 grid items-stretch gap-6"
-            style={{ gridTemplateColumns: "2fr 1fr" }}
+            className="mt-10 text-[15px] leading-[1.8] [&>*+*]:mt-6"
+            style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
           >
-            {/* Left: Intro paragraphs + summary (minor columns 1-4) */}
-            <div
-              className="flex flex-col gap-5 text-[14px] leading-[1.7]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
-            >
-              <p>
-                The AD-Epstein Index is built by a fully automated three-phase
-                pipeline. In the first phase, a Scout agent discovers every
-                issue of Architectural Digest published between 1988 and 2025
-                on archive.org, a Courier downloads and decodes each
-                issue&apos;s digital article catalog, and a Reader extracts
-                structured records from every featured home — homeowner names,
-                interior designers, locations, architectural styles, square
-                footage, and construction dates.
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                The system operates as a six-stage sequential pipeline: data
+                acquisition, feature extraction, cross-referencing,
+                investigation, editorial review, and then report design. Each of
+                these stages has a clearly defined input, a defined output, and
+                a dedicated agent responsible for the work. A magazine issue
+                enters the pipeline as a URL and exits as structured records,
+                each containing a homeowner name, designer, location, aesthetic
+                profile, and &mdash; if the name was flagged &mdash; a confirmed or
+                rejected cross-reference with a full evidentiary trail.
               </p>
-              <p>
-                In the second phase, every extracted name is cross-referenced
-                against two primary Epstein sources: the Little Black Book
-                (approximately 1,500 contacts) and the Department of
-                Justice&apos;s Full Epstein Library (millions of released
-                documents searchable via OCR). Names that surface as potential
-                matches are investigated by a Researcher agent, which builds a
-                detailed dossier synthesizing public records, graph analytics,
-                and documentary evidence.
-              </p>
-              <p>
-                The third phase is editorial review and publication. An Editor
-                agent reviews every dossier before confirming or rejecting a
-                connection. Confirmed names, their associated metadata, and the
-                full evidence chain are published to this website. No human
-                touches the data at any stage of the pipeline — the system runs
-                end-to-end autonomously.
-              </p>
-              <p
-                className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                Summary
-              </p>
-              <p className="-mt-2">
-                480 issues ingested, 2,180 features extracted, 476
-                cross-references evaluated, 185 dossiers built, 33 connections
-                confirmed — all without human intervention in the data pipeline.
-              </p>
-            </div>
+              <div className="relative">
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  Here&apos;s what that actually looks like in practice. The AD
+                  Archive<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> contains a structured digital version of every issue
+                  published. There are other &mdash; more challenging, less
+                  structured &mdash; data sources available: PDFs with incorrect
+                  metadata on archive.org, issue scans on random personal
+                  websites, some digital features on the main site, eBay back
+                  issues, but none of them had what became a gold-standard source
+                  of machine readable metadata. Each issue page embeds a
+                  JWT-encoded article catalog, a structured JSON object containing
+                  the title, teaser, designer credit, and page range for every
+                  feature. As a brief aside, some of those articles cataloged as
+                  &ldquo;features&rdquo; actually weren&apos;t a true feature,
+                  they were more like roundups of flashy locations or a focus on
+                  one specific architect&apos;s work. A review by Haiku AI quickly
+                  separated legitimate features from non-features.
+                </p>
+                <div
+                  className="absolute top-0 z-10 hidden pl-4 md:block"
+                  style={{
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/sidenotes/ad-decades.png"
+                    alt="Architectural Digest interiors across four decades — 2000s, 1990s, 1980s, 1970s"
+                    className="mb-2 rounded"
+                    style={{
+                      maxWidth: "calc(50% - 12px)",
+                      maxHeight: 140,
+                      filter: "grayscale(1) contrast(1.1)",
+                    }}
+                  />
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    The AD Archive
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    Cond&eacute; Nast&apos;s complete digital archive. Each issue page embeds a JWT-encoded article catalog &mdash; structured JSON with title, teaser, designer credit, and page range. No OCR required.
+                  </p>
+                  <a href="https://archive.architecturaldigest.com/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    archive.architecturaldigest.com &rarr;
+                  </a>
+                </div>
+              </div>
 
-            {/* Right: Pipeline flow — interlocking vertical chevrons (minor columns 5-6) */}
-            {(() => {
-            // Progressive shades — darker at top, lighter toward output (wider contrast)
-            const SHADES = [
-              "#1a1835", "#21203f", "#292649",
-              "#322e54", "#3c365f", "#48416c",
-            ];
-            const NOTCH = 18; // chevron depth in px
-            const nodes = [
-              { label: "Find public AD issues" },
-              { label: "Extract features from each issue" },
-              { label: "Cross-reference each homeowner name" },
-              { label: "Build full dossiers for potential matches" },
-              { label: "Double-check context and confirm a match" },
-              { label: "Publish all data", sub: "wheretheylive.world  ·  github" },
-            ];
-            const isFirst = (i: number) => i === 0;
-            const isLast = (i: number) => i === nodes.length - 1;
-            // Vertical chevron clip-paths: V-point bottom, inverted-V dip top
-            const clipFor = (i: number) => {
-              if (isFirst(i)) {
-                // flat top, chevron point bottom
-                return `polygon(0 0, 100% 0, 100% calc(100% - ${NOTCH}px), 50% 100%, 0 calc(100% - ${NOTCH}px))`;
-              }
-              if (isLast(i)) {
-                // inverted-V top (center dips down), flat bottom
-                return `polygon(0 0, 50% ${NOTCH}px, 100% 0, 100% 100%, 0 100%)`;
-              }
-              // inverted-V top (center dips down), chevron point bottom
-              return `polygon(0 0, 50% ${NOTCH}px, 100% 0, 100% calc(100% - ${NOTCH}px), 50% 100%, 0 calc(100% - ${NOTCH}px))`;
-            };
-            return (
-              <div className="flex flex-col">
-                <div className="flex flex-1 flex-col">
-                  {nodes.map((node, i) => (
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.18em]"
+                style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
+              >
+                Walkthrough
+              </p>
+
+              {/* ── Fig. 1: Floated pipeline chevron diagram (cols 1-2) ── */}
+              {(() => {
+                const SHADES = [
+                  "#1a1835", "#21203f", "#292649",
+                  "#322e54", "#3c365f", "#48416c",
+                ];
+                const NOTCH = 14;
+                const nodes: Array<{ label: string; sub?: string; agent: string; agentColor: string }> = [
+                  { label: "Data acquisition", agent: "Scout", agentColor: GREEN },
+                  { label: "Feature extraction", agent: "Courier", agentColor: "#4ECDC4" },
+                  { label: "Cross-referencing", agent: "Detective", agentColor: "#CC4040" },
+                  { label: "Investigation", agent: "Researcher", agentColor: "#D97EC4" },
+                  { label: "Editorial review", agent: "Editor", agentColor: COPPER },
+                  { label: "Report design", agent: "Designer", agentColor: SLATE },
+                ];
+                const isFirst = (i: number) => i === 0;
+                const isLast = (i: number) => i === nodes.length - 1;
+                const clipFor = (i: number) => {
+                  if (isFirst(i))
+                    return `polygon(0 0, 100% 0, 100% calc(100% - ${NOTCH}px), 50% 100%, 0 calc(100% - ${NOTCH}px))`;
+                  if (isLast(i))
+                    return `polygon(0 0, 50% ${NOTCH}px, 100% 0, 100% 100%, 0 100%)`;
+                  return `polygon(0 0, 50% ${NOTCH}px, 100% 0, 100% calc(100% - ${NOTCH}px), 50% 100%, 0 calc(100% - ${NOTCH}px))`;
+                };
+                return (
+                  <div
+                    className="float-left mb-4 mr-6 hidden md:block"
+                    style={{ width: "calc((100% - 5 * 24px) / 6)", height: 500 }}
+                  >
+                    <div className="flex flex-col" style={{ height: 476 }}>
+                      {nodes.map((node, i) => (
+                        <div
+                          key={node.label}
+                          className="relative flex flex-1 flex-col items-center justify-center"
+                          style={{
+                            background: SHADES[i],
+                            clipPath: clipFor(i),
+                            marginTop: isFirst(i) ? 0 : -NOTCH,
+                            zIndex: nodes.length - i,
+                            filter: "drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5))",
+                          }}
+                        >
+                          <span
+                            className="text-[9px] tracking-[0.08em] leading-tight text-center"
+                            style={{ fontFamily: MONO, color: TEXT_LIGHT, maxWidth: "80%" }}
+                          >
+                            {node.label}
+                          </span>
+                          <span
+                            className="mt-0.5 text-[7px] tracking-wider text-center"
+                            style={{ fontFamily: MONO, color: node.agentColor }}
+                          >
+                            {node.agent}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                    <p
+                      className="mt-2 text-[8px] tracking-wider"
+                      style={{ fontFamily: MONO, color: TEXT_DIM }}
+                    >
+                      <span style={{ color: TEXT_MID }}>Fig. 1</span> — Six-stage pipeline.
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                The AD archive issue data made this process smoother than
+                expected. In Stage 1, a Scout agent discovered the issue URL. A
+                Courier agent fetches the page, decodes the JWT, and downloads
+                the corresponding article page images from the publisher&apos;s
+                content delivery network. No PDF cracking, no OCR. The
+                structured metadata is already there, embedded in the page
+                itself. A Reader agent was originally designed to
+                &ldquo;read&rdquo; or extract data from scanned PDFs, but this
+                process proved cumbersome and ultimately unnecessary after
+                discovering the embedded metadata source.
+              </p>
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                In Stage 2, those page images go into an extraction model.
+                Claude Opus examines each set of article pages and extracts the
+                homeowner&apos;s name, their designer, the city and country, the
+                architectural style, the article&apos;s author, and nine
+                aesthetic scores via a custom scoring instrument developed for
+                this work (more on that in the Aesthetic Methodology section).
+                Let&apos;s take an example from the July 1996 AD issue: one of
+                the extracted features showcases the unambiguously lavish,
+                triplex penthouse on the Upper East Side of Manhattan, designed
+                for media mogul Mort Zuckerman, owner of U.S. News &amp; World
+                Report and the New York Daily News.
+              </p>
+              <div className="relative">
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  In Stage 3, the name &ldquo;Mort Zuckerman&rdquo; reaches the
+                  Detective&apos;s inbox. There, he runs two checks in rapid
+                  succession. First, an instant search of Jeffrey Epstein&apos;s
+                  Little Black Book<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> &mdash; a 95-page contact directory seized
+                  during the original 2008 investigation. The Black Book contains
+                  a &ldquo;Zuckerman, Mort&rdquo; entry with phone numbers. That
+                  alone constitutes a direct match: Epstein had this
+                  person&apos;s contact information in his personal address book.
+                  Second, the Detective queries the DOJ&apos;s Full Epstein
+                  Library &mdash; a public search interface that spans across
+                  millions of pages of unredacted documents. The result of that
+                  DOJ search: 1,317 documents containing &ldquo;Mort
+                  Zuckerman.&rdquo; The Detective&apos;s verdict: confirmed via
+                  presence in the Black Book and extensive documented DOJ
+                  references.
+                </p>
+                <div
+                  className="absolute top-0 z-10 hidden pl-4 md:block"
+                  style={{
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    The Little Black Book
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    Seized during the 2005 Palm Beach investigation. 95 pages, ~1,500 names organized by region, with phone numbers and addresses. A structured entry with contact details is direct evidence of being in Epstein&apos;s personal network.
+                  </p>
+                </div>
+              </div>
+              {/* ── Fig. 2: Simplified Zuckerman subgraph (floated left, 2 cols) ── */}
+              {(() => {
+                const Dot = ({ cx, cy }: { cx: number; cy: number }) => (
+                  <circle cx={cx} cy={cy} r="2.5" fill={TEXT_DIM} opacity="0.6" />
+                );
+                return (
+                  <div
+                    className="float-left mb-4 mr-6 hidden md:block"
+                    style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+                  >
                     <div
-                      key={node.label}
-                      className="relative flex flex-1 flex-col items-center justify-center"
+                      className="overflow-hidden rounded"
                       style={{
-                        background: SHADES[i],
-                        clipPath: clipFor(i),
-                        marginTop: isFirst(i) ? 0 : -NOTCH,
-                        zIndex: nodes.length - i,
-                        filter: "drop-shadow(0 2px 3px rgba(0, 0, 0, 0.5))",
+                        border: `1px solid ${BORDER}`,
+                        backgroundColor: "#111118",
                       }}
                     >
-                      <span
-                        className="text-[10px] tracking-[0.08em] leading-tight text-center"
-                        style={{ fontFamily: MONO, color: TEXT_LIGHT, maxWidth: "50%", }}
-                      >
-                        {node.label}
-                      </span>
-                      {node.sub && (
-                        <span
-                          className="mt-1 text-[8px] tracking-wider text-center"
-                          style={{ fontFamily: MONO, color: TEXT_DIM, maxWidth: "50%" }}
-                        >
-                          {node.sub}
+                      <div className="px-3 py-1.5" style={{ backgroundColor: "rgba(184, 115, 51, 0.1)" }}>
+                        <span className="text-[8px] font-bold tracking-[0.08em]" style={{ fontFamily: MONO, color: COPPER }}>
+                          KNOWLEDGE GRAPH &mdash; SUBGRAPH
                         </span>
-                      )}
+                      </div>
+                      <div className="px-2 py-2">
+                        <svg viewBox="0 0 280 320" className="w-full" style={{ maxHeight: 320 }}>
+                          {/* ── Edges with variable weight + endpoint dots at perimeters ── */}
+                          {/* Zuckerman → Epstein: strong (1,317 DOJ docs) */}
+                          <line x1="130" y1="145" x2="65" y2="42" stroke={TEXT_DIM} strokeWidth="2.5" opacity="0.55" />
+                          <Dot cx={118} cy={126} /><Dot cx={74} cy={56} />
+                          <text x="62" y="95" fill={TEXT_DIM} fontSize="6.5" fontFamily="JetBrains Mono, monospace">meetings</text>
+                          <text x="62" y="104" fill={TEXT_DIM} fontSize="5.5" fontFamily="JetBrains Mono, monospace" opacity="0.7">1,317 docs</text>
+
+                          {/* Zuckerman → Groff: indirect, dashed */}
+                          <line x1="130" y1="145" x2="215" y2="72" stroke={TEXT_DIM} strokeWidth="1" strokeDasharray="6 3" opacity="0.35" />
+                          <Dot cx={147} cy={131} /><Dot cx={206} cy={80} />
+                          <text x="175" y="118" fill={TEXT_DIM} fontSize="6.5" fontFamily="JetBrains Mono, monospace">coordinated</text>
+
+                          {/* Zuckerman → Kissinger: medium (AD feature) */}
+                          <line x1="130" y1="145" x2="55" y2="260" stroke={TEXT_DIM} strokeWidth="1.5" opacity="0.45" />
+                          <Dot cx={118} cy={163} /><Dot cx={63} cy={248} />
+                          <text x="62" y="215" fill={TEXT_DIM} fontSize="6.5" fontFamily="JetBrains Mono, monospace">AD friendship</text>
+
+                          {/* Zuckerman → AD Jul '96: weak, dashed */}
+                          <line x1="130" y1="145" x2="210" y2="235" stroke={TEXT_DIM} strokeWidth="0.75" strokeDasharray="2 3" opacity="0.25" />
+                          <Dot cx={146} cy={161} /><Dot cx={196} cy={222} />
+
+                          {/* Zuckerman → AD May '97: weak, dashed */}
+                          <line x1="130" y1="145" x2="245" y2="248" stroke={TEXT_DIM} strokeWidth="0.75" strokeDasharray="2 3" opacity="0.25" />
+                          <Dot cx={147} cy={160} /><Dot cx={231} cy={237} />
+                          <text x="195" y="195" fill={TEXT_DIM} fontSize="6.5" fontFamily="JetBrains Mono, monospace">featured</text>
+
+                          {/* Epstein → Groff: strong */}
+                          <line x1="65" y1="42" x2="215" y2="72" stroke={TEXT_DIM} strokeWidth="2" opacity="0.45" />
+                          <Dot cx={81} cy={45} /><Dot cx={203} cy={70} />
+                          <text x="110" y="48" fill={TEXT_DIM} fontSize="6.5" fontFamily="JetBrains Mono, monospace">employer</text>
+
+                          {/* Epstein → Kissinger: DOJ docs (not Black Book) */}
+                          <line x1="65" y1="42" x2="55" y2="260" stroke={TEXT_DIM} strokeWidth="1.5" opacity="0.4" />
+                          <Dot cx={64} cy={58} /><Dot cx={56} cy={246} />
+                          <text x="18" y="155" fill={TEXT_DIM} fontSize="6.5" fontFamily="JetBrains Mono, monospace">DOJ docs</text>
+
+                          {/* ── Nodes ── */}
+                          {/* Epstein */}
+                          <circle cx="65" cy="42" r="16" fill="rgba(42, 42, 58, 0.8)" stroke={TEXT_MID} strokeWidth="1" />
+                          <text x="86" y="30" fill={TEXT_LIGHT} fontSize="7" fontFamily="JetBrains Mono, monospace">Jeffrey</text>
+                          <text x="86" y="40" fill={TEXT_LIGHT} fontSize="7" fontFamily="JetBrains Mono, monospace">Epstein</text>
+
+                          {/* Groff */}
+                          <circle cx="215" cy="72" r="12" fill="rgba(42, 42, 58, 0.6)" stroke={BORDER} strokeWidth="1" />
+                          <text x="232" y="69" fill={TEXT_MID} fontSize="7" fontFamily="JetBrains Mono, monospace">Lesley</text>
+                          <text x="232" y="79" fill={TEXT_MID} fontSize="7" fontFamily="JetBrains Mono, monospace">Groff</text>
+
+                          {/* Zuckerman — confirmed: outer ring + solid inner core */}
+                          <circle cx="130" cy="145" r="22" fill="rgba(184, 115, 51, 0.08)" stroke={COPPER} strokeWidth="1.5" />
+                          <circle cx="130" cy="145" r="12" fill={COPPER} opacity="0.85" />
+                          <text x="158" y="141" fill={TEXT_LIGHT} fontSize="8" fontFamily="JetBrains Mono, monospace" fontWeight="bold">Mort</text>
+                          <text x="158" y="152" fill={TEXT_LIGHT} fontSize="8" fontFamily="JetBrains Mono, monospace" fontWeight="bold">Zuckerman</text>
+                          {/* CONFIRMED badge */}
+                          <rect x="155" y="156" width="52" height="12" rx="2" fill="rgba(184, 115, 51, 0.2)" stroke={COPPER} strokeWidth="0.5" />
+                          <text x="181" y="164" fill={COPPER} fontSize="6" fontFamily="JetBrains Mono, monospace" textAnchor="middle" fontWeight="bold">CONFIRMED</text>
+
+                          {/* Kissinger */}
+                          <circle cx="55" cy="260" r="14" fill="rgba(42, 42, 58, 0.6)" stroke={BORDER} strokeWidth="1" />
+                          <text x="75" y="257" fill={TEXT_MID} fontSize="7" fontFamily="JetBrains Mono, monospace">Henry</text>
+                          <text x="75" y="267" fill={TEXT_MID} fontSize="7" fontFamily="JetBrains Mono, monospace">Kissinger</text>
+
+                          {/* AD Issue Jul '96 — label below */}
+                          <rect x="192" y="222" width="36" height="26" rx="3" fill="rgba(42, 42, 58, 0.5)" stroke={BORDER} strokeWidth="1" />
+                          <text x="210" y="260" fill={TEXT_DIM} fontSize="6" fontFamily="JetBrains Mono, monospace" textAnchor="middle">Jul &apos;96</text>
+
+                          {/* AD Issue May '97 — label below */}
+                          <rect x="227" y="235" width="36" height="26" rx="3" fill="rgba(42, 42, 58, 0.5)" stroke={BORDER} strokeWidth="1" />
+                          <text x="245" y="273" fill={TEXT_DIM} fontSize="6" fontFamily="JetBrains Mono, monospace" textAnchor="middle">May &apos;97</text>
+
+                          {/* ── Legend ── */}
+                          <line x1="18" y1="298" x2="44" y2="298" stroke={TEXT_DIM} strokeWidth="2.5" opacity="0.55" />
+                          <text x="48" y="300" fill={TEXT_DIM} fontSize="5.5" fontFamily="JetBrains Mono, monospace">strong evidence</text>
+                          <line x1="140" y1="298" x2="166" y2="298" stroke={TEXT_DIM} strokeWidth="1" strokeDasharray="4 2" opacity="0.4" />
+                          <text x="170" y="300" fill={TEXT_DIM} fontSize="5.5" fontFamily="JetBrains Mono, monospace">indirect / inferred</text>
+                        </svg>
+                      </div>
                     </div>
-                  ))}
+                    <p
+                      className="mt-1 text-[8px] tracking-wider"
+                      style={{ fontFamily: MONO, color: TEXT_DIM }}
+                    >
+                      <span style={{ color: TEXT_MID }}>Fig. 2</span> — Zuckerman subgraph.
+                      {" "}<a href="/fullgraph" style={{ color: "rgba(184, 115, 51, 0.6)" }}>Full graph &rarr;</a>
+                    </p>
+                  </div>
+                );
+              })()}
+
+              <div className="relative">
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  Stage 4 shifts the system from identification to investigation.
+                  The Researcher receives the Detective&apos;s verdict and the raw
+                  evidence and begins the work of constructing a structured dossier.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                  {" "}She queries the DOJ documents for specifics: What was the nature of
+                  the documents in the DOJ files? It included scheduled meetings
+                  at Epstein&apos;s East 71st Street address, coordinated via
+                  Lesley Groff<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> &mdash; Epstein&apos;s chief scheduler.
+                  The Epstein/Zuckerman relationship persisted from at least 2010
+                  through 2014 &mdash; many years after Epstein&apos;s 2008
+                  criminal conviction. The Researcher cross-references the
+                  knowledge graph and finds that Zuckerman&apos;s AD feature
+                  documents a friendship with Henry Kissinger, himself another
+                  confirmed Epstein associate. She compiles every document
+                  reference and finding into a structured dossier.
+                </p>
+                <div
+                  className="absolute top-0 z-10 hidden pl-4 md:block"
+                  style={{
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/sidenotes/zuckerman-dossier.png"
+                    alt="Mort Zuckerman dossier — Confirmed, Featured in AD July 1996"
+                    className="mb-2 rounded"
+                    style={{
+                      maxWidth: "calc(50% - 12px)",
+                      maxHeight: 140,
+                      filter: "grayscale(1) contrast(1.1)",
+                    }}
+                  />
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    The Zuckerman Dossier
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    Lesley Groff, Epstein&apos;s chief scheduler, coordinated meetings at 9 E. 71st St. Henry Kissinger &mdash; also confirmed in the Black Book &mdash; appears in the same AD feature as a personal friend of Zuckerman.
+                  </p>
+                  <a href="https://www.wheretheylive.world/report/4873" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    Full dossier &rarr;
+                  </a>
+                </div>
+                <div
+                  className="absolute z-10 hidden pl-4 md:block"
+                  style={{
+                    top: "18em",
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    Lesley Groff
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    Epstein&apos;s executive assistant and chief scheduler. Coordinated visits to 9 E. 71st Street. Subpoenaed in 2019; prosecutors declined to bring charges. Her name recurs across hundreds of DOJ documents as the logistical hub of Epstein&apos;s social calendar.
+                  </p>
+                </div>
+              </div>
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                Next, in Stage 5, that dossier reaches the Editor for final
+                review. The Editor is the only agent that can write a verdict to
+                the database. She examines the total evidence chain: Black Book
+                entry (direct contact), 1,317 DOJ references (sustained
+                relationship), scheduled meetings at a private residence (not a
+                public event), post-conviction contact (the relationship
+                survived legal disgrace). Clear cut, a confirmed connection with
+                high confidence. The feature, the cross-reference, the dossier,
+                and the verdict are all written to the database as a single
+                auditable record.
+              </p>
+
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.18em]"
+                style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
+              >
+                False Positives
+              </p>
+              <div className="relative">
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  Now consider a false positive. The system checks every name,
+                  including &ldquo;Francis Ford Coppola,&rdquo; who was featured
+                  in a September 1995 issue where the director shared his jungle
+                  retreat in Belize with AD. The DOJ library <em>does</em> return
+                  results for &ldquo;Coppola.&rdquo; However, by reading the
+                  context of the individual PDFs, the Detective understands that
+                  this is actually Donato Coppola excitedly reaching out to
+                  Jeffrey Epstein to set up a meeting. And then there is also
+                  Scott Coppola,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> who was shown emailing Jeffrey Epstein&apos;s
+                  girlfriend Karina Shuliak in a Facebook message in 2011. Same
+                  last name, but very different people. The Detective&apos;s
+                  verdict: no match. The pipeline flags the name, investigates it
+                  with the same rigor, and moves on. No human had to intervene to
+                  catch the false positive. The system&apos;s evidence standards
+                  caught it automatically, while a careless system would have
+                  stopped at the surname.
+                </p>
+                <div
+                  className="absolute top-0 z-10 hidden pl-4 md:block"
+                  style={{
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/sidenotes/coppola-fb.png"
+                    alt="Scott Coppola Facebook message to Karina Shuliak, June 2011"
+                    className="mb-2 rounded"
+                    style={{
+                      maxWidth: "calc(50% - 12px)",
+                      maxHeight: 140,
+                      filter: "grayscale(1) contrast(1.1)",
+                    }}
+                  />
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    DOJ Source Document
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    The actual DOJ document showing Scott Coppola&apos;s Facebook message to Karina Shuliak &mdash; not Francis Ford Coppola.
+                  </p>
+                  <a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA00575663.pdf" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    EFTA00575663.pdf &rarr;
+                  </a>
+                </div>
+              </div>
+
+              {/* ── Fig. 3: Coppola rejection tree ── */}
+              <div style={{ maxWidth: CONTENT_NARROW }}>
+                <div
+                  className="overflow-hidden rounded"
+                  style={{
+                    border: `1px solid ${BORDER}`,
+                    backgroundColor: "#111118",
+                  }}
+                >
+                  <div className="px-3 py-1.5" style={{ backgroundColor: "rgba(204, 64, 64, 0.1)" }}>
+                    <span className="text-[8px] font-bold tracking-[0.08em]" style={{ fontFamily: MONO, color: "#CC4040" }}>
+                      DETECTIVE &mdash; FALSE POSITIVE REJECTION
+                    </span>
+                  </div>
+                  <div className="px-3 py-3">
+                    <p className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                      AD Feature: <span style={{ color: TEXT_LIGHT }}>&ldquo;Francis Ford Coppola&apos;s Jungle Retreat in Belize&rdquo;</span> <span style={{ color: TEXT_DIM }}>&mdash; Sep 1995</span>
+                    </p>
+                    <div className="mt-1 ml-2 pl-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
+                      <p className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                        <span style={{ color: TEXT_MID }}>└</span> Extracted name: <span style={{ color: TEXT_LIGHT }}>Francis Ford Coppola</span>
+                      </p>
+                      <div className="mt-1 ml-3 pl-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
+                        <p className="text-[11px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
+                          <span style={{ color: TEXT_MID }}>└</span> DOJ search: &ldquo;Coppola&rdquo;
+                        </p>
+                        <div className="mt-1 ml-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
+                          <div className="flex items-baseline gap-2 py-1 pl-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>├</span>
+                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Donato Coppola</span>
+                            <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; email to Epstein</span>
+                            <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
+                          </div>
+                          <div className="flex items-baseline gap-2 py-1 pl-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>├</span>
+                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Scott Coppola</span>
+                            <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; Facebook msg to Shuliak</span>
+                            <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
+                          </div>
+                          <div className="flex items-baseline gap-2 py-1 pl-3">
+                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>└</span>
+                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Francis Ford Coppola</span>
+                            <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; no connection</span>
+                            <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    <p className="mt-2 text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                      Verdict: <span style={{ color: TEXT_MID }}>NO MATCH</span> &mdash; surname collision, three different individuals
+                      {" "}<a href="https://www.wheretheylive.world/dossier/200" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>View dossier &rarr;</a>
+                    </p>
+                  </div>
                 </div>
                 <p
-                  className="mt-3 text-[8px] tracking-wider"
+                  className="mt-1 text-[8px] tracking-wider"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
-                  <span style={{ color: TEXT_MID }}>Fig. 1</span> — Pipeline stages from issue discovery through publication.
+                  <span style={{ color: TEXT_MID }}>Fig. 3</span> — False positive rejection: surname collision resolved without human intervention.
                 </p>
               </div>
-            );
-          })()}
+
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                In Stage 6, the Designer synthesizes the pipeline&apos;s output
+                into a visual report for every home in the archive, not only
+                those with confirmed connections. Each feature receives a
+                dedicated detail page pairing article imagery with structured
+                data, including nine aesthetic scores plotted on a radar chart.
+                The decision to measure nine axes rather than six, to organize
+                them into clusters &mdash; Space, Story, and Stage &mdash; and
+                to introduce a &ldquo;hospitality&rdquo; dimension
+                distinguishing private retreat from social venue was driven by
+                the analytical need to test divergence from the broader
+                baseline. Presentation and measurement were developed in tandem.
+                The report design pulled the data collection method upstream.
+                How the findings are presented and what was measured are
+                indivisible.
+              </p>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.18em]"
+                style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
+              >
+                Architecture
+              </p>
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                Separating each of the agents concerns means that an error in
+                extraction doesn&apos;t corrupt the cross-reference, a false
+                positive in the Detective stage doesn&apos;t bypass the
+                Editor&apos;s review, and every stage produces an intermediate
+                output that can be independently audited. If someone questions a
+                particular finding, you can trace the exact path: here&apos;s
+                the page the name was extracted from, here&apos;s the Black Book
+                entry, here are the DOJ documents, here&apos;s the
+                Researcher&apos;s analysis, here&apos;s the Editor&apos;s
+                reasoning. The pipeline doesn&apos;t just produce a black-box
+                conclusion, it produces detailed evidence for those conclusions.
+              </p>
+              <div className="relative">
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  This is what the literature calls the ReAct pattern:<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                  {" "}interleaving reasoning (&ldquo;this Black Book match is
+                  surname-only &mdash; probably a coincidence&rdquo;) with actions
+                  (search the DOJ library, query the knowledge graph), observing
+                  the results, and reasoning again. This loop underlies most
+                  modern LLM agent systems, and every agent in this pipeline
+                  implements a version of it. The Detective doesn&apos;t just
+                  pattern-match a name against a database. It reasons about the
+                  quality of the match, decides what additional evidence to seek,
+                  evaluates what it finds, and produces a verdict with its
+                  reasoning attached.
+                </p>
+                <div
+                  className="absolute top-0 z-10 hidden pl-4 md:block"
+                  style={{
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src="/sidenotes/react-pattern.png"
+                    alt="ReAct pattern diagram — Reason Only, Act Only, and combined Reasoning Traces + Actions loop"
+                    className="mb-2 rounded"
+                    style={{
+                      maxWidth: "calc(50% - 12px)",
+                      maxHeight: 140,
+                      filter: "grayscale(1) contrast(1.1)",
+                    }}
+                  />
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    ReAct Pattern
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    Yao et al. (2022). &ldquo;ReAct: Synergizing Reasoning and Acting in Language Models.&rdquo; Agents interleave chain-of-thought reasoning with tool calls, observe results, then reason again.
+                  </p>
+                  <a href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    arxiv.org/abs/2210.03629 &rarr;
+                  </a>
+                </div>
+              </div>
+              <div className="relative">
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  It is important to resist the illusion of infallibility. The DOJ
+                  search interface is OCR-based,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> which means handwritten
+                  documents &mdash; and there are many in the Epstein
+                  archive &mdash; are effectively invisible to the system. Name
+                  matching always carries edge cases: &ldquo;Ashley&rdquo; could
+                  refer to Ashley Hicks (confirmed in the Black Book with a London
+                  address) or Sir Bernard Ashley (the Laura Ashley co-founder,
+                  featured in AD, with no documented Epstein connection). Many
+                  features from the 1980s and early 1990s do not name homeowners
+                  at all, and no amount of computer vision can extract a name that
+                  was never printed on the page. The pipeline is also constrained
+                  by the documents it can access: if a relationship was never
+                  recorded, remains redacted, or has not been released, this
+                  system will never discover it.
+                </p>
+                <div
+                  className="absolute z-10 hidden pl-4 md:block"
+                  style={{
+                    top: "4em",
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    OCR Limitations
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    The DOJ search engine indexes scanned pages via optical character recognition. Handwritten notes, marginalia, and address book entries with non-standard formatting are largely invisible. The system can only find what the OCR can read.
+                  </p>
+                </div>
+              </div>
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                But what it can do is reliably transform ambiguity into
+                structured, reviewable decisions at a scale no individual
+                researcher could sustain alone. This same pipeline, pointed at a
+                different data set, would run the same way. The question may
+                change but the architecture stays the same.
+              </p>
           </div>
 
           <div className="mt-10" style={{ borderTop: `1px solid ${BORDER}` }} />
 
-          {/* Phase cards */}
-          <div className="mt-10 grid gap-6 md:grid-cols-3">
-            {phases.map((phase) => (
-              <div
-                key={phase.num}
-                className="flex flex-col rounded p-6 md:min-h-[920px]"
-                style={{ backgroundColor: CARD_BG, border: `1px solid ${BORDER}` }}
-              >
-                <span
-                  className="text-[64px] font-bold leading-none"
-                  style={{ fontFamily: MONO, color: COPPER_DIM }}
-                >
-                  {phase.num}
-                </span>
-                <p
-                  className="mt-2 text-[13px] font-bold tracking-wide"
-                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-                >
-                  {phase.title}
-                </p>
-                <p
-                  className="mt-3 text-[11px] leading-[1.65]"
-                  style={{ fontFamily: MONO, color: TEXT_MID }}
-                >
-                  {phase.description}
-                </p>
-                <div className="mt-6 flex flex-wrap gap-2">
-                  {phase.agents.map((agent) => (
-                    <span
-                      key={agent}
-                      className="rounded-sm px-2 py-1 text-[10px]"
-                      style={{
-                        fontFamily: MONO,
-                        backgroundColor: GREEN_BG,
-                        color: GREEN,
-                      }}
-                    >
-                      {agent}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ))}
-          </div>
-
-          <p
-            className="relative z-10 mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
-          >
-            <span style={{ color: TEXT_MID }}>Fig. 2</span> — Three-phase system architecture showing data flow from archive discovery through Epstein cross-referencing to website deployment.
-          </p>
-
-          {/* Full 3-phase Architecture SVG — overlaps bottom of phase cards on desktop */}
+          {/* Full 3-phase Architecture SVG */}
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src="/pipeline-architecture.svg?v=2"
             alt="System Architecture — Phase 01: Scout, Courier, and Reader agents feeding data through the Editor to Supabase. Phase 02: Detective and Researcher cross-referencing names against DOJ Epstein files and Black Book. Phase 03: Deep aesthetic extraction, Designer agent, Neo4j knowledge graph, and website deployment."
-            className="relative z-10 mt-6 w-full rounded md:-mt-[480px]"
+            className="mt-6 w-full rounded"
           />
+          <p
+            className="mt-3 text-[8px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            <span style={{ color: TEXT_MID }}>Fig. 4</span> — Three-phase system architecture showing data flow from archive discovery through Epstein cross-referencing to website deployment.
+          </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 2: MULTI-AGENT SYSTEM
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-2" className="mt-24 scroll-mt-24">
           <SectionHeader
             num="2"
             title="MULTI-AGENT SYSTEM"
@@ -791,7 +1529,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 3</span> — Hub-and-spoke topology with Miranda at center coordinating six specialist agents via asynchronous task queues.
+            <span style={{ color: TEXT_MID }}>Fig. 5</span> — Hub-and-spoke topology with Miranda at center coordinating six specialist agents via asynchronous task queues.
           </p>
 
         </div>
@@ -799,7 +1537,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 3: PERSONALITY AS ARCHITECTURE
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-3" className="mt-24 scroll-mt-24">
           {/* ── S3 Header (full width) ── */}
           <div>
             <p
@@ -1008,7 +1746,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 className="mt-3 text-[8px] tracking-wider"
                 style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                <span style={{ color: TEXT_MID }}>Fig. 4</span> — Miranda, the Editor agent, serves as the central hub — every task, verdict, and database write passes through her review.
+                <span style={{ color: TEXT_MID }}>Fig. 6</span> — Miranda, the Editor agent, serves as the central hub — every task, verdict, and database write passes through her review.
               </p>
             </div>
           </div>
@@ -1068,7 +1806,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 5</span> — The six specialist agents, each with a dedicated language model, archetype, and behavioral constraints encoded through personality.
+            <span style={{ color: TEXT_MID }}>Fig. 7</span> — The six specialist agents, each with a dedicated language model, archetype, and behavioral constraints encoded through personality.
           </p>
 
           <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
@@ -1128,7 +1866,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 className="mt-3 text-[8px] tracking-wider"
                 style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                <span style={{ color: TEXT_MID }}>Fig. 6</span> — The Agent Office: a real-time pixel-art dashboard showing autonomous AI coordination as it happens.
+                <span style={{ color: TEXT_MID }}>Fig. 8</span> — The Agent Office: a real-time pixel-art dashboard showing autonomous AI coordination as it happens.
               </p>
             </div>
           </div>
@@ -1137,7 +1875,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 4: INVESTIGATION METHODOLOGY
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-4" className="mt-24 scroll-mt-24">
           {/* Section 4 header — inline so intro text sits beside pipeline flow */}
           <p
             className="text-[11px] tracking-widest"
@@ -1457,7 +2195,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 7</span> &mdash; Investigation funnel showing how extracted features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
+            <span style={{ color: TEXT_MID }}>Fig. 9</span> &mdash; Investigation funnel showing how extracted features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
           </p>
 
           {/* ── Evidence criteria — two columns ── */}
@@ -1548,14 +2286,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 8</span> — Evidence standards defining what constitutes a confirmed connection versus what does not qualify.
+            <span style={{ color: TEXT_MID }}>Fig. 10</span> — Evidence standards defining what constitutes a confirmed connection versus what does not qualify.
           </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 5: INTELLIGENCE INFRASTRUCTURE
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-5" className="mt-24 scroll-mt-24">
           <SectionHeader
             num="5"
             title="INTELLIGENCE INFRASTRUCTURE"
@@ -1727,7 +2465,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 9</span> &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
+              <span style={{ color: TEXT_MID }}>Fig. 11</span> &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
             </p>
           </div>
 
@@ -1928,7 +2666,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 10</span> &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
+              <span style={{ color: TEXT_MID }}>Fig. 12</span> &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
             </p>
           </div>
 
@@ -2172,7 +2910,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 11</span> &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
+              <span style={{ color: TEXT_MID }}>Fig. 13</span> &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
             </p>
           </div>
 
@@ -2375,14 +3113,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 12</span> — The six intelligence subsystems that enable agent coordination, learning, and self-improvement without human intervention.
+            <span style={{ color: TEXT_MID }}>Fig. 14</span> — The six intelligence subsystems that enable agent coordination, learning, and self-improvement without human intervention.
           </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 6: UI DESIGN
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-6" className="mt-24 scroll-mt-24">
           <SectionHeader
             num="6"
             title="UI DESIGN"
@@ -2529,14 +3267,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 13</span> &mdash; Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
+            <span style={{ color: TEXT_MID }}>Fig. 15</span> &mdash; Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
           </p>
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 7: LIMITATIONS AND DISCLAIMERS
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-7" className="mt-24 scroll-mt-24">
           <SectionHeader
             num="7"
             title="LIMITATIONS"
@@ -2603,7 +3341,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 8: DATA SOURCES
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-8" className="mt-24 scroll-mt-24">
           <SectionHeader
             num="8"
             title="DATA SOURCES"
@@ -2678,7 +3416,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 9: CONCLUSIONS
         ══════════════════════════════════════════════════════════════════ */}
-        <div className="mt-24">
+        <div id="section-9" className="mt-24 scroll-mt-24">
           <SectionHeader
             num="9"
             title="CONCLUSIONS"

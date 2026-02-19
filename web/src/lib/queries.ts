@@ -160,7 +160,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
       .filter(Boolean)
   );
 
-  const CATEGORIES = ["Business", "Celebrity", "Designer", "Politician", "Private", "Royalty", "Socialite", "Other"];
+  const CATEGORIES = ["Business", "Celebrity", "Design", "Art", "Media", "Politician", "Private", "Royalty", "Socialite", "Other"];
   const baselineCatCounts = new Map<string, number>();
   const epsteinCatCounts = new Map<string, number>();
   let baselineTotal = 0;
@@ -238,11 +238,13 @@ interface FeatureFilters {
   search?: string;
   hasDossier?: boolean;
   confirmedOnly?: boolean;
+  sort?: string;
+  order?: "asc" | "desc";
 }
 
 export async function getFeatures(
   filters: FeatureFilters = {}
-): Promise<PaginatedResponse<Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null }>> {
+): Promise<PaginatedResponse<Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null }>> {
   const sb = getSupabase();
   const page = filters.page ?? 1;
   const pageSize = filters.pageSize ?? 20;
@@ -251,7 +253,7 @@ export async function getFeatures(
   // Build query — join with issues for month/year, and dossiers for link
   let query = sb
     .from("features")
-    .select("*, issues!inner(month, year), dossiers(id)", { count: "exact" });
+    .select("*, issues!inner(month, year), dossiers(id, editor_verdict)", { count: "exact" });
 
   if (filters.year) {
     query = query.eq("issues.year", filters.year);
@@ -275,28 +277,29 @@ export async function getFeatures(
       `homeowner_name.ilike.%${filters.search}%,designer_name.ilike.%${filters.search}%,article_title.ilike.%${filters.search}%`
     );
   }
+  // Hoist filter ID lists so they're available for both main query and year-sort idQuery
+  let confirmedIds: string[] | undefined;
+  let dossierIds: string[] | undefined;
+
   if (filters.confirmedOnly) {
-    // Get feature IDs with confirmed dossiers, then filter
     const { data: confirmed } = await sb
       .from("dossiers")
       .select("feature_id")
       .eq("editor_verdict", "CONFIRMED");
-    const confirmedIds = (confirmed ?? [])
+    confirmedIds = (confirmed ?? [])
       .map((d: { feature_id: string | null }) => d.feature_id)
       .filter(Boolean) as string[];
     if (confirmedIds.length > 0) {
       query = query.in("id", confirmedIds);
     } else {
-      // No confirmed connections — return empty
       return { data: [], total: 0, page, pageSize, totalPages: 0 };
     }
   }
   if (filters.hasDossier) {
-    // Get feature IDs that have any dossier (regardless of verdict)
     const { data: withDossier } = await sb
       .from("dossiers")
       .select("feature_id");
-    const dossierIds = (withDossier ?? [])
+    dossierIds = (withDossier ?? [])
       .map((d: { feature_id: string | null }) => d.feature_id)
       .filter(Boolean) as string[];
     if (dossierIds.length > 0) {
@@ -306,27 +309,139 @@ export async function getFeatures(
     }
   }
 
+  // Sorting — map frontend column names to DB columns
+  const sortMap: Record<string, string> = {
+    homeowner: "homeowner_name",
+    designer: "designer_name",
+    category: "subject_category",
+    location: "location_city",
+  };
+  const ascending = filters.order === "asc";
+
+  // Year sort requires a two-step approach: PostgREST can't sort parent rows
+  // by joined table columns, so we fetch sorted issue IDs first, then paginate.
+  if (filters.sort === "year") {
+    // Step 1: Get total count (query already has .select with count: "exact")
+    const { count: totalCount } = await query.limit(0);
+
+    // Step 2: Fetch ALL matching feature IDs with issue year/month (lightweight)
+    // PostgREST caps at 1000 rows per request, so we paginate in batches.
+    let idQuery = sb
+      .from("features")
+      .select("id, issue_id, issues!inner(year, month)");
+
+    // Re-apply ALL filters to the ID query
+    if (filters.year) idQuery = idQuery.eq("issues.year", filters.year);
+    if (filters.style) idQuery = idQuery.ilike("design_style", `%${filters.style}%`);
+    if (filters.designer) idQuery = idQuery.ilike("designer_name", `%${filters.designer}%`);
+    if (filters.category) idQuery = idQuery.ilike("subject_category", `%${filters.category}%`);
+    if (filters.location) {
+      idQuery = idQuery.or(
+        `location_city.ilike.%${filters.location}%,location_state.ilike.%${filters.location}%,location_country.ilike.%${filters.location}%`
+      );
+    }
+    if (filters.search) {
+      idQuery = idQuery.or(
+        `homeowner_name.ilike.%${filters.search}%,designer_name.ilike.%${filters.search}%,article_title.ilike.%${filters.search}%`
+      );
+    }
+    if (filters.confirmedOnly && confirmedIds) {
+      idQuery = idQuery.in("id", confirmedIds);
+    }
+    if (filters.hasDossier && dossierIds) {
+      idQuery = idQuery.in("id", dossierIds);
+    }
+
+    // Paginate through all results (PostgREST caps at 1000 per request)
+    const allRows: Array<{ id: number; issue_id: number; issues: { year: number; month: number | null } }> = [];
+    let batchOffset = 0;
+    const BATCH_SIZE = 1000;
+    while (true) {
+      const { data: batch } = await idQuery.range(batchOffset, batchOffset + BATCH_SIZE - 1);
+      const typedBatch = (batch ?? []) as unknown as Array<{ id: number; issue_id: number; issues: { year: number; month: number | null } }>;
+      allRows.push(...typedBatch);
+      if (typedBatch.length < BATCH_SIZE) break;
+      batchOffset += BATCH_SIZE;
+    }
+    const rows = allRows;
+
+    // Sort in JS by year, then month
+    rows.sort((a, b) => {
+      const yearDiff = (a.issues.year ?? 0) - (b.issues.year ?? 0);
+      if (yearDiff !== 0) return ascending ? yearDiff : -yearDiff;
+      const monthDiff = (a.issues.month ?? 0) - (b.issues.month ?? 0);
+      return ascending ? monthDiff : -monthDiff;
+    });
+
+    // Paginate the sorted IDs
+    const pageIds = rows.slice(offset, offset + pageSize).map((r) => r.id);
+
+    if (pageIds.length === 0) {
+      return { data: [], total: totalCount ?? 0, page, pageSize, totalPages: Math.ceil((totalCount ?? 0) / pageSize) };
+    }
+
+    // Step 3: Fetch full feature data for just this page
+    const { data: pageData } = await sb
+      .from("features")
+      .select("*, issues!inner(month, year), dossiers(id)")
+      .in("id", pageIds);
+
+    // Re-sort to match our sorted order
+    const idOrder = new Map(pageIds.map((id, i) => [id, i]));
+    const sorted = (pageData ?? []).sort((a, b) =>
+      (idOrder.get((a as { id: number }).id) ?? 0) - (idOrder.get((b as { id: number }).id) ?? 0)
+    );
+
+    const features = sorted.map((row: Record<string, unknown>) => {
+      const { issues: issueData, dossiers: dossierData, ...feature } = row as Record<string, unknown> & {
+        issues: { month: number | null; year: number };
+        dossiers: { id: number; editor_verdict: string | null } | null;
+      };
+      return {
+        ...feature,
+        issue_month: issueData?.month ?? null,
+        issue_year: issueData?.year ?? 0,
+        dossier_id: dossierData?.id ?? null,
+        editor_verdict: dossierData?.editor_verdict ?? null,
+      };
+    });
+
+    const total = totalCount ?? rows.length;
+
+    return {
+      data: features as (Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null })[],
+      total,
+      page,
+      pageSize,
+      totalPages: Math.ceil(total / pageSize),
+    };
+  }
+
+  // Non-year sorting — straightforward DB sort
+  const sortCol = sortMap[filters.sort ?? ""] ?? "created_at";
+  query = query.order(sortCol, { ascending: filters.sort ? ascending : false });
+
   const { data, count } = await query
-    .order("created_at", { ascending: false })
     .range(offset, offset + pageSize - 1);
 
   const features = (data ?? []).map((row: Record<string, unknown>) => {
     const { issues: issueData, dossiers: dossierData, ...feature } = row as Record<string, unknown> & {
       issues: { month: number | null; year: number };
-      dossiers: { id: number } | null;
+      dossiers: { id: number; editor_verdict: string | null } | null;
     };
     return {
       ...feature,
       issue_month: issueData?.month ?? null,
       issue_year: issueData?.year ?? 0,
       dossier_id: dossierData?.id ?? null,
+      editor_verdict: dossierData?.editor_verdict ?? null,
     };
   });
 
   const total = count ?? 0;
 
   return {
-    data: features as (Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null })[],
+    data: features as (Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null })[],
     total,
     page,
     pageSize,

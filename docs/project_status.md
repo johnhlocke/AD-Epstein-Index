@@ -145,6 +145,14 @@ This file should be automatically updated when necessary to answer three key que
 | Deferred graph analytics (unblock Playwright DOJ) | Tooling | Done |
 | Event loop threading (graph sync + watercooler) | Tooling | Done |
 | Scoring v2.2 — per-axis rationale + scoring clarifications | Phase 2 | Done |
+| Fix PostgREST 1000-row year sort data loss | Phase 3 | Done |
+| Page jump input for index pagination | Phase 3 | Done |
+| Copper dossier tags for confirmed connections | Phase 3 | Done |
+| Homepage default sort (year desc) | Phase 3 | Done |
+| Designer extraction false positive cleanup (202 features) | Phase 2 | Done |
+| Haiku vision designer pass (98 designers found, $0.84) | Phase 2 | Done |
+| Category restructuring (Designer→Design, new Art/Media) | Phase 2 | Done |
+| Full index page (/fullindex) | Phase 3 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 
@@ -306,12 +314,13 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 1,396 issues, **4,080 features** (1,600 original + 2,305 re-extracted + 176 test - 1 removed), 1,106 cross-references (309 YES), 420 dossiers, **75 confirmed connections**
+- **Final stats**: 1,396 issues, **4,081 features** (1,600 original + 2,305 re-extracted + 176 test), 1,106 cross-references (309 YES), 420 dossiers, **84+ confirmed connections**
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
 - Manual DOJ evidence review: Diane von Furstenberg + Sharon Stone overridden to CONFIRMED
 - Non-home feature cleanup: 458 features deleted (editorials, columns, museums, designer profiles, hotels, Grand Palais restoration)
-- Subject category classification: 2,785 features tagged with profession categories (remaining in scorer queue)
+- Subject category classification: All features tagged. Categories restructured: Designer→Design, new Art (285), Media (16) split from Other
+- Designer extraction cleanup: 202 false positives cleared (homeowner name copied to designer), 98 real designers recovered via Haiku vision pass ($0.84)
 - Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
 - CLAUDE.md rewritten to reflect actual project state (multi-agent system, deployment, current stats)
 
@@ -335,7 +344,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - ~~Opus Vision scoring on original 1,600 features~~ **Done** ($145, 1,590 scored)
 - ~~Feature image backfill~~ **Done** (11,340 images across 1,590 features + 13,000+ from re-extraction + 73 backfilled)
 - Opus Vision scoring all 4,080 features — **In Progress** (2,774 done, 1,306 remaining, ~$130 projected)
-- Subject category tagging — **In Progress** (2,785/4,080 done, rest in scorer queue)
+- Subject category tagging — **Done** (all features tagged, categories restructured: Art/Media/Design taxonomy)
 - Cross-reference new names → Detective → Researcher → Editor pipeline
 - Complete dossier building for all flagged leads
 - Manual review of HIGH and MEDIUM connection strength dossiers
