@@ -6,7 +6,21 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
-## 2026-02-19 (Sessions 43-44)
+## 2026-02-19 (Sessions 43-45)
+
+### Added — Haiku Vision Feature Classifier
+
+- **`src/classify_uncertain.py`** — New script that auto-classifies uncertain features using Haiku Vision. Downloads first page image for each feature, sends to Haiku with a detailed prompt distinguishing HOME_TOUR (keep) vs NOT_HOME_TOUR (delete). Classified 148 features: 89 home tours, 59 non-home content. Outputs `data/uncertain_classified.json`, `data/uncertain_keep.json`, `data/uncertain_delete.json`.
+
+### Fixed — Non-Home Feature Cleanup (164 deleted)
+
+- **297 unmatched features** (no spread data match) fully resolved through three-pass audit:
+  1. **101 obvious deletes**: Department columns (FOR COLLECTORS, AD at LARGE, TRAVELS), personality profiles, museum features, architecture essays — identified by section header patterns
+  2. **59 classified deletes**: Haiku Vision identified travel guides, firm profiles, product roundups, object lessons, shopping guides masquerading as home features. Common pattern: LLM extracted a mentioned celebrity as "homeowner" (e.g., Marc Jacobs mentioned as client → tagged as homeowner)
+  3. **4 manual deletes**: Queen Elizabeth (royal residences essay), George Clooney ghost (TRAVELS section misattributed), DVF (Litchfield County regional roundup), Marc Jacobs (Harrison Green gardening firm profile)
+- **133 features kept**: 43 clear AD VISITS/department home tours + 90 Haiku-confirmed home tours (real home features in DISCOVERIES, Design Notebook, AD VISITS sections)
+- **Total removed**: 164 features, 660 images, associated cross-references and dossiers
+- **Database after cleanup**: 3,775 features, 29,051 images
 
 ### Added — Spread Data Ground Truth for Page Ranges
 

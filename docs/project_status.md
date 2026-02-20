@@ -89,7 +89,7 @@ This file should be automatically updated when necessary to answer three key que
 | Fix Supabase 1000-row pagination | Tooling | Done |
 | Agent done sprite state (extended idle detection) | Tooling | Done |
 | Skills modal fallback (no dashboard server) | Tooling | Done |
-| Non-home feature cleanup (457 deleted) | Phase 1 | Done |
+| Non-home feature cleanup (457 + 164 = 621 deleted) | Phase 1 | Done |
 | Sync graph pagination fix | Tooling | Done |
 | Speech bubble persistence fix | Tooling | Done |
 | Agent work cycle error fixes (Casey, Arthur) | Tooling | Done |
@@ -160,6 +160,8 @@ This file should be automatically updated when necessary to answer three key que
 | Radar chart visual overhaul (colored sectors, group arcs) | Phase 3 | Done |
 | Report card redesign (connection status, combined fields) | Phase 3 | Done |
 | Confirmed badge copper color | Phase 3 | Done |
+| Haiku Vision feature classifier (148 uncertain → 89 keep, 59 delete) | Phase 1 | Done |
+| Unmatched feature audit (297 resolved: 164 deleted, 133 kept) | Phase 1 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
 
@@ -321,11 +323,11 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 1,396 issues, **4,081 features** (1,600 original + 2,305 re-extracted + 176 test), 1,106 cross-references (309 YES), 420 dossiers, **84+ confirmed connections**
+- **Final stats**: 1,396 issues, **3,775 features** (after 621 non-home deletions), 1,106 cross-references (309 YES), 420 dossiers, **84+ confirmed connections**
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
 - Manual DOJ evidence review: Diane von Furstenberg + Sharon Stone overridden to CONFIRMED
-- Non-home feature cleanup: 458 features deleted (editorials, columns, museums, designer profiles, hotels, Grand Palais restoration)
+- Non-home feature cleanup: 621 features deleted total (458 original + 164 unmatched audit: department columns, travel guides, firm profiles, misattributed celebrities)
 - Subject category classification: All features tagged. Categories restructured: Designer→Design, new Art (285), Media (16) split from Other
 - Designer extraction cleanup: 202 false positives cleared (homeowner name copied to designer), 98 real designers recovered via Haiku vision pass ($0.84)
 - Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
@@ -334,7 +336,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 **In Progress — Score + Cross-Reference New Features:**
 - Opus Vision scoring: 1,306 features queued (298 never-scored + 1,008 rescoring for subject_category). Running at ~162/hr, ~$130 projected.
 - ~427 features have genuinely anonymous homeowners (Opus tried with full prompt, no name found). Mostly pre-2010 issues.
-- Image data now clean: spread data ground truth for 3,643 features, all wrong images removed, missing pages downloaded. 297 features without spread data (department columns, old issues) retain original images.
+- Image data now clean: spread data ground truth for 3,642 features, all wrong images removed, missing pages downloaded. 133 features without spread data (department home tours, AD VISITS) retain original images. 297 unmatched fully resolved (164 deleted, 133 kept).
 - After scoring: cross-reference all new homeowner names against BB + DOJ
 - Run Detective → Researcher → Editor pipeline on new hits
 - Test-retest validation COMPLETE: 3 runs × 100 features, 87% exact agreement, 99.8% within ±1, zero systematic bias
@@ -353,7 +355,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - ~~9-axis aesthetic scoring instrument v2~~ **Done** (v2.2 with per-axis rationale)
 - ~~Opus Vision scoring on original 1,600 features~~ **Done** ($145, 1,590 scored)
 - ~~Feature image backfill~~ **Done** (11,340 images across 1,590 features + 13,000+ from re-extraction + 73 backfilled + 2,861 missing pages downloaded)
-- ~~Image cleanup~~ **Done** — Spread data ground truth established for 3,643 features. 907 wrong images deleted (backfill Strategy 3 cross-contamination). 26 poisoned Opus name recoveries reverted. 5 non-home features deleted.
+- ~~Image cleanup~~ **Done** — Spread data ground truth established for 3,642 features. 907 wrong images deleted (backfill Strategy 3 cross-contamination). 26 poisoned Opus name recoveries reverted. 164 non-home features deleted (unmatched audit complete).
 - Opus Vision scoring all 4,080 features — **In Progress** (2,774 done, 1,306 remaining, ~$130 projected)
 - Subject category tagging — **Done** (all features tagged, categories restructured: Art/Media/Design taxonomy)
 - Cross-reference new names → Detective → Researcher → Editor pipeline

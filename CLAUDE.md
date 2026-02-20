@@ -5,7 +5,7 @@ A research project that cross-references every homeowner featured in Architectur
 
 **Live site:** https://www.wheretheylive.world
 
-**Current stats:** 4,081 features, 1,396 issues, 75 confirmed Epstein connections, 420 dossiers
+**Current stats:** 3,775 features, 1,396 issues, 75 confirmed Epstein connections, 420 dossiers
 
 ## Project Phases
 
