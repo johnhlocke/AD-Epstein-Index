@@ -106,6 +106,9 @@ This file should be automatically updated when necessary to answer three key que
 | Deep extract confirmed names (Vision + taxonomy) | Phase 2 | Done |
 | 9-axis aesthetic scoring instrument v2 (design) | Phase 2 | Done |
 | Feature image backfill (Azure Blob → Supabase Storage) | Phase 2 | Done |
+| Spread data ground truth (authoritative page ranges) | Phase 2 | Done |
+| Image cross-contamination cleanup (907 wrong images) | Phase 2 | Done |
+| Missing page downloads (2,861 pages for 1,032 features) | Phase 2 | Done |
 | Opus Vision scoring pipeline (score_features.py) | Phase 2 | Done |
 | Run Opus Vision on all ~1,600 features (v2 scoring) | Phase 2 | Done (1,590 scored) |
 | Full archive re-extraction (spread data, 2,305 new features) | Phase 1 | Done |
@@ -331,10 +334,12 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 **In Progress — Score + Cross-Reference New Features:**
 - Opus Vision scoring: 1,306 features queued (298 never-scored + 1,008 rescoring for subject_category). Running at ~162/hr, ~$130 projected.
 - ~427 features have genuinely anonymous homeowners (Opus tried with full prompt, no name found). Mostly pre-2010 issues.
+- Image data now clean: spread data ground truth for 3,643 features, all wrong images removed, missing pages downloaded. 297 features without spread data (department columns, old issues) retain original images.
 - After scoring: cross-reference all new homeowner names against BB + DOJ
 - Run Detective → Researcher → Editor pipeline on new hits
 - Test-retest validation COMPLETE: 3 runs × 100 features, 87% exact agreement, 99.8% within ±1, zero systematic bias
 - Validate with human calibration set (25-30 features)
+- Opus name recovery: Only safe on features with verified article-specific images. 26/27 previous recoveries were cross-contamination (reverted). Need to re-run on clean images.
 
 **Phase 1 — AD Database: COMPLETE**
 - ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456+ issues)
@@ -347,7 +352,8 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - ~~6-dimension aesthetic taxonomy for all features~~ **Done** (v1 superseded by v2)
 - ~~9-axis aesthetic scoring instrument v2~~ **Done** (v2.2 with per-axis rationale)
 - ~~Opus Vision scoring on original 1,600 features~~ **Done** ($145, 1,590 scored)
-- ~~Feature image backfill~~ **Done** (11,340 images across 1,590 features + 13,000+ from re-extraction + 73 backfilled)
+- ~~Feature image backfill~~ **Done** (11,340 images across 1,590 features + 13,000+ from re-extraction + 73 backfilled + 2,861 missing pages downloaded)
+- ~~Image cleanup~~ **Done** — Spread data ground truth established for 3,643 features. 907 wrong images deleted (backfill Strategy 3 cross-contamination). 26 poisoned Opus name recoveries reverted. 5 non-home features deleted.
 - Opus Vision scoring all 4,080 features — **In Progress** (2,774 done, 1,306 remaining, ~$130 projected)
 - Subject category tagging — **Done** (all features tagged, categories restructured: Art/Media/Design taxonomy)
 - Cross-reference new names → Detective → Researcher → Editor pipeline

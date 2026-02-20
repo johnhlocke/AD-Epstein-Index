@@ -30,7 +30,7 @@ client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 PROMPT = """You are reading pages from an Architectural Digest article about a featured home.
 
-Your ONLY task: identify the HOMEOWNER — the person or people who LIVE in this home.
+TASK 1: Identify the HOMEOWNER — the person or people who LIVE in this home.
 
 CRITICAL DISTINCTION:
 - The HOMEOWNER is who LIVES in the house. They are the client. The article is about THEIR home.
@@ -52,15 +52,36 @@ Common patterns in anonymous articles:
 - "the clients" with no name ever given = genuinely anonymous, return null
 - The designer is named but the homeowner is only described generically = genuinely anonymous
 
+TASK 2: Classify the homeowner's subject_category based on what the article says about them.
+Even if the homeowner is anonymous, classify them by what the article reveals about their profession/identity.
+
+Categories (pick exactly one):
+- "Business" — CEO, entrepreneur, financier, real estate developer, investor, banker, executive
+- "Celebrity" — actor, musician, TV personality, sports figure, famous entertainer
+- "Design" — architect, interior designer, fashion designer (ONLY if it's their own home)
+- "Art" — artist, photographer, filmmaker, sculptor, gallery owner
+- "Media" — writer, journalist, editor, publisher
+- "Socialite" — philanthropist, society figure, prominent hostess
+- "Royalty" — titled nobility, royal family members
+- "Politician" — elected official, diplomat, government figure
+- "Private" — no profession mentioned, described only as a couple/family with no professional context
+- "Other" — doesn't fit any category above
+
 Respond with ONLY valid JSON:
 {
   "homeowner_name": "Full Name" or null,
   "designer_name": "Designer/Architect Name if mentioned" or null,
   "is_designers_own_home": true or false,
+  "subject_category": "Business" or "Celebrity" or "Design" or "Art" or "Media" or "Socialite" or "Royalty" or "Politician" or "Private" or "Other",
   "confidence": "high" or "medium" or "low",
   "evidence": "Quote or describe exactly where you found the homeowner name",
   "why_anonymous": "If null, explain why — e.g., 'Article only refers to owners as a young couple'"
 }"""
+
+VALID_CATEGORIES = {
+    "Business", "Celebrity", "Design", "Art", "Media",
+    "Socialite", "Royalty", "Politician", "Private", "Other",
+}
 
 
 def fetch_candidates(seed=42):
@@ -196,9 +217,14 @@ def main():
                 name = parsed.get("homeowner_name")
                 designer = parsed.get("designer_name")
                 own_home = parsed.get("is_designers_own_home", False)
+                category = parsed.get("subject_category", "")
                 confidence = parsed.get("confidence", "unknown")
                 evidence = parsed.get("evidence", "")
                 why_anon = parsed.get("why_anonymous", "")
+
+                # Validate category
+                if category not in VALID_CATEGORIES:
+                    category = "Other"
 
                 result = {
                     "feature_id": fid,
@@ -208,6 +234,7 @@ def main():
                     "homeowner_name": name,
                     "designer_name": designer,
                     "is_designers_own_home": own_home,
+                    "subject_category": category,
                     "confidence": confidence,
                     "evidence": evidence,
                     "why_anonymous": why_anon,
@@ -218,7 +245,7 @@ def main():
                 if name and name.lower() not in ("null", "none", "anonymous", "unknown", ""):
                     found += 1
                     own_str = " [DESIGNER'S OWN HOME]" if own_home else ""
-                    print(f"  [{i+1}/{len(candidates)}] #{fid} ({year}-{month:02d}) → {name} ({confidence}){own_str}")
+                    print(f"  [{i+1}/{len(candidates)}] #{fid} ({year}-{month:02d}) → {name} [{category}] ({confidence}){own_str}")
                     print(f"    Evidence: {evidence[:120]}")
 
                     if own_home:
@@ -226,12 +253,17 @@ def main():
 
                     if not args.no_write:
                         sb.from_("features").update(
-                            {"homeowner_name": name}
+                            {"homeowner_name": name, "subject_category": category}
                         ).eq("id", fid).execute()
                 else:
                     genuinely_anonymous += 1
-                    if why_anon:
-                        print(f"  [{i+1}/{len(candidates)}] #{fid} ({year}-{month:02d}) ANON: {why_anon[:120]}")
+                    print(f"  [{i+1}/{len(candidates)}] #{fid} ({year}-{month:02d}) ANON [{category}]: {(why_anon or '?')[:120]}")
+
+                    # Still write category even for anonymous features
+                    if not args.no_write and category:
+                        sb.from_("features").update(
+                            {"subject_category": category}
+                        ).eq("id", fid).execute()
 
         except Exception as e:
             errors += 1

@@ -6,7 +6,23 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
-## 2026-02-19 (Session 43)
+## 2026-02-19 (Sessions 43-44)
+
+### Added — Spread Data Ground Truth for Page Ranges
+
+- **`src/update_spread_pages.py`** — New script that reads the AD Archive's spread data (page-by-page article layout embedded in issue HTML) to establish authoritative page ranges for every feature. Two modes: `--audit` (report only) and `--write` (update DB). Matched 3,643/3,940 features (92.5%) by exact title match. 297 unmatched (department columns, older issues without spread data). Writes `spread_pages` and `spread_page_count` into each feature's `notes` JSON.
+- **`src/download_missing_pages.py`** — New script that reads `data/spread_gap_report.json` (gap analysis output) and downloads missing page images from Azure Blob into Supabase Storage. Bulk-fetches issue dates, feature-to-issue mappings, bucket detection, and existing page records to skip already-downloaded pages. Downloaded 2,861 missing pages across 1,032 features.
+
+### Fixed — Image Cross-Contamination Cleanup
+
+- **Wrong images from backfill Strategy 3**: `backfill_feature_images.py` Strategy 3 (page number matching) assigned wrong articles' pages to features when name/title matching failed. Affected 473 features with 907 wrong image records pointing to pages from other articles in the same issue.
+- **Opus name recovery poisoned**: 26 of 27 "recovered" names from Opus Vision were cross-contamination — Opus read shared page images from adjacent articles. All 26 reverted to NULL. Only #8758 (Michael & Gabrielle Boyd) was genuine.
+- **Deleted 907 wrong image records** (DB rows + storage files) for features with pages outside their spread range.
+- **Deleted 5 non-home features**: #9677 (Olympic Aquatics Centre), #9622 (Uganda community center), #7230 (renovation tips), #6684 (robot editorial), #4073 (Lindbergh historic house).
+
+### Fixed — Truncated Page Counts (max_images=6 Cap)
+
+- `reextract_features.py` line 326 had `max_images=6` cap that truncated article images. 1,181 features were missing pages. Gap analysis found 3,941 total missing pages. All downloaded and uploaded to correct Supabase Storage buckets.
 
 ### Changed — Radar Chart Visual Overhaul
 
