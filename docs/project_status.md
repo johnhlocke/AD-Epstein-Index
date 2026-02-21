@@ -164,6 +164,12 @@ This file should be automatically updated when necessary to answer three key que
 | Unmatched feature audit (297 resolved: 164 deleted, 133 kept) | Phase 1 | Done |
 | Phase 02 Architecture diagram | Phase 3 | Not Started |
 | Phase 03 Architecture diagram | Phase 3 | Not Started |
+| Agent Office demo (public deployment) | Tooling | Done |
+| Scoring v2.3 (aesthetic_summary, structural overwrite) | Phase 2 | Done |
+| Methodology section content expansion (14 paragraphs + sidenotes) | Phase 3 | Done |
+| Full-screen Knowledge Graph page (/fullgraph) | Phase 3 | Done |
+| Baseline statistical methodology document | Phase 2 | Done |
+| Architecture SVG diagrams (hub-spoke, monolithic, decentralized, pipeline) | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -324,6 +330,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
 - **Final stats**: 1,396 issues, **3,775 features** (after 621 non-home deletions), 1,106 cross-references (309 YES), 420 dossiers, **84+ confirmed connections**
+- Scoring v2.3: aesthetic_summary field, structural overwrite on rescore, expanded subject_category (Art/Media/Design), --offset flag, checkpoint refresh
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
 - Manual DOJ evidence review: Diane von Furstenberg + Sharon Stone overridden to CONFIRMED

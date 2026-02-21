@@ -162,3 +162,65 @@ html {
     letter-spacing: -0.01em;
   }
 }
+
+/* ── Methodology section typography system ──
+ * Single source of truth for section headers, body text, and subheadings.
+ * Palette: TEXT_LIGHT #E0E0E5, TEXT_MID #A0A0B0, TEXT_DIM rgba(160,160,176,0.6)
+ *          COPPER rgba(184,115,51,0.85), BORDER #2a2a3a
+ */
+.s-label {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgba(184, 115, 51, 0.85);
+}
+.s-title {
+  margin-top: 0.75rem;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 24px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.025em;
+  color: #E0E0E5;
+  max-width: var(--content-narrow);
+}
+.s-subtitle {
+  margin-top: 0.75rem;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 15px;
+  line-height: 1.4;
+  color: #A0A0B0;
+  max-width: var(--content-narrow);
+}
+.s-divider {
+  margin-top: 2rem;
+  border-top: 1px solid #2a2a3a;
+}
+.s-body {
+  margin-top: 2.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  font-family: var(--font-inter), Inter, sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #A0A0B0;
+  max-width: var(--content-narrow);
+}
+.s-subhead {
+  margin-top: 2.5rem;
+  margin-bottom: -0.25rem;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #E0E0E5;
+}
+.s-summary-label {
+  margin-top: 1rem;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  color: rgba(184, 115, 51, 0.85);
+}

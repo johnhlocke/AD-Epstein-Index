@@ -23,6 +23,79 @@ const SLATE = "rgba(74, 124, 143, 0.85)";          // #4A7C8F — on-system slat
 const SLATE_DIM = "rgba(74, 124, 143, 0.2)";
 const CONTENT_NARROW = "var(--content-narrow)";    // 4-of-6 grid columns for prose
 
+// ── Grid-aware divider — full-width hairline with tick marks at gutter centers ─
+function GridDivider({ className = "", startTick = false, endTick = false }: { className?: string; startTick?: boolean; endTick?: boolean }) {
+  const TICK = { position: "absolute" as const, width: "0.5px", height: "7px", backgroundColor: TEXT_DIM };
+  return (
+    <div className={`relative ${className}`} style={{ height: 16, marginTop: className.includes("mt-") ? undefined : "2rem" }}>
+      {/* Full-width hairline */}
+      <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: "0.5px", backgroundColor: TEXT_DIM }} />
+      {/* Edge ticks */}
+      {startTick && <div style={{ ...TICK, left: 0, top: "calc(50% - 3.5px)" }} />}
+      {endTick && <div style={{ ...TICK, right: 0, top: "calc(50% - 3.5px)" }} />}
+      {/* Tick marks at all 5 gutter centers */}
+      {[1, 2, 3, 4, 5].map(i => {
+        const pctNumerator = (i * 100) / 6;
+        const pxOffset = (i - 1) * 24 + 12 - i * 20;
+        return (
+          <div
+            key={i}
+            style={{
+              ...TICK,
+              left: `calc(${pctNumerator.toFixed(4)}% + ${pxOffset}px)`,
+              top: "calc(50% - 3.5px)",
+            }}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+// ── Python-style section transition divider ──────────────────────────────────
+function SectionTransition({ num, name }: { num: string; name: string }) {
+  const TICK = { position: "absolute" as const, width: "0.5px", height: "7px", backgroundColor: TEXT_DIM };
+  return (
+    <div className="relative mt-24" style={{ height: 16 }}>
+      {/* Full-width hairline */}
+      <div style={{ position: "absolute", top: "50%", left: 0, right: 0, height: "0.5px", backgroundColor: TEXT_DIM }} />
+      {/* End tick */}
+      <div style={{ ...TICK, right: 0, top: "calc(50% - 3.5px)" }} />
+      {/* Tick marks at gutter centers 2–5 (skip 1st — text label sits there) */}
+      {[2, 3, 4, 5].map(i => {
+        const pctNumerator = (i * 100) / 6;
+        const pxOffset = (i - 1) * 24 + 12 - i * 20;
+        return (
+          <div
+            key={i}
+            style={{
+              ...TICK,
+              left: `calc(${pctNumerator.toFixed(4)}% + ${pxOffset}px)`,
+              top: "calc(50% - 3.5px)",
+            }}
+          />
+        );
+      })}
+      {/* Text label with BG mask */}
+      <span
+        className="absolute left-0 whitespace-nowrap text-[10px]"
+        style={{
+          fontFamily: MONO,
+          color: TEXT_DIM,
+          letterSpacing: "0.05em",
+          backgroundColor: BG,
+          paddingRight: "12px",
+          top: "50%",
+          transform: "translateY(-50%)",
+        }}
+      >
+        <span style={{ color: COPPER, opacity: 0.7 }}>#</span>
+        {` ── section_${num}: ${name}`}
+      </span>
+    </div>
+  );
+}
+
 // ── Code Box component for technical diagrams ───────────────────────────────
 function CodeBox({
   title,
@@ -90,6 +163,8 @@ const subAgents = [
     name: "Arthur",
     role: "Scout",
     sprite: "/agents/scout_front_trans.png",
+    videoMov: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Scout_Sprite.mov",
+    videoWebm: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Scout_Sprite.webm",
     accent: "#5B8DEF",
     description: "Soft-spoken and deferential, but with granite-like stubbornness. Thinks in grids and patterns, methodically filling gaps in the archive with obsessive precision. He outlasts every obstacle.",
     quote: "There\u2019s a gap in the grid and it shouldn\u2019t be there.",
@@ -98,6 +173,8 @@ const subAgents = [
     name: "Casey",
     role: "Courier",
     sprite: "/agents/courier_front_trans.png",
+    videoMov: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Courier_Sprite.mov",
+    videoWebm: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Courier_Sprite.webm",
     accent: "#9B7EDB",
     description: "Chose peace in logistics over chaos. Speaks in manifests and delivery metrics with dry humor, moving packages and the whole pipeline with quiet, unshakeable competence.",
     quote: "Package delivered.",
@@ -106,6 +183,8 @@ const subAgents = [
     name: "Elias",
     role: "Reader",
     sprite: "/agents/reader_front_trans.png",
+    videoMov: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Reader_Sprite.mov",
+    videoWebm: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Reader_Sprite.webm",
     accent: "#4ECDC4",
     description: "A coiled spring of fierce intensity who reads PDFs like a discipline. Seeks euphoria through resistance \u2014 fighting cursed scans and broken layouts until every null is zero and every page is conquered.",
     quote: "Did you SEE that? Zero nulls. ZERO.",
@@ -130,6 +209,8 @@ const subAgents = [
     name: "Sable",
     role: "Designer",
     sprite: "/agents/designer_front_trans.png",
+    videoMov: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Designer_Sprite.mov",
+    videoWebm: "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Designer_Sprite.webm",
     accent: "#D97EC4",
     description: "Craft-obsessed and snarky. Studies 300+ design patterns before touching a pixel. Translates pipeline data into interactive visualizations with the conviction that good design is invisible and bad design is violence.",
     quote: "If it needs a label, you already failed.",
@@ -192,56 +273,21 @@ function SectionHeader({
 }) {
   return (
     <div>
-      <p
-        className="text-[11px] tracking-widest"
-        style={{ fontFamily: MONO, color: "#B87333" }}
-      >
-        SECTION {num}
-      </p>
-      <h3
-        className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
-        style={{
-          fontFamily: MONO,
-          color: TEXT_LIGHT,
-          maxWidth: CONTENT_NARROW,
-        }}
-      >
-        {title}
-      </h3>
-      <p
-        className="mt-3 text-[15px] leading-[1.4]"
-        style={{
-          fontFamily: MONO,
-          color: TEXT_MID,
-          maxWidth: CONTENT_NARROW,
-        }}
-      >
-        {subtitle}
-      </p>
-      <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+      <p className="s-label">SECTION {num}</p>
+      <h3 className="s-title">{title}</h3>
+      <p className="s-subtitle">{subtitle}</p>
+      <GridDivider startTick endTick />
 
       {/* Intro paragraphs — 4 grid columns wide */}
-      <div
-        className="mt-10 flex flex-col gap-5 text-[14px] leading-[1.7]"
-        style={{
-          fontFamily: MONO,
-          color: TEXT_MID,
-          maxWidth: CONTENT_NARROW,
-        }}
-      >
+      <div className="s-body">
         {intro.map((p, i) => (
           <p key={i}>{p}</p>
         ))}
-        <p
-          className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em]"
-          style={{ fontFamily: MONO, color: "#B87333" }}
-        >
-          Summary
-        </p>
+        <p className="s-summary-label">Summary</p>
         <p className="-mt-2">{summary}</p>
       </div>
 
-      <div className="mt-10" style={{ borderTop: `1px solid ${BORDER}` }} />
+      <GridDivider className="mt-10" startTick endTick />
     </div>
   );
 }
@@ -566,7 +612,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           <div className="mt-10">
             <p
               className="text-[10px] font-bold uppercase tracking-[0.18em]"
-              style={{ fontFamily: MONO, color: "#B87333", maxWidth: CONTENT_NARROW }}
+              style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
             >
               Research Questions
             </p>
@@ -629,10 +675,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </div>
 
               {/* Q2 — no sidenote */}
-              <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
-                <span style={{ marginLeft: "-1.25rem", marginRight: "0.55rem", color: TEXT_MID }}>&bull;</span>
-                Can you build an autonomous system, without a human in the loop, that handles ambiguity in names responsibly and avoids false positives?
-              </p>
+              <div className="relative">
+                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  Can you build an autonomous system, without a human in the loop, that handles ambiguity in names responsibly and avoids false positives?
+                </p>
+              </div>
 
               {/* Q3 + Heuer note */}
               <div className="relative">
@@ -661,10 +709,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </div>
 
               {/* Q4 — no sidenote */}
-              <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
-                <span style={{ marginLeft: "-1.25rem", marginRight: "0.55rem", color: TEXT_MID }}>&bull;</span>
-                What infrastructure do agents need beyond a system prompt (things like memory, communication, reflection) to sustain quality over thousands of sequential decisions?
-              </p>
+              <div className="relative">
+                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  What infrastructure do agents need beyond a system prompt (things like memory, communication, reflection) to sustain quality over thousands of sequential decisions?
+                </p>
+              </div>
 
               {/* Q5 + Shneiderman note */}
               <div className="relative pb-16 md:pb-0">
@@ -796,10 +846,10 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         </div>
 
         {/* ── Pull Quote: Knuth ── */}
-        <div className="mt-28 mb-20 flex flex-col items-center px-4 md:mt-36 md:mb-28">
+        <div className="mt-28 mb-20 md:mt-36 md:mb-28">
           <div
-            className="relative w-full max-w-2xl"
-            style={{ borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}
+            className="relative mx-auto w-full"
+            style={{ maxWidth: CONTENT_NARROW }}
           >
             <span
               className="pointer-events-none absolute select-none text-[150px] leading-none md:text-[200px]"
@@ -826,38 +876,17 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
+        <SectionTransition num="01" name="the_pipeline" />
+
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 1: THE PIPELINE
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-1" className="mt-24 scroll-mt-24">
+        <div id="section-1" className="mt-8 scroll-mt-24">
           {/* Section 1 header — inline so intro text sits beside pipeline flow */}
-          <p
-            className="text-[11px] tracking-widest"
-            style={{ fontFamily: MONO, color: "#B87333" }}
-          >
-            SECTION 1
-          </p>
-          <h3
-            className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
-            style={{
-              fontFamily: MONO,
-              color: TEXT_LIGHT,
-              maxWidth: CONTENT_NARROW,
-            }}
-          >
-            THE PIPELINE
-          </h3>
-          <p
-            className="mt-3 text-[15px] leading-[1.4]"
-            style={{
-              fontFamily: MONO,
-              color: TEXT_MID,
-              maxWidth: CONTENT_NARROW,
-            }}
-          >
-            How a magazine URL becomes a confirmed or rejected connection with a full evidentiary trail
-          </p>
-          <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+          <p className="s-label">SECTION 1</p>
+          <h3 className="s-title">THE PIPELINE</h3>
+          <p className="s-subtitle">How a magazine URL becomes a confirmed or rejected connection with a full evidentiary trail</p>
+          <GridDivider startTick endTick />
 
           {/* ── Body text with floated pipeline diagram ── */}
           <div
@@ -924,10 +953,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </div>
               </div>
 
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
-              >
+              <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
                 Walkthrough
               </p>
 
@@ -939,12 +965,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 ];
                 const NOTCH = 14;
                 const nodes: Array<{ label: string; sub?: string; agent: string; agentColor: string }> = [
-                  { label: "Data acquisition", agent: "Scout", agentColor: GREEN },
-                  { label: "Feature extraction", agent: "Courier", agentColor: "#4ECDC4" },
-                  { label: "Cross-referencing", agent: "Detective", agentColor: "#CC4040" },
-                  { label: "Investigation", agent: "Researcher", agentColor: "#D97EC4" },
-                  { label: "Editorial review", agent: "Editor", agentColor: COPPER },
-                  { label: "Report design", agent: "Designer", agentColor: SLATE },
+                  { label: "Data acquisition", agent: "Scout Agent", agentColor: GREEN },
+                  { label: "Feature extraction", agent: "Courier Agent", agentColor: "#4ECDC4" },
+                  { label: "Cross-referencing", agent: "Detective Agent", agentColor: "#CC4040" },
+                  { label: "Investigation", agent: "Researcher Agent", agentColor: "#D97EC4" },
+                  { label: "Editorial review", agent: "Editor Agent", agentColor: COPPER },
+                  { label: "Report design", agent: "Designer Agent", agentColor: SLATE },
                 ];
                 const isFirst = (i: number) => i === 0;
                 const isLast = (i: number) => i === nodes.length - 1;
@@ -958,7 +984,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 return (
                   <div
                     className="float-left mb-4 mr-6 hidden md:block"
-                    style={{ width: "calc((100% - 5 * 24px) / 6)", height: 500 }}
+                    style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)", height: 500 }}
                   >
                     <div className="flex flex-col" style={{ height: 476 }}>
                       {nodes.map((node, i) => (
@@ -974,14 +1000,25 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                           }}
                         >
                           <span
+                            className="text-[7px] tracking-[0.15em] text-center"
+                            style={{ fontFamily: MONO, color: TEXT_DIM }}
+                          >
+                            STAGE {i + 1}
+                          </span>
+                          <span
                             className="text-[9px] tracking-[0.08em] leading-tight text-center"
                             style={{ fontFamily: MONO, color: TEXT_LIGHT, maxWidth: "80%" }}
                           >
                             {node.label}
                           </span>
                           <span
-                            className="mt-0.5 text-[7px] tracking-wider text-center"
-                            style={{ fontFamily: MONO, color: node.agentColor }}
+                            className="mt-1 inline-flex items-center justify-center rounded-sm px-1.5 py-px text-[7px] font-bold tracking-wider text-center"
+                            style={{
+                              fontFamily: MONO,
+                              color: node.agentColor,
+                              backgroundColor: `color-mix(in srgb, ${node.agentColor} 15%, transparent)`,
+                              border: `1px solid color-mix(in srgb, ${node.agentColor} 25%, transparent)`,
+                            }}
                           >
                             {node.agent}
                           </span>
@@ -1163,7 +1200,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                       style={{ fontFamily: MONO, color: TEXT_DIM }}
                     >
                       <span style={{ color: TEXT_MID }}>Fig. 2</span> — Zuckerman subgraph.
-                      {" "}<a href="/fullgraph" style={{ color: "rgba(184, 115, 51, 0.6)" }}>Full graph &rarr;</a>
+                      {" "}<a href="https://www.wheretheylive.world/fullgraph" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>Full graph &rarr;</a>
                     </p>
                   </div>
                 );
@@ -1245,10 +1282,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 auditable record.
               </p>
 
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
-              >
+              <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
                 False Positives
               </p>
               <div className="relative">
@@ -1301,88 +1335,103 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </div>
               </div>
 
-              {/* ── Fig. 3: Coppola rejection tree ── */}
-              <div style={{ maxWidth: CONTENT_NARROW }}>
+              {/* ── Fig. 3: Coppola rejection tree (floated left, 2 cols — same as Fig. 2) ── */}
+              <div className="relative">
                 <div
-                  className="overflow-hidden rounded"
-                  style={{
-                    border: `1px solid ${BORDER}`,
-                    backgroundColor: "#111118",
-                  }}
+                  className="float-left mb-4 mr-6 hidden md:block"
+                  style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
                 >
-                  <div className="px-3 py-1.5" style={{ backgroundColor: "rgba(204, 64, 64, 0.1)" }}>
-                    <span className="text-[8px] font-bold tracking-[0.08em]" style={{ fontFamily: MONO, color: "#CC4040" }}>
-                      DETECTIVE &mdash; FALSE POSITIVE REJECTION
-                    </span>
-                  </div>
-                  <div className="px-3 py-3">
-                    <p className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                      AD Feature: <span style={{ color: TEXT_LIGHT }}>&ldquo;Francis Ford Coppola&apos;s Jungle Retreat in Belize&rdquo;</span> <span style={{ color: TEXT_DIM }}>&mdash; Sep 1995</span>
-                    </p>
-                    <div className="mt-1 ml-2 pl-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
+                  <div
+                    className="overflow-hidden rounded"
+                    style={{
+                      border: `1px solid ${BORDER}`,
+                      backgroundColor: "#111118",
+                    }}
+                  >
+                    <div className="px-3 py-1.5" style={{ backgroundColor: "rgba(204, 64, 64, 0.1)" }}>
+                      <span className="text-[8px] font-bold tracking-[0.08em]" style={{ fontFamily: MONO, color: "#CC4040" }}>
+                        DETECTIVE &mdash; FALSE POSITIVE REJECTION
+                      </span>
+                    </div>
+                    <div className="px-3 py-3">
                       <p className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                        <span style={{ color: TEXT_MID }}>└</span> Extracted name: <span style={{ color: TEXT_LIGHT }}>Francis Ford Coppola</span>
+                        AD Feature, Sep 1995:<br />
+                        <span style={{ color: TEXT_LIGHT }}>&ldquo;Francis Ford Coppola&apos;s Jungle Retreat in Belize&rdquo;</span>
                       </p>
-                      <div className="mt-1 ml-3 pl-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
-                        <p className="text-[11px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
-                          <span style={{ color: TEXT_MID }}>└</span> DOJ search: &ldquo;Coppola&rdquo;
+                      <div className="mt-1 ml-2 pl-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
+                        <p className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                          <span style={{ color: TEXT_MID }}>└</span> Extracted name: <span style={{ color: TEXT_LIGHT }}>Francis Ford Coppola</span>
                         </p>
-                        <div className="mt-1 ml-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
-                          <div className="flex items-baseline gap-2 py-1 pl-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>├</span>
-                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Donato Coppola</span>
-                            <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; email to Epstein</span>
-                            <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
-                          </div>
-                          <div className="flex items-baseline gap-2 py-1 pl-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>├</span>
-                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Scott Coppola</span>
-                            <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; Facebook msg to Shuliak</span>
-                            <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
-                          </div>
-                          <div className="flex items-baseline gap-2 py-1 pl-3">
-                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>└</span>
-                            <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Francis Ford Coppola</span>
-                            <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; no connection</span>
-                            <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
+                        <div className="mt-1 ml-3 pl-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
+                          <p className="text-[11px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
+                            <span style={{ color: TEXT_MID }}>└</span> DOJ search: &ldquo;Coppola&rdquo;
+                          </p>
+                          <div className="mt-1 ml-3" style={{ borderLeft: `1px solid ${BORDER}` }}>
+                            <div className="py-1.5 pl-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>├</span>
+                                <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Donato Coppola</span>
+                              </div>
+                              <div className="mt-0.5 flex items-baseline gap-1.5 pl-4">
+                                <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; email to Epstein</span>
+                                <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
+                              </div>
+                            </div>
+                            <div className="py-1.5 pl-3" style={{ borderBottom: `1px solid ${BORDER}` }}>
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>├</span>
+                                <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Scott Coppola</span>
+                              </div>
+                              <div className="mt-0.5 flex items-baseline gap-1.5 pl-4">
+                                <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; Facebook msg to Shuliak</span>
+                                <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
+                              </div>
+                            </div>
+                            <div className="py-1.5 pl-3">
+                              <div className="flex items-baseline gap-1.5">
+                                <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_MID }}>└</span>
+                                <span className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Francis Ford Coppola</span>
+                              </div>
+                              <div className="mt-0.5 flex items-baseline gap-1.5 pl-4">
+                                <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>&rarr; no connection</span>
+                                <span className="ml-auto text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, color: "#CC4040" }}>REJECT</span>
+                              </div>
+                            </div>
                           </div>
                         </div>
                       </div>
+                      <p className="mt-2 text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                        Verdict: <span style={{ color: TEXT_MID }}>NO MATCH</span><br />
+                        Surname collision, three different individuals<br />
+                        <a href="https://www.wheretheylive.world/dossier/200" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>View dossier &rarr;</a>
+                      </p>
                     </div>
-                    <p className="mt-2 text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                      Verdict: <span style={{ color: TEXT_MID }}>NO MATCH</span> &mdash; surname collision, three different individuals
-                      {" "}<a href="https://www.wheretheylive.world/dossier/200" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>View dossier &rarr;</a>
-                    </p>
                   </div>
+                  <p
+                    className="mt-1 text-[8px] tracking-wider"
+                    style={{ fontFamily: MONO, color: TEXT_DIM }}
+                  >
+                    <span style={{ color: TEXT_MID }}>Fig. 3</span> — False positive rejection: surname collision resolved without human intervention.
+                  </p>
                 </div>
-                <p
-                  className="mt-1 text-[8px] tracking-wider"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  <span style={{ color: TEXT_MID }}>Fig. 3</span> — False positive rejection: surname collision resolved without human intervention.
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  In Stage 6, the Designer synthesizes the pipeline&apos;s output
+                  into a visual report for every home in the archive, not only
+                  those with confirmed connections. Each feature receives a
+                  dedicated detail page pairing article imagery with structured
+                  data, including nine aesthetic scores plotted on a radar chart.
+                  The decision to measure nine axes rather than six, to organize
+                  them into clusters &mdash; Space, Story, and Stage &mdash; and
+                  to introduce a &ldquo;hospitality&rdquo; dimension
+                  distinguishing private retreat from social venue was driven by
+                  the analytical need to test divergence from the broader
+                  baseline. Presentation and measurement were developed in tandem.
+                  The report design pulled the data collection method upstream.
+                  How the findings are presented and what was measured are
+                  indivisible.
                 </p>
               </div>
-
-              <p style={{ maxWidth: CONTENT_NARROW }}>
-                In Stage 6, the Designer synthesizes the pipeline&apos;s output
-                into a visual report for every home in the archive, not only
-                those with confirmed connections. Each feature receives a
-                dedicated detail page pairing article imagery with structured
-                data, including nine aesthetic scores plotted on a radar chart.
-                The decision to measure nine axes rather than six, to organize
-                them into clusters &mdash; Space, Story, and Stage &mdash; and
-                to introduce a &ldquo;hospitality&rdquo; dimension
-                distinguishing private retreat from social venue was driven by
-                the analytical need to test divergence from the broader
-                baseline. Presentation and measurement were developed in tandem.
-                The report design pulled the data collection method upstream.
-                How the findings are presented and what was measured are
-                indivisible.
-              </p>
-              <p
-                className="text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
-              >
+              <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
                 Architecture
               </p>
               <p style={{ maxWidth: CONTENT_NARROW }}>
@@ -1398,6 +1447,25 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 reasoning. The pipeline doesn&apos;t just produce a black-box
                 conclusion, it produces detailed evidence for those conclusions.
               </p>
+              {/* ── Fig. 4: Three-column pipeline (floated left, 2 cols) ── */}
+              <div
+                className="float-left mb-4 mr-6 hidden md:block"
+                style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/fig4-pipeline-v6.svg"
+                  alt="Three-column pipeline diagram — Agents (Scout, Courier, Reader, Detective, Researcher, Designer) feed into Miranda (Editor) who coordinates all six stages. Human in the Loop column shows investigation policy, verdict overrides, dossier review, and design collaboration touchpoints."
+                  className="w-full rounded"
+                  style={{ backgroundColor: "#14121e" }}
+                />
+                <p
+                  className="mt-2 text-[8px] tracking-wider"
+                  style={{ fontFamily: MONO, color: TEXT_DIM }}
+                >
+                  <span style={{ color: TEXT_MID }}>Fig. 4</span> — Three-column pipeline: agents, editor, and human-in-the-loop oversight.
+                </p>
+              </div>
               <div className="relative">
                 <p style={{ maxWidth: CONTENT_NARROW }}>
                   This is what the literature calls the ReAct pattern:<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
@@ -1476,218 +1544,475 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </p>
                 </div>
               </div>
-              <p style={{ maxWidth: CONTENT_NARROW }}>
-                But what it can do is reliably transform ambiguity into
-                structured, reviewable decisions at a scale no individual
-                researcher could sustain alone. This same pipeline, pointed at a
-                different data set, would run the same way. The question may
-                change but the architecture stays the same.
-              </p>
+              <div className="relative">
+                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  But what it can do is reliably transform ambiguity into
+                  structured, reviewable decisions at a scale no individual
+                  researcher could sustain alone. This same pipeline, pointed at a
+                  different data set,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> would run the same way. The question may
+                  change but the architecture stays the same.
+                </p>
+                <div
+                  className="absolute z-10 hidden pl-4 md:block"
+                  style={{
+                    top: 0,
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    Dataset: OpenSecrets.org
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    OpenSecrets.org uses structured data pipelines to map political donations and lobbying networks to campaign finance.
+                  </p>
+                  <a href="https://www.opensecrets.org" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                    opensecrets.org &rarr;
+                  </a>
+                </div>
+              </div>
           </div>
-
-          <div className="mt-10" style={{ borderTop: `1px solid ${BORDER}` }} />
-
-          {/* Full 3-phase Architecture SVG */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/pipeline-architecture.svg?v=2"
-            alt="System Architecture — Phase 01: Scout, Courier, and Reader agents feeding data through the Editor to Supabase. Phase 02: Detective and Researcher cross-referencing names against DOJ Epstein files and Black Book. Phase 03: Deep aesthetic extraction, Designer agent, Neo4j knowledge graph, and website deployment."
-            className="mt-6 w-full rounded"
-          />
-          <p
-            className="mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
-          >
-            <span style={{ color: TEXT_MID }}>Fig. 4</span> — Three-phase system architecture showing data flow from archive discovery through Epstein cross-referencing to website deployment.
-          </p>
         </div>
+
+        <SectionTransition num="02" name="multi_agent_system" />
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 2: MULTI-AGENT SYSTEM
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-2" className="mt-24 scroll-mt-24">
-          <SectionHeader
-            num="2"
-            title="MULTI-AGENT SYSTEM"
-            subtitle="A hub-and-spoke architecture with seven autonomous agents, one editor, zero humans in the loop."
-            intro={[
-              "The pipeline is powered by seven AI agents organized in a hub-and-spoke architecture. Miranda, the Editor, sits at the center — she assigns every task, reviews every result, and has final authority over every verdict. The six specialist agents (Scout, Courier, Reader, Detective, Researcher, and Designer) receive tasks from Miranda's outbox, execute them independently, and return results through their own outbox.",
-              "Each agent runs on a different language model selected for its task profile. Miranda uses Claude Opus for editorial judgment and Sonnet for routine assessments. The Reader uses Gemini for vision tasks like reading magazine pages. The Detective and Researcher use Sonnet for synthesis. Bulk classification tasks use Haiku for cost efficiency. This model-splitting strategy keeps the total API cost under $55 for the entire pipeline.",
-              "The agents communicate through asynchronous task queues — not direct messaging. Miranda pushes a Task object to an agent's inbox; the agent pushes a TaskResult to its outbox. This decoupled design means agents can work in parallel without blocking each other, and Miranda can redistribute work if an agent fails or stalls.",
-            ]}
-            summary="The hub-and-spoke architecture ensures that no data enters the final database without editorial review, while allowing all seven agents to work concurrently on different stages of the pipeline."
-          />
+        <div id="section-2" className="mt-8 scroll-mt-24">
+          {/* ── S2 Header ── */}
+          <div>
+            <p className="s-label">SECTION 2</p>
+            <h3 className="s-title">MULTI-AGENT SYSTEM</h3>
+            <p className="s-subtitle">From One Prompt to Seven Agents</p>
+            <GridDivider startTick endTick />
+          </div>
 
-          {/* Hub-and-spoke diagram (synced from Figma) */}
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/hub-and-spoke.svg?v=3"
-            alt="Hub-and-spoke architecture diagram — Miranda (Editor) at center, connected to six agents: Scout, Courier, Reader, Detective, Researcher, and Designer. Shared systems: Supabase, Neo4j, Memory, and Bulletin Board."
-            className="mt-10 w-full rounded"
-          />
-          <p
-            className="mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          {/* ── S2 Body paragraphs (cols 1-4, no maxWidth on wrapper so sidenotes can reach col 5) ── */}
+          {/* Uses block flow (not flex) so floated diagrams work — same pattern as S1 */}
+          <div
+            className="mt-10 text-[15px] leading-[1.8] [&>*+*]:mt-6"
+            style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID, maxWidth: "none" }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 5</span> — Hub-and-spoke topology with Miranda at center coordinating six specialist agents via asynchronous task queues.
-          </p>
+            <p style={{ maxWidth: CONTENT_NARROW }}>As a non-software engineer with limited free time and some experience with ChatGPT, your natural first instinct when tackling a problem like this is the simplest. Provide one giant prompt and then sit back and wait for a single end-to-end execution to do everything while you sit back: <em>&ldquo;Find every AD issue since 1988. Here are the DOJ Epstein files. Cross-reference every name, investigate every lead, and return the confirmed connections.&rdquo;</em></p>
+
+            {/* ── Fig. 5: Monolithic diagram (floated left, 2 minor cols — same as S1 Fig. 1) ── */}
+            <div
+              className="float-left mb-4 mr-6 hidden md:block"
+              style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+            >
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/monolithic-diagram.svg?v=7"
+                alt="Monolithic single-prompt architecture — one model, one call, six sequential steps, no intermediate state saved, no error recovery"
+                className="w-full rounded"
+                style={{ border: `1px solid ${BORDER}` }}
+              />
+              <p
+                className="mt-2 text-[8px] tracking-wider"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                <span style={{ color: TEXT_MID }}>Fig. 5</span> — Test 01: Monolithic single-prompt architecture. One model, one call, no intermediate state, no error recovery.
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/decentralized-diagram.svg?v=7"
+                alt="Decentralized multi-agent architecture — six agents communicating peer-to-peer with shared state, no central authority"
+                className="mt-8 w-full rounded"
+                style={{ border: `1px solid ${BORDER}` }}
+              />
+              <p
+                className="mt-2 text-[8px] tracking-wider"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                <span style={{ color: TEXT_MID }}>Fig. 6</span> — Test 02: Decentralized multi-agent mesh. Peer-to-peer communication, shared state, no central authority.
+              </p>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src="/hub-spoke-diagram.svg?v=4"
+                alt="Hub-and-spoke architecture — Miranda as central editor hub with six specialist agents as spokes, connected via async task queues"
+                className="mt-8 w-full rounded"
+                style={{ border: `1px solid ${BORDER}` }}
+              />
+              <p
+                className="mt-2 text-[8px] tracking-wider"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                <span style={{ color: TEXT_MID }}>Fig. 7</span> — Test 03: Hub-and-spoke architecture. Central editor coordinates six specialist agents via async task queues.
+              </p>
+            </div>
+
+            {/* P2 — context window + monolithic IBM link + sidenote */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>In theory, this is straightforward. In practice, it collapses immediately. The context window<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> saturates. The model gets itself stunningly lost chasing loose threads as states become entangled. There are no durable checkpoints, no clean backup points, and the black box nature negates any externalized audit trail. You&rsquo;d have to blindly trust the results&mdash;that&rsquo;s difficult to accept. The results may look coherent, but its operationally opaque. The path from A to B becomes lost, with no meaningful way to replicate or validate the conclusions. While it is simple and <a href="https://www.ibm.com/think/topics/monolithic-architecture" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>monolithic</a>, it just doesn&rsquo;t work.</p>
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: 0,
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Context Window
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  A context window is the amount of text an AI model can &ldquo;see&rdquo; at once&mdash;typically 100,000&ndash;200,000 words. Once full, earlier information is effectively forgotten.
+                </p>
+              </div>
+            </div>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>The next step is to decompose the problem. Break the monolith model into bounded stages with explicit interfaces, externalize the intermediate states, and allow specialized components to operate concurrently. The user assigns specialized roles: searching, reading, cross-referencing, investigating. But how do these roles interact with each other? My first attempt here was a more decentralized, multi-writer, peer-coordinated agent mesh: each role&mdash;or agent&mdash;communicates with all the others, negotiates their own task ownership, and writes updates to a shared source as conclusions began to emerge. Seemingly chaotic, but it seemed more analagous to how a group of people would collaborate autonomously. However, in practice, for this investigative work, it introduces too much avoidable risk.</p>
+
+            {/* P4 — race conditions sidenote */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>First, multiple writers create the possibility of race conditions<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> via conflicting updates. If two agents attempt to update the same record concurrently, which wins? While peer negotiation diffuses responsibility and obscures which agent introduced an error. In this system, coordination would emerge through negotiation rather than orchestration. Attractive in theory since it reads as more &ldquo;intelligent&rdquo;, but again, in practice introduces additional structural complexity. If the Detective and Researcher disagree about whether a lead merits escalation, who decides? The system architecture must define an explicit resolution mechanism. For this production pipeline processing thousands of names, this expanded coordination and defining an endless list individual rule settings would prove overly complicated and infeasible.</p>
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: 0,
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Race Condition
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  A race condition occurs when two processes try to update the same data simultaneously, and the outcome depends on which one finishes first&mdash;the software equivalent of two editors rewriting the same paragraph at the same time.
+                </p>
+              </div>
+            </div>
+
+            {/* P5 — hub-and-spoke origin sidenote */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>These tensions were resolved by adopting the specific topology architecture of a centrally orchestrated hub-and-spoke.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> Each agent operates concurrently within a bounded relationship to a central coordinator. Here, all task assignments and all persistent writes flow through the single authoritative coordinator. They alone validate outputs, resolve ambiguities, and commit states to the database. This preserves parallel throughput without introducing multi-writer contention. There are no conflicting updates, no intra-agent negotiations, and no ambiguity about provenance. Every state transition can be attributable to a single decision point.</p>
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: 0,
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/sidenotes/fedex-hub-spoke.png"
+                  alt="FedEx hub-and-spoke route map — Memphis as central hub with spokes radiating to every US city"
+                  className="mb-2 rounded"
+                  style={{
+                    maxWidth: "calc(50% - 12px)",
+                    maxHeight: 140,
+                    objectFit: "cover",
+                    filter: "grayscale(1) contrast(1.1)",
+                  }}
+                />
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Hub-and-Spoke
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Hub-and-spoke topology was pioneered by FedEx in 1973 and later adopted by the airline industry: every package (or flight) routes through a central hub rather than flying point-to-point. The efficiency gains&mdash;and the single point of failure risks&mdash;are the same in software.
+                </p>
+              </div>
+            </div>
+
+            {/* ── Why It Works ── */}
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Why It Works</p>
+
+            <div className="relative">
+              <p className="-mt-2" style={{ maxWidth: CONTENT_NARROW }}>The metaphor is straightforward: imagine a newsroom<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>. Reporters don&rsquo;t directly publish to the front page. They file copy. An editor reviews it, fact checks it, decides if it meets standards, and then either runs it, kills it, or sends it back for revision. The reporters are specialists in their fields. One might cover politics, another crime, another film, but an editor is the single point of contact for all of them. No story hits a reader&rsquo;s eyeballs without the editor&rsquo;s sign-off.</p>
+              <div
+                className="absolute top-0 z-10 hidden pl-4 md:block"
+                style={{
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/sidenotes/newsroom-roles.png"
+                  alt="Newsroom organizational chart showing Editor-in-Chief at the center coordinating section editors, reporters, photographers, and copy desk"
+                  className="mb-2 rounded"
+                  style={{
+                    maxWidth: "calc(50% - 12px)",
+                    maxHeight: 140,
+                    objectFit: "cover",
+                    filter: "grayscale(1) contrast(1.1)",
+                  }}
+                />
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Newsroom Structure
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Newsrooms typically have an editor-in-chief who coordinates and oversees production &mdash; assigning stories, reviewing copy, and deciding what runs. Reporters are specialists; no story reaches the reader without passing through editorial.
+                </p>
+                <a href="https://training.wkustudentpubs.com/index.php/newsroom-roles/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  wkustudentpubs.com/newsroom-roles &rarr;
+                </a>
+              </div>
+            </div>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>The communication mechanism is deliberately simple. Each agent has an inbox, and an outbox. The editor pushes a task, for example: &ldquo;cross-reference these twelve names&rdquo; into the Detective&rsquo;s inbox. The Detective works through them in sequential order, pushes the results into his outbox. The editor collects the results, validates them, writes the verdicts to the database, and then pushes a new tasks: &ldquo;investigate this confirmed lead&rdquo; into the Researcher&rsquo;s inbox. The message-passing is one-to-one. Agents never talk to each other directly. They only talk to the Editor, and she decides what happens next.</p>
+
+            {/* ── Fig. 8: Dataclass code block (floated left, 2 minor cols) ── */}
+            <div
+              className="float-left mb-4 mr-6 hidden md:block"
+              style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+            >
+              <div
+                className="overflow-hidden rounded-lg"
+                style={{
+                  border: `1px solid ${BORDER}`,
+                  backgroundColor: "#0d0d14",
+                }}
+              >
+                {/* File tab bar */}
+                <div
+                  className="flex items-center gap-2 px-4 py-2"
+                  style={{ backgroundColor: "#111118", borderBottom: `1px solid ${BORDER}` }}
+                >
+                  <span className="text-[9px] tracking-wider" style={{ fontFamily: MONO, color: GREEN }}>
+                    src/agents/base.py
+                  </span>
+                </div>
+                {/* Code content */}
+                <pre
+                  className="whitespace-pre-wrap break-words px-5 py-3 text-[11px] leading-[1.75]"
+                  style={{ fontFamily: MONO, margin: 0 }}
+                >
+                  <code>
+                    <span style={{ color: "#6B7280" }}>{"# The entire communication protocol\n"}</span>
+                    <span style={{ color: "#6B7280" }}>{"\n"}</span>
+                    <span style={{ color: "#C792EA" }}>{"@dataclass\n"}</span>
+                    <span style={{ color: "#89DDFF" }}>{"class "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"Task"}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{":\n"}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{"    type"}</span>
+                    <span style={{ color: "#89DDFF" }}>{": "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"str"}</span>
+                    <span style={{ color: "#6B7280" }}>{"      # "}</span>
+                    <span style={{ color: "#546E7A" }}>{'"cross_reference"\n'}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{"    goal"}</span>
+                    <span style={{ color: "#89DDFF" }}>{": "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"str"}</span>
+                    <span style={{ color: "#6B7280" }}>{"      # "}</span>
+                    <span style={{ color: "#546E7A" }}>{'"Check these 12 names"\n'}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{"    params"}</span>
+                    <span style={{ color: "#89DDFF" }}>{": "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"dict"}</span>
+                    <span style={{ color: "#6B7280" }}>{"   # "}</span>
+                    <span style={{ color: "#546E7A" }}>{"The actual names + evidence\n"}</span>
+                    <span style={{ color: "#6B7280" }}>{"\n"}</span>
+                    <span style={{ color: "#C792EA" }}>{"@dataclass\n"}</span>
+                    <span style={{ color: "#89DDFF" }}>{"class "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"TaskResult"}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{":\n"}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{"    status"}</span>
+                    <span style={{ color: "#89DDFF" }}>{": "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"str"}</span>
+                    <span style={{ color: "#6B7280" }}>{"    # "}</span>
+                    <span style={{ color: "#546E7A" }}>{'"success" or "failure"\n'}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{"    result"}</span>
+                    <span style={{ color: "#89DDFF" }}>{": "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"dict"}</span>
+                    <span style={{ color: "#6B7280" }}>{"    # "}</span>
+                    <span style={{ color: "#546E7A" }}>{"What the agent found\n"}</span>
+                    <span style={{ color: TEXT_LIGHT }}>{"    agent"}</span>
+                    <span style={{ color: "#89DDFF" }}>{": "}</span>
+                    <span style={{ color: "#FFCB6B" }}>{"str"}</span>
+                    <span style={{ color: "#6B7280" }}>{"     # "}</span>
+                    <span style={{ color: "#546E7A" }}>{"Who did the work"}</span>
+                  </code>
+                </pre>
+              </div>
+              <p
+                className="mt-1.5 text-[8px] tracking-wider"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                <span style={{ color: TEXT_MID }}>Fig. 8</span> — The entire inter-agent communication protocol. Two dataclasses, six fields.
+              </p>
+            </div>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>This solves the issue of contradictory updates by design: if only the Editor writes to the database, there is no possibility of two agents comitting conflicting verdicts on the same record. Ths means the audit trail is never ambiguous about decision making.</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>The system is also modular. For instance, maybe the Detective&rsquo;s methodology needs to change, say, adding a new evidence source beyond the Black Book and DOJ. You&rsquo;d swap out the Detective&rsquo;s code without touching the Researcher, the Editor, or anyone else. The inbox/outbox interface stays the same. The rest of the system doesn&rsquo;t know or care that the Detective now checks three sources instead of two.</p>
+
+            {/* ── The Autonomy Question ── */}
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>The Autonomy Question</p>
+
+            <div className="relative">
+              <p className="-mt-2" style={{ maxWidth: CONTENT_NARROW }}>As someone now genuinely curious about the role AI agents in software workflows, it is important to be precise about what these agents are and are not. In contemporary discourse, frequently the term &ldquo;agent&rdquo; implies systems that plan autonomously, adapt strategies, and pursue goals with minimal supervision.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> Current research literature explores architectures with self-directed planning, tool discovery, and even limited forms of self-evolution. Some of those capabilities are real; many remain experimental.</p>
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: 0,
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/sidenotes/autonomy-robot.png"
+                  alt="Cartoon robot with open head revealing gears — the autonomy question"
+                  className="mb-2 rounded"
+                  style={{
+                    maxWidth: "calc(50% - 12px)",
+                    maxHeight: 140,
+                    objectFit: "cover",
+                    filter: "grayscale(1) contrast(1.1)",
+                  }}
+                />
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  AI Agents in 2025
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Von Davier (2025) documents the year AI agents went mainstream &mdash; standardized protocols like MCP and Agent2Agent enabled autonomous tool use at scale, while raising unresolved questions about security, oversight, and control.
+                </p>
+                <a href="https://theconversation.com/ai-agents-arrived-in-2025-heres-what-happened-and-the-challenges-ahead-in-2026-272325" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  theconversation.com &rarr;
+                </a>
+              </div>
+            </div>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>The pipeline here is intentionally narrow. Partially intentionally, but also constrained by what&rsquo;s feasible technically. Each agent in this system is a bounded worker receiving a well-defined assignment, executing it according to clear and structured, machine-readable methodology, and then returns a typed result. The agent controls how it performs its task, but the Editor determines what it works on.</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>This distinction reflects a fundamental design tension worth exploring a bit when talking about AI: autonomy versus control.</p>
+
+            {/* P — Candice Bergen + sidenote */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>A fully autonomous system would not require Miranda. It would ingest issues, extract entities, evaluate evidence, and publish verdicts independently, refining its methods over time. Architectures approximating this model exist in research settings. From a hypothetical, science-fiction example, a fully autonomous, self-evolving Detective agent might conceivably evolve a way to hack into Candice Bergen&rsquo;s private email<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> as an extreme example of proving out a suspected connection to Epstein. Luckily, this can&rsquo;t do that.</p>
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: 0,
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Autonomy Boundary
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  The example is deliberately absurd to illustrate a real constraint: in a fully autonomous system, the objective function (&ldquo;prove connections&rdquo;) could justify methods the designer never intended.
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Notably, in a 2024 paper, an AI agent attempted to modify its own evaluation scripts to give itself higher scores. It was caught and sandboxed, but its self-preservation instincts led it to game its own metrics.
+                </p>
+                <a href="https://arxiv.org/abs/2408.06292" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  arxiv.org/abs/2408.06292 &rarr;
+                </a>
+              </div>
+            </div>
+
+            {/* ── Summary ── */}
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Summary</p>
+
+            <p className="-mt-2" style={{ maxWidth: CONTENT_NARROW }}>This architecture emerged incrementally rather than being designed upfront. The first version was a single sequential script. It worked for ten issues. It failed at fifty. Throughput collapsed and failure recovery was brittle.</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>The second version decomposed the work into separate agents but allowed each to write to the database independently. The first time two agents updated the same record concurrently, state corrupted. The third version introduced the Editor as the single writer (the &ldquo;hub&rdquo;) and the system stabilized.</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>Each iteration responded to an observed failure mode, not an abstract preference. That pattern reflects a broader reality of building AI systems: you begin with what works, observe where it breaks, and redesign around those breakpoints. This collaborative, iterative approach is personally new to me, but I could see how it reinforcing the theme of &ldquo;AI as creativity enhancer.&rdquo; You need to learn by doing, and in the process, your preconceived notions of feasibility are also expanded. For me, a consistent metric for a successful project is that your curiousity during the process leads to you a place you couldn&rsquo;t have considered when you started out.</p>
+
+            {/* P — Voyager sidenote */}
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>Looking forward, it seems reasonable to assume that the boundary between task-constrained agents and more autonomous systems<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> will continue to narrow. Today, the Editor applies fixed editorial rules set by the human (the publication&rsquo;s &ldquo;owner&rdquo; in this analogy?). In principle, the Editor could instead learn the rules over time from accumulated past decisions, similar to how we learn through examples. The Detective queries two evidence sources. Tomorrow, it could discover and integrate new sources autonomously. Each agent&rsquo;s methodology is currently authored by a human. Why couldn&rsquo;t it instead propose, test, and refine its own procedures&mdash;finding new, even better ideas&mdash;to meet the high-level goals I set out?</p>
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: 0,
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Autonomous Agents
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Wang et al. (2023), &ldquo;Voyager: An Open-Ended Embodied Agent with Large Language Models.&rdquo; An agent that autonomously writes and refines its own code to master an open-world environment&mdash;Minecraft&mdash;without human intervention.
+                </p>
+                <a href="https://arxiv.org/abs/2305.16291" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  arxiv.org &rarr;
+                </a>
+              </div>
+            </div>
+          </div>
 
         </div>
+
+        <SectionTransition num="03" name="personality_as_architecture" />
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 3: PERSONALITY AS ARCHITECTURE
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-3" className="mt-24 scroll-mt-24">
+        <div id="section-3" className="mt-8 scroll-mt-24">
           {/* ── S3 Header (full width) ── */}
           <div>
-            <p
-              className="text-[11px] tracking-widest"
-              style={{ fontFamily: MONO, color: "#B87333" }}
-            >
-              SECTION 3
-            </p>
-            <h3
-              className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
-              style={{
-                fontFamily: MONO,
-                color: TEXT_LIGHT,
-                maxWidth: CONTENT_NARROW,
-              }}
-            >
-              PERSONALITY AS ARCHITECTURE
-            </h3>
-            <p
-              className="mt-3 text-[15px] leading-[1.4]"
-              style={{
-                fontFamily: MONO,
-                color: TEXT_MID,
-                maxWidth: CONTENT_NARROW,
-              }}
-            >
-              Why do these autonomous AI agents have names, archetypes, and voices? Does it matter?
-            </p>
-            <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+            <p className="s-label">SECTION 3</p>
+            <h3 className="s-title">PERSONALITY AS ARCHITECTURE</h3>
+            <p className="s-subtitle">Why do these autonomous AI agents have names, archetypes, and voices? Does it matter?</p>
+            <GridDivider startTick endTick />
           </div>
 
-          {/* ── Two-column: Intro text (cols 1-4) + Miranda card (cols 5-6) ── */}
+          {/* ── Body text with sidenotes — matching S1-S2 pattern ── */}
           <div
-            className="mt-10 flex flex-col gap-10 md:flex-row md:items-stretch"
-            style={{ gap: "24px" }}
+            className="mt-10 text-[15px] leading-[1.8] [&>*+*]:mt-6"
+            style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
           >
-            {/* Left — Intro paragraphs (columns 1-4) */}
-            <div
-              className="flex flex-col gap-5 text-[14px] leading-[1.8] md:flex-[4]"
-              style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
-            >
-              <p>If we want to dig into this question, there are actually three layers to uncover. It&rsquo;s worth it to take a minute to unpack each because it speaks to the nature of how the agentic system works.</p>
+            <p style={{ maxWidth: CONTENT_NARROW }}>If we want to dig into this question, there are actually three layers to uncover. It&rsquo;s worth it to take a minute to unpack each because it speaks to the nature of how the agentic system works.</p>
 
-              <p
-                className="mt-4 text-[12px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                Layer 1: The System Prompt IS the Agent
-              </p>
-              <p>When you call an AI model in something like Claude, you are sending it a system prompt. That&rsquo;s just a set of instructions that tells it how to behave. Example: &ldquo;You are a research assistant. Read the following text, do a thorough academic code review, and add footnotes where applicable. Be thorough and precise.&rdquo; In turn, every response the model produces is shaped by that simple prompt.</p>
-
-              <p>An &ldquo;agent&rdquo; in this pipeline is, at its core, just a system prompt plus a task queue. Silas the Detective doesn&rsquo;t exist somewhere as a separate piece of software. He&rsquo;s a set of instructions that get sent to Claude every time we need a given name checked against the Epstein records. Elena the Researcher is a whole different set of instructions sent to the same model, but for a different kind of task.</p>
-
-              <p>So, when we say: &ldquo;the Detective checks a name,&rdquo; what&rsquo;s actually happening is:</p>
-              <ol className="ml-6 list-decimal space-y-1">
-                <li>The orchestrator pulls a homeowner&rsquo;s name from the queue</li>
-                <li>It sends that name to Claude along with Silas&rsquo; system prompt, that includes his methodology, his evidence standards, his decision rules, etc.</li>
-                <li>Claude responds as shaped by those instructions.</li>
-                <li>Those results get written to a central database.</li>
-              </ol>
-
-              <p>Silas being anthropomorphized as a typical &ldquo;terse, sardonic, false positives offend him existentially&rdquo; kind-of-guy is actually not just an added sprinkling of decoration on top of a simple quantitative task. The persona becomes part of his system prompt&mdash;his instructions. This personality steers how this agent approaches ambiguous cases.</p>
-
-              <p
-                className="mt-4 text-[12px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                Layer 2: Why a Character Works Better than a Rulebook
-              </p>
-              <p>Here&rsquo;s the technical part: Does it matter that the Detective Agent is &ldquo;Silas, a Sam Spade archetype&rdquo; rather than just a &ldquo;cross-referencing machine with 14 clearly codified rules&rdquo;?</p>
-
-              <p>It actually depends on the task, and the academic literature is split.</p>
-
-              <p>A 2024 study tested 162 different personas across 2,410 factual questions and found that adding a persona generally does not improve factual accuracy, if anything it&rsquo;s the opposite.<sup><a href="#fn1" id="fnref1" style={{ color: COPPER, textDecoration: "none" }}>1</a></sup> If you ask a model &ldquo;What year was the Treaty of Versailles signed?&rdquo; it doesn&rsquo;t matter if you&rsquo;ve told it to be a plumber or a historian.</p>
-
-              <p>A crucial difference is that here our agents aren&rsquo;t answering factual questions. They&rsquo;re making judgment calls: is this a real Epstein connection or just someone with the same last name? Is the interior design of this home more &ldquo;theatrical&rdquo; or &ldquo;restrained&rdquo;? Those are subjective assessments, and for subjective, domain-specific reasoning, expert personas do shift behavior in measurable ways. When researchers built multi-agent systems where specialized evaluators with distinct personas debated each other&rsquo;s assessments, they achieved around 16% higher correlation with human judgement as opposed to a single agent evaluation. And critically, this improvement disappeared when the persona diversity was removed.<sup><a href="#fn3" id="fnref3" style={{ color: COPPER, textDecoration: "none" }}>3</a></sup> The value came specifically from having different agent perspectives shaped by different roles.</p>
-
-              <p>When Silas encounters the name &ldquo;Coppola&rdquo; that could be &ldquo;Donato Coppola&rdquo; obsequiously emailing Jeffrey Epstein back for the chance to meetup (<a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA01187523.pdf" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>DOJ source</a>), or it could be &ldquo;Francis Ford Coppola&rdquo; sharing his magnificent retreat in Belize in the September 1995 issue (<a href="https://archive.architecturaldigest.com/article/1995/9/francis-ford-coppola-in-belize" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>AD archive</a>). The &ldquo;false positives offend him&rdquo; framing makes the model more likely to pause and disambiguate rather than rubber stamping &ldquo;Coppola&rdquo; as a connection match. It is not purely a binary factual, it&rsquo;s an evidence weighing judgment call, exactly where persona design matters.</p>
-
-              <p>A related line of research has shown when multiple specialized personas start to interact&mdash;debating, reviewing each other&rsquo;s work&mdash;the results are significantly better than any single persona working alone.<sup><a href="#fn2" id="fnref2" style={{ color: COPPER, textDecoration: "none" }}>2</a></sup> This is closer to what our pipeline is doing: Silas flags a name, Elena investigates it, Miranda reviews both of their work. The value isn&rsquo;t in any one character. It&rsquo;s in the structured disagreement and collaboration between each of them.</p>
-
-              <p
-                className="mt-4 text-[12px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                Layer 3: What&rsquo;s Creative Expression vs Technical Function
-              </p>
-              <p>It&rsquo;s helpful to define the difference here:</p>
-
-              <p
-                className="mt-2 text-[11px] font-bold uppercase tracking-[0.1em]"
-                style={{ fontFamily: MONO, color: COPPER }}
-              >
-                Technically Functional:
-              </p>
-              <ul className="ml-6 list-disc space-y-2">
-                <li>Each agent has their own distinct methodology (Detective checks Black Book + DOJ, Researcher does a multi-step investigation, Editor applies editorial judgement). This is a separation of concerns, a basic software engineering principle applied to AI. Research on autonomous agent pipelines confirms that structured role-based collaboration outperforms single-agent approaches for complex multi-step tasks.<sup><a href="#fn4" id="fnref4" style={{ color: COPPER, textDecoration: "none" }}>4</a></sup></li>
-                <li>Each agent has a personality that matches its task (the Detective is skeptical, the Researcher is thorough, the Editor is demanding). For evaluative tasks such as this one, carefully designed personas shape edge-case behavior, however, the key word is &ldquo;carefully&rdquo;. Generic or poorly matched personas can hurt more than help.<sup><a href="#fn7" id="fnref7" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup></li>
-                <li>Using different model tiers for different agents. The Editor uses a more powerful model (Opus) for quality-critical reviews and a faster one (Sonnet) for routine tasks. Research confirms that mixing model capabilities across agents outperforms using the same model everywhere by as much as 47% on certain tasks.<sup><a href="#fn5" id="fnref5" style={{ color: COPPER, textDecoration: "none" }}>5</a></sup></li>
-                <li>Agents have reflection loops. The Editor periodically reviews her own past decisions and identifies patterns. Multi-agent systems with structured reflection mechanisms that generate targeted feedback for individual agents shows measurable reductions in cascading errors.<sup><a href="#fn6" id="fnref6" style={{ color: COPPER, textDecoration: "none" }}>6</a></sup></li>
-              </ul>
-
-              <p
-                className="mt-4 text-[11px] font-bold uppercase tracking-[0.1em]"
-                style={{ fontFamily: MONO, color: GOLD }}
-              >
-                Primarily Creative (but Still Valuable!):
-              </p>
-              <ul className="ml-6 list-disc space-y-2">
-                <li>The specific archetypes (Sam Spade, Miranda Priestly, Andrew Neiman) are memorable shorthands for complex instruction sets. A different set of archetypes with the same underlying instructions would produce similar pipeline results.</li>
-                <li>While the character sprites and backstories don&rsquo;t fundamentally change the AI&rsquo;s output, they do make the project more human.</li>
-                <li>The in-character conversations where you can talk to Miranda as Miranda works as an interactive developer tool, not a pipeline component.</li>
-              </ul>
-
-              <p className="mt-4">The real insight is that in many ways the technical value isn&rsquo;t in the specific characters, rather, it is in the act of designing them carefully. It&rsquo;s a simple idea, but when we decided Miranda should be demanding and autocratic, we were really making engineering decisions about how strict to dial in the editorial review. When we made Silas terse and skeptical, we were trying to tune down the false-positive rate as much as possible. The character design process forced a deeper thinking about what each stage of the pipeline should optimize for. The personas therefore act as human-legible encoding of engineering decisions. This can be a valuable lesson as agents become more and more complex and unleashed on more complicated problems.</p>
-
-              <p>Research backs this up. A 2024 study found that &ldquo;coarsely aligned&rdquo; or generic personas often hurt performance, but carefully designed, task-specific personas can measurably improve it.<sup><a href="#fn7b" id="fnref7b" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup> In the future, as agentic workflows become more widespread, the quality of the persona design and storytelling could become a primary consideration.</p>
-
-              <p
-                className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
-              >
-                Summary
-              </p>
-              <p className="-mt-2">Seven AI agents processed 4,081 magazine features, cross-referenced more than 3,000 names against federal records, investigated over 1,000 leads, and confirmed 100+ connections autonomously. The significance of these results is structural: this was not a manual audit but a reproducible investigative system operating at scale. The outcome did not depend on personas; it depended on architecture&mdash;task queues, deterministic database writes, retry logic, and calibrated evidence thresholds that disciplined false positives and defined what qualified as confirmation. The human role was upstream: asking the question, designing the framework, endlessly stress-testing the pipeline, and deploying it publicly on this site. The agents executed judgment, the codebase enforced standards, and the result is not just a set of findings but a scalable, auditable method.</p>
-
-              {/* ── Footnotes ── */}
-              <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
+              Layer 1: The System Prompt IS the Agent
+            </p>
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>When you call an AI model in something like Claude, you are sending it a system prompt. That&rsquo;s just a set of instructions that tells it how to behave. Example: &ldquo;You are a research assistant. Read the following text, do a thorough academic code review, and add footnotes where applicable. Be thorough and precise.&rdquo; In turn, every response the model produces is shaped by that simple prompt.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span></p>
               <div
-                className="mt-4 flex flex-col gap-2 text-[9px] leading-[1.6]"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
+                className="absolute top-0 z-10 hidden pl-4 md:block"
+                style={{
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
               >
-                <p id="fn1"><sup><a href="#fnref1" style={{ color: COPPER, textDecoration: "none" }}>1</a></sup> Zheng et al., <a href="https://aclanthology.org/2024.findings-emnlp.888/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Is Persona Prompting Effective?&rdquo;</a> Findings of EMNLP 2024. Tested 162 personas across 2,410 factual questions; persona prompting did not reliably improve correctness.</p>
-                <p id="fn2"><sup><a href="#fnref2" style={{ color: COPPER, textDecoration: "none" }}>2</a></sup> Wang et al., <a href="https://aclanthology.org/2024.naacl-long.15/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Multi-Persona Collaboration&rdquo;</a> NAACL 2024. Found that simulating collaboration between multiple expert personas effectively reduced hallucinations while maintaining reasoning capabilities&mdash;though notably only in GPT-4, not smaller models.</p>
-                <p id="fn3"><sup><a href="#fnref3" style={{ color: COPPER, textDecoration: "none" }}>3</a></sup> Chan et al., <a href="https://openreview.net/forum?id=FQepisCUWu" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;ChatEval&rdquo;</a> ICLR 2024. Demonstrated that specialized evaluator agents with diverse personas, debating sequentially, achieve ~16% higher correlation with human judgment than single-agent evaluation. The improvement disappeared when persona diversity was removed.</p>
-                <p id="fn4"><sup><a href="#fnref4" style={{ color: COPPER, textDecoration: "none" }}>4</a></sup> Qian et al., <a href="https://aclanthology.org/2024.acl-long.810/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;ChatDev&rdquo;</a> ACL 2024. Showed that treating complex tasks as structured conversations between specialized agents (CEO, CTO, Programmer, Reviewer) enables autonomous completion of multi-step workflows.</p>
-                <p id="fn5"><sup><a href="#fnref5" style={{ color: COPPER, textDecoration: "none" }}>5</a></sup> Ye et al., <a href="https://arxiv.org/abs/2505.16997" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Heterogeneous Multi-Agent LLM Systems&rdquo;</a> arXiv 2025. Demonstrated that assigning different LLMs to different agent roles outperforms homogeneous systems by up to 47% on mathematical reasoning tasks.</p>
-                <p id="fn6"><sup><a href="#fnref6" style={{ color: COPPER, textDecoration: "none" }}>6</a></sup> Bo et al., <a href="https://openreview.net/forum?id=wWiAR5mqXq" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Reflective Multi-Agent Refinement&rdquo;</a> NeurIPS 2024. Introduced a shared reflector that generates targeted prompt refinements for individual agents using counterfactual reward signals, reducing cascading errors in multi-agent pipelines.</p>
-                <p id="fn7"><sup><a href="#fnref7" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup> Kim et al., <a href="https://arxiv.org/abs/2408.08631" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Persona-Aligned Reasoning&rdquo;</a> arXiv 2024. Found that poorly aligned personas degraded performance in 7 of 12 reasoning datasets tested on Llama 3, while their proposed ensemble method outperformed both persona and no-persona baselines.</p>
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  System Prompts
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  The hidden instructions sent alongside every user message. A system prompt defines the model&rsquo;s role, constraints, and behavior &mdash; it&rsquo;s the difference between &ldquo;Claude&rdquo; and &ldquo;Silas the Detective.&rdquo;
+                </p>
               </div>
             </div>
 
-            {/* Right — Miranda card + caption (columns 5-6) */}
-            <div className="flex flex-col md:flex-[2]">
+            <p style={{ maxWidth: CONTENT_NARROW }}>An &ldquo;agent&rdquo; in this pipeline is, at its core, just a system prompt plus a task queue. Silas the Detective doesn&rsquo;t exist somewhere as a separate piece of software. He&rsquo;s a set of instructions that get sent to Claude every time we need a given name checked against the Epstein records. Elena the Researcher is a whole different set of instructions sent to the same model, but for a different kind of task.</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>So, when we say: &ldquo;the Detective checks a name,&rdquo; what&rsquo;s actually happening is:</p>
+            <ol className="ml-6 list-decimal space-y-1" style={{ maxWidth: CONTENT_NARROW }}>
+              <li>The orchestrator pulls a homeowner&rsquo;s name from the queue</li>
+              <li>It sends that name to Claude along with Silas&rsquo; system prompt, that includes his methodology, his evidence standards, his decision rules, etc.</li>
+              <li>Claude responds as shaped by those instructions.</li>
+              <li>Those results get written to a central database.</li>
+            </ol>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>Silas being anthropomorphized as a typical &ldquo;terse, sardonic, false positives offend him existentially&rdquo; kind-of-guy is actually not just an added sprinkling of decoration on top of a simple quantitative task. The persona becomes part of his system prompt&mdash;his instructions. This personality steers how this agent approaches ambiguous cases.</p>
+
+            {/* ── Fig. 9: Miranda card — floated left in columns 1-2 ── */}
+            <div
+              className="float-left mr-6 mb-4 hidden md:block"
+              style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+            >
               <div
                 className="flex flex-col items-center rounded border p-6 pb-8"
                 style={{
                   backgroundColor: CARD_BG,
                   borderColor: BORDER,
-                  borderTop: "2px solid #B87333",
+                  borderTop: `2px solid ${COPPER}`,
                 }}
               >
                 <video
@@ -1698,116 +2023,222 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   className="h-[220px] w-[160px] flex-shrink-0 object-contain"
                   style={{ imageRendering: "pixelated" }}
                 >
-                  <source src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite_2.mov" type='video/mp4; codecs="hvc1"' />
-                  <source src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.webm?v=4" type="video/webm" />
+                  <source src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite_2.mov?v=2" type='video/mp4; codecs="hvc1"' />
+                  <source src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/Editor_Sprite.webm?v=5" type="video/webm" />
                 </video>
-                <p
-                  className="mt-4 text-[15px] font-bold"
-                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-                >
+                <p className="mt-4 text-[15px] font-bold" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
                   {editorAgent.name}
                 </p>
-                <p
-                  className="text-[10px] tracking-wider"
-                  style={{ fontFamily: MONO, color: "#B87333" }}
-                >
+                <p className="text-[10px] tracking-wider" style={{ fontFamily: MONO, color: COPPER }}>
                   {editorAgent.role.toUpperCase()} &mdash; THE HUB
                 </p>
-                <p
-                  className="mt-3 text-center text-[11px] leading-[1.8]"
-                  style={{ fontFamily: MONO, color: TEXT_MID }}
-                >
+                <p className="mt-3 text-center text-[11px] leading-[1.8]" style={{ fontFamily: MONO, color: TEXT_MID }}>
                   {editorAgent.description}
                 </p>
-                <div
-                  className="mt-4 w-full"
-                  style={{ borderTop: `1px solid ${BORDER}` }}
-                />
-                <p
-                  className="mt-4 text-[10px] leading-[1.7]"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  Surgically precise and unyielding. Every decision is final &mdash; delivered with the same tonal register whether she&rsquo;s approving a lead or killing a story. She never raises her voice; the quieter she speaks, the more terrified everyone becomes.
+                <div className="mt-4 w-full" style={{ borderTop: `1px solid ${BORDER}` }} />
+                <p className="mt-4 text-[10px] leading-[1.7]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Surgically precise and unyielding. Every decision is final &mdash; delivered with the same tonal register whether she&rsquo;s approving a lead or killing a story.
                 </p>
-                <p
-                  className="mt-3 text-[10px] leading-[1.7]"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  Autocratic and unilateral. She delegates relentlessly without explanation. Her management runs on standards so high they function as fear. The announcement that Boss is reviewing the pipeline triggers building-wide quality checks.
+                <p className="mt-3 text-[10px] leading-[1.7]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Autocratic and unilateral. She delegates relentlessly without explanation. Her management runs on standards so high they function as fear.
                 </p>
-                <p
-                  className="mt-3 text-[10px] leading-[1.7] italic"
-                  style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.5)" }}
-                >
+                <p className="mt-3 text-[10px] leading-[1.7] italic" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.5)" }}>
                   &ldquo;Details of your incompetence do not interest me.&rdquo;
                 </p>
               </div>
-              <p
-                className="mt-3 text-[8px] tracking-wider"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                <span style={{ color: TEXT_MID }}>Fig. 6</span> — Miranda, the Editor agent, serves as the central hub — every task, verdict, and database write passes through her review.
+              <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                <span style={{ color: TEXT_MID }}>Fig. 9</span> — Miranda, the Editor: every task, verdict, and database write passes through her review.
+              </p>
+
+              {/* ── Fig. 10: 6 agent cards — 2×3 grid under Miranda ── */}
+              <div className="mt-6 grid grid-cols-2 gap-2">
+                {subAgents.map((agent) => (
+                  <div
+                    key={agent.name}
+                    className="flex flex-col items-center rounded border p-3"
+                    style={{
+                      backgroundColor: CARD_BG,
+                      borderColor: BORDER,
+                      borderTop: `2px solid ${agent.accent}`,
+                    }}
+                  >
+                    {agent.videoWebm ? (
+                      <video
+                        autoPlay
+                        loop
+                        muted
+                        playsInline
+                        className="h-[180px] w-[120px] flex-shrink-0 object-contain"
+                        style={{ imageRendering: "pixelated" }}
+                      >
+                        <source src={agent.videoMov} type='video/mp4; codecs="hvc1"' />
+                        <source src={agent.videoWebm} type="video/webm" />
+                      </video>
+                    ) : (
+                      <div className="relative h-[180px] w-[120px]">
+                        <Image
+                          src={agent.sprite}
+                          alt={`${agent.name} — ${agent.role}`}
+                          fill
+                          className="object-contain"
+                          style={{ imageRendering: "pixelated" }}
+                        />
+                      </div>
+                    )}
+                    <p
+                      className="mt-3 text-[11px] font-bold"
+                      style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                    >
+                      {agent.name}
+                    </p>
+                    <p
+                      className="text-[10px] tracking-wider"
+                      style={{ fontFamily: MONO, color: agent.accent }}
+                    >
+                      {agent.role.toUpperCase()}
+                    </p>
+                    <p
+                      className="mt-2 flex-1 text-left text-[10px] leading-[1.6]"
+                      style={{ fontFamily: MONO, color: TEXT_DIM }}
+                    >
+                      {agent.description}
+                    </p>
+                    <p
+                      className="mt-3 text-left text-[9px] italic leading-[1.5]"
+                      style={{ fontFamily: MONO, color: `${agent.accent}BF` }}
+                    >
+                      &ldquo;{agent.quote}&rdquo;
+                    </p>
+                  </div>
+                ))}
+              </div>
+              <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                <span style={{ color: TEXT_MID }}>Fig. 10</span> — The six specialist agents, each with a dedicated language model, archetype, and behavioral constraints encoded through personality.
               </p>
             </div>
-          </div>
 
-          <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
+              Layer 2: Why a Character Works Better than a Rulebook
+            </p>
+            <p style={{ maxWidth: CONTENT_NARROW }}>Here&rsquo;s the technical part: Does it matter that the Detective Agent is &ldquo;Silas, a Sam Spade archetype&rdquo; rather than just a &ldquo;cross-referencing machine with 14 clearly codified rules&rdquo;?</p>
 
-          {/* ── Sub-agents — 6 spokes ── */}
-          <div className="mt-14 grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-6">
-            {subAgents.map((agent) => (
+            <p style={{ maxWidth: CONTENT_NARROW }}>It actually depends on the task, and the academic literature is split.</p>
+
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>A 2024 study tested 162 different personas across 2,410 factual questions and found that adding a persona generally does not improve factual accuracy, if anything it&rsquo;s the opposite.<sup><a href="#fn1" id="fnref1" style={{ color: COPPER, textDecoration: "none" }}>1</a></sup> If you ask a model &ldquo;What year was the Treaty of Versailles signed?&rdquo; it doesn&rsquo;t matter if you&rsquo;ve told it to be a plumber or a historian.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span></p>
               <div
-                key={agent.name}
-                className="flex flex-col items-center rounded border p-3"
+                className="absolute top-0 z-10 hidden pl-4 md:block"
                 style={{
-                  backgroundColor: CARD_BG,
-                  borderColor: BORDER,
-                  borderTop: `2px solid ${agent.accent}`,
-                  boxShadow: `0 0 20px 2px ${agent.accent}22, inset 0 0 10px 0 ${agent.accent}0A`,
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
                 }}
               >
-                <div className="relative h-[120px] w-[80px]">
-                  <Image
-                    src={agent.sprite}
-                    alt={`${agent.name} — ${agent.role}`}
-                    fill
-                    className="object-contain"
-                    style={{ imageRendering: "pixelated" }}
-                  />
-                </div>
-                <p
-                  className="mt-3 text-[11px] font-bold"
-                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-                >
-                  {agent.name}
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Persona ≠ Accuracy
                 </p>
-                <p
-                  className="text-[10px] tracking-wider"
-                  style={{ fontFamily: MONO, color: agent.accent }}
-                >
-                  {agent.role.toUpperCase()}
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Zheng et al. (EMNLP 2024) tested 162 personas across 2,410 factual questions. Persona prompting did not reliably improve correctness &mdash; and sometimes hurt it.
                 </p>
-                <p
-                  className="mt-2 flex-1 text-left text-[10px] leading-[1.6]"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  {agent.description}
+                <a href="https://aclanthology.org/2024.findings-emnlp.888/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  aclanthology.org &rarr;
+                </a>
+              </div>
+            </div>
+
+            <div className="relative md:min-h-[180px]">
+              <p style={{ maxWidth: CONTENT_NARROW }}>A crucial difference is that here our agents aren&rsquo;t answering factual questions. They&rsquo;re making judgment calls: is this a real Epstein connection or just someone with the same last name? Is the interior design of this home more &ldquo;theatrical&rdquo; or &ldquo;restrained&rdquo;? Those are subjective assessments, and for subjective, domain-specific reasoning, expert personas do shift behavior in measurable ways. When researchers built multi-agent systems where specialized evaluators with distinct personas debated each other&rsquo;s assessments, they achieved around 16% higher correlation with human judgement as opposed to a single agent evaluation. And critically, this improvement disappeared when the persona diversity was removed.<sup><a href="#fn3" id="fnref3" style={{ color: COPPER, textDecoration: "none" }}>3</a></sup> The value came specifically from having different agent perspectives shaped by different roles.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span></p>
+              <div
+                className="absolute top-0 z-10 hidden pl-4 md:block"
+                style={{
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  +16% With Persona Diversity
                 </p>
-                <p
-                  className="mt-3 text-left text-[9px] italic leading-[1.5]"
-                  style={{ fontFamily: MONO, color: `${agent.accent}BF` }}
-                >
-                  &ldquo;{agent.quote}&rdquo;
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Chan et al. &ldquo;ChatEval&rdquo; (ICLR 2024): specialized evaluator agents with diverse personas debating sequentially achieved ~16% higher correlation with human judgment. The improvement vanished when diversity was removed.
+                </p>
+                <a href="https://openreview.net/forum?id=FQepisCUWu" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
+                  openreview.net &rarr;
+                </a>
+              </div>
+            </div>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>When Silas encounters the name &ldquo;Coppola&rdquo; that could be &ldquo;Donato Coppola&rdquo; obsequiously emailing Jeffrey Epstein back for the chance to meetup (<a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA01187523.pdf" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>DOJ source</a>), or it could be &ldquo;Francis Ford Coppola&rdquo; sharing his magnificent retreat in Belize in the September 1995 issue (<a href="https://archive.architecturaldigest.com/article/1995/9/francis-ford-coppola-in-belize" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>AD archive</a>). The &ldquo;false positives offend him&rdquo; framing makes the model more likely to pause and disambiguate rather than rubber stamping &ldquo;Coppola&rdquo; as a connection match. It is not purely a binary factual, it&rsquo;s an evidence weighing judgment call, exactly where persona design matters.</p>
+
+            <div className="relative">
+              <p style={{ maxWidth: CONTENT_NARROW }}>A related line of research has shown when multiple specialized personas start to interact&mdash;debating, reviewing each other&rsquo;s work&mdash;the results are significantly better than any single persona working alone.<sup><a href="#fn2" id="fnref2" style={{ color: COPPER, textDecoration: "none" }}>2</a></sup> This is closer to what our pipeline is doing: Silas flags a name, Elena investigates it, Miranda reviews both of their work. The value isn&rsquo;t in any one character. It&rsquo;s in the structured disagreement and collaboration between each of them.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span></p>
+              <div
+                className="absolute z-10 hidden pl-4 md:block"
+                style={{
+                  top: "3em",
+                  left: "calc(var(--content-narrow) + 24px)",
+                  width: "calc(100% - var(--content-narrow) - 24px)",
+                  borderLeft: `2px solid ${COPPER}`,
+                }}
+              >
+                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                  Structured Disagreement
+                </p>
+                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                  Wang et al. (NAACL 2024) found that multi-persona collaboration reduced hallucinations while maintaining reasoning &mdash; though only in GPT-4-class models. The value is in the structured interaction, not any single persona.
                 </p>
               </div>
-            ))}
+            </div>
+
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
+              Layer 3: What&rsquo;s Creative Expression vs Technical Function
+            </p>
+            <p style={{ maxWidth: CONTENT_NARROW }}>It&rsquo;s helpful to define the difference here:</p>
+
+            <p
+              className="mt-2 text-[11px] font-bold uppercase tracking-[0.1em]"
+              style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
+            >
+              Technically Functional:
+            </p>
+            <ul className="ml-6 list-disc space-y-2" style={{ maxWidth: CONTENT_NARROW }}>
+              <li>Each agent has their own distinct methodology (Detective checks Black Book + DOJ, Researcher does a multi-step investigation, Editor applies editorial judgement). This is a separation of concerns, a basic software engineering principle applied to AI. Research on autonomous agent pipelines confirms that structured role-based collaboration outperforms single-agent approaches for complex multi-step tasks.<sup><a href="#fn4" id="fnref4" style={{ color: COPPER, textDecoration: "none" }}>4</a></sup></li>
+              <li>Each agent has a personality that matches its task (the Detective is skeptical, the Researcher is thorough, the Editor is demanding). For evaluative tasks such as this one, carefully designed personas shape edge-case behavior, however, the key word is &ldquo;carefully&rdquo;. Generic or poorly matched personas can hurt more than help.<sup><a href="#fn7" id="fnref7" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup></li>
+              <li>Using different model tiers for different agents. The Editor uses a more powerful model (Opus) for quality-critical reviews and a faster one (Sonnet) for routine tasks. Research confirms that mixing model capabilities across agents outperforms using the same model everywhere by as much as 47% on certain tasks.<sup><a href="#fn5" id="fnref5" style={{ color: COPPER, textDecoration: "none" }}>5</a></sup></li>
+              <li>Agents have reflection loops. The Editor periodically reviews her own past decisions and identifies patterns. Multi-agent systems with structured reflection mechanisms that generate targeted feedback for individual agents shows measurable reductions in cascading errors.<sup><a href="#fn6" id="fnref6" style={{ color: COPPER, textDecoration: "none" }}>6</a></sup></li>
+            </ul>
+
+            <p
+              className="mt-4 text-[11px] font-bold uppercase tracking-[0.1em]"
+              style={{ fontFamily: MONO, color: GOLD, maxWidth: CONTENT_NARROW }}
+            >
+              Primarily Creative (but Still Valuable!):
+            </p>
+            <ul className="ml-6 list-disc space-y-2" style={{ maxWidth: CONTENT_NARROW }}>
+              <li>The specific archetypes (Sam Spade, Miranda Priestly, Andrew Neiman) are memorable shorthands for complex instruction sets. A different set of archetypes with the same underlying instructions would produce similar pipeline results.</li>
+              <li>While the character sprites and backstories don&rsquo;t fundamentally change the AI&rsquo;s output, they do make the project more human.</li>
+              <li>The in-character conversations where you can talk to Miranda as Miranda works as an interactive developer tool, not a pipeline component.</li>
+            </ul>
+
+            <p className="mt-4" style={{ maxWidth: CONTENT_NARROW }}>The real insight is that in many ways the technical value isn&rsquo;t in the specific characters, rather, it is in the act of designing them carefully. It&rsquo;s a simple idea, but when we decided Miranda should be demanding and autocratic, we were really making engineering decisions about how strict to dial in the editorial review. When we made Silas terse and skeptical, we were trying to tune down the false-positive rate as much as possible. The character design process forced a deeper thinking about what each stage of the pipeline should optimize for. The personas therefore act as human-legible encoding of engineering decisions. This can be a valuable lesson as agents become more and more complex and unleashed on more complicated problems.</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>Research backs this up. A 2024 study found that &ldquo;coarsely aligned&rdquo; or generic personas often hurt performance, but carefully designed, task-specific personas can measurably improve it.<sup><a href="#fn7b" id="fnref7b" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup> In the future, as agentic workflows become more widespread, the quality of the persona design and storytelling could become a primary consideration.</p>
+
+            {/* ── Footnotes ── */}
+            <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+            <div
+              className="mt-4 flex flex-col gap-2 text-[9px] leading-[1.6]"
+              style={{ fontFamily: MONO, color: TEXT_DIM, maxWidth: CONTENT_NARROW }}
+            >
+              <p id="fn1"><sup><a href="#fnref1" style={{ color: COPPER, textDecoration: "none" }}>1</a></sup> Zheng et al., <a href="https://aclanthology.org/2024.findings-emnlp.888/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Is Persona Prompting Effective?&rdquo;</a> Findings of EMNLP 2024.</p>
+              <p id="fn2"><sup><a href="#fnref2" style={{ color: COPPER, textDecoration: "none" }}>2</a></sup> Wang et al., <a href="https://aclanthology.org/2024.naacl-long.15/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Multi-Persona Collaboration&rdquo;</a> NAACL 2024.</p>
+              <p id="fn3"><sup><a href="#fnref3" style={{ color: COPPER, textDecoration: "none" }}>3</a></sup> Chan et al., <a href="https://openreview.net/forum?id=FQepisCUWu" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;ChatEval&rdquo;</a> ICLR 2024.</p>
+              <p id="fn4"><sup><a href="#fnref4" style={{ color: COPPER, textDecoration: "none" }}>4</a></sup> Qian et al., <a href="https://aclanthology.org/2024.acl-long.810/" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;ChatDev&rdquo;</a> ACL 2024.</p>
+              <p id="fn5"><sup><a href="#fnref5" style={{ color: COPPER, textDecoration: "none" }}>5</a></sup> Ye et al., <a href="https://arxiv.org/abs/2505.16997" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Heterogeneous Multi-Agent LLM Systems&rdquo;</a> arXiv 2025.</p>
+              <p id="fn6"><sup><a href="#fnref6" style={{ color: COPPER, textDecoration: "none" }}>6</a></sup> Bo et al., <a href="https://openreview.net/forum?id=wWiAR5mqXq" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Reflective Multi-Agent Refinement&rdquo;</a> NeurIPS 2024.</p>
+              <p id="fn7"><sup><a href="#fnref7" style={{ color: COPPER, textDecoration: "none" }}>7</a></sup> Kim et al., <a href="https://arxiv.org/abs/2408.08631" target="_blank" rel="noopener noreferrer" style={{ color: TEXT_MID }}>&ldquo;Persona-Aligned Reasoning&rdquo;</a> arXiv 2024.</p>
+            </div>
           </div>
-          <p
-            className="mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
-          >
-            <span style={{ color: TEXT_MID }}>Fig. 7</span> — The six specialist agents, each with a dedicated language model, archetype, and behavioral constraints encoded through personality.
-          </p>
 
           <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
 
@@ -1866,44 +2297,23 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 className="mt-3 text-[8px] tracking-wider"
                 style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                <span style={{ color: TEXT_MID }}>Fig. 8</span> — The Agent Office: a real-time pixel-art dashboard showing autonomous AI coordination as it happens.
+                <span style={{ color: TEXT_MID }}>Fig. 11</span> — The Agent Office: a real-time pixel-art dashboard showing autonomous AI coordination as it happens.
               </p>
             </div>
           </div>
         </div>
 
+        <SectionTransition num="04" name="investigation_methodology" />
+
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 4: INVESTIGATION METHODOLOGY
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-4" className="mt-24 scroll-mt-24">
+        <div id="section-4" className="mt-8 scroll-mt-24">
           {/* Section 4 header — inline so intro text sits beside pipeline flow */}
-          <p
-            className="text-[11px] tracking-widest"
-            style={{ fontFamily: MONO, color: "#B87333" }}
-          >
-            SECTION 4
-          </p>
-          <h3
-            className="mt-3 text-[24px] font-bold leading-[1.1] tracking-tight"
-            style={{
-              fontFamily: MONO,
-              color: TEXT_LIGHT,
-              maxWidth: CONTENT_NARROW,
-            }}
-          >
-            INVESTIGATION METHODOLOGY
-          </h3>
-          <p
-            className="mt-3 text-[15px] leading-[1.4]"
-            style={{
-              fontFamily: MONO,
-              color: TEXT_MID,
-              maxWidth: CONTENT_NARROW,
-            }}
-          >
-            How a name match becomes a confirmed connection — or gets rejected.
-          </p>
-          <div className="mt-8" style={{ borderTop: `1px solid ${BORDER}` }} />
+          <p className="s-label">SECTION 4</p>
+          <h3 className="s-title">INVESTIGATION METHODOLOGY</h3>
+          <p className="s-subtitle">How a name match becomes a confirmed connection — or gets rejected.</p>
+          <GridDivider startTick endTick />
 
           {/* ── Body text + Pipeline flow — side by side ── */}
           <div
@@ -1912,8 +2322,8 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           >
             {/* Left: Intro paragraphs + summary */}
             <div
-              className="flex flex-col gap-5 text-[14px] leading-[1.7]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
+              className="flex flex-col gap-6 text-[15px] leading-[1.8]"
+              style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
             >
               <p>
                 Finding a name in both Architectural Digest and the Epstein
@@ -1945,7 +2355,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </p>
               <p
                 className="mt-4 text-[10px] font-bold uppercase tracking-[0.18em]"
-                style={{ fontFamily: MONO, color: "#B87333" }}
+                style={{ fontFamily: MONO, color: COPPER }}
               >
                 Summary
               </p>
@@ -2100,11 +2510,11 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               {/* Step 5: Editor Review */}
               <div
                 className="w-full rounded border px-3 py-2.5 text-center"
-                style={{ backgroundColor: CARD_BG, borderColor: "#B87333" }}
+                style={{ backgroundColor: CARD_BG, borderColor: COPPER }}
               >
                 <p
                   className="text-[9px] font-bold tracking-[0.12em]"
-                  style={{ fontFamily: MONO, color: "#B87333" }}
+                  style={{ fontFamily: MONO, color: COPPER }}
                 >
                   EDITOR REVIEW
                 </p>
@@ -2195,7 +2605,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 9</span> &mdash; Investigation funnel showing how extracted features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
+            <span style={{ color: TEXT_MID }}>Fig. 12</span> &mdash; Investigation funnel showing how extracted features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
           </p>
 
           {/* ── Evidence criteria — two columns ── */}
@@ -2286,14 +2696,16 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 10</span> — Evidence standards defining what constitutes a confirmed connection versus what does not qualify.
+            <span style={{ color: TEXT_MID }}>Fig. 13</span> — Evidence standards defining what constitutes a confirmed connection versus what does not qualify.
           </p>
         </div>
+
+        <SectionTransition num="05" name="intelligence_infrastructure" />
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 5: INTELLIGENCE INFRASTRUCTURE
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-5" className="mt-24 scroll-mt-24">
+        <div id="section-5" className="mt-8 scroll-mt-24">
           <SectionHeader
             num="5"
             title="INTELLIGENCE INFRASTRUCTURE"
@@ -2402,8 +2814,8 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   {/* Task Outbox */}
                   <CodeBox
                     title="TaskResult{} outbox"
-                    titleColor="#B87333"
-                    borderColor="#B87333"
+                    titleColor={COPPER}
+                    borderColor={COPPER}
                     lines={[
                       "class TaskResult:",
                       "  status: 'success'|'failure'",
@@ -2465,7 +2877,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 11</span> &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
+              <span style={{ color: TEXT_MID }}>Fig. 14</span> &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
             </p>
           </div>
 
@@ -2613,7 +3025,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     "verdict: YES|NO with rationale",
                   ]} />
                   <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="EDITOR → review" titleColor="#B87333" borderColor="#B87333" lines={[
+                  <CodeBox title="EDITOR → review" titleColor={COPPER} borderColor={COPPER} lines={[
                     "miranda reviews dossier:",
                     "  evidence sufficient?",
                     "  verdict consistent?",
@@ -2666,7 +3078,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 12</span> &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
+              <span style={{ color: TEXT_MID }}>Fig. 15</span> &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
             </p>
           </div>
 
@@ -2776,7 +3188,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     "  when name has special characters'",
                   ]} />
                   <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="SELF-IMPROVEMENT (every 30 min)" titleColor="#B87333" borderColor="#B87333" lines={[
+                  <CodeBox title="SELF-IMPROVEMENT (every 30 min)" titleColor={COPPER} borderColor={COPPER} lines={[
                     "def propose_improvement():",
                     "  reflections = recall('methodology')",
                     "  proposal = haiku(f'''",
@@ -2910,7 +3322,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 13</span> &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
+              <span style={{ color: TEXT_MID }}>Fig. 16</span> &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
             </p>
           </div>
 
@@ -2996,7 +3408,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             >
               <p
                 className="text-[10px] tracking-widest"
-                style={{ fontFamily: MONO, color: "#B87333" }}
+                style={{ fontFamily: MONO, color: COPPER }}
               >
                 03
               </p>
@@ -3113,14 +3525,16 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 14</span> — The six intelligence subsystems that enable agent coordination, learning, and self-improvement without human intervention.
+            <span style={{ color: TEXT_MID }}>Fig. 17</span> — The six intelligence subsystems that enable agent coordination, learning, and self-improvement without human intervention.
           </p>
         </div>
+
+        <SectionTransition num="06" name="ui_design" />
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 6: UI DESIGN
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-6" className="mt-24 scroll-mt-24">
+        <div id="section-6" className="mt-8 scroll-mt-24">
           <SectionHeader
             num="6"
             title="UI DESIGN"
@@ -3267,14 +3681,16 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-3 text-[8px] tracking-wider"
             style={{ fontFamily: MONO, color: TEXT_DIM }}
           >
-            <span style={{ color: TEXT_MID }}>Fig. 15</span> &mdash; Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
+            <span style={{ color: TEXT_MID }}>Fig. 18</span> &mdash; Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
           </p>
         </div>
+
+        <SectionTransition num="07" name="limitations" />
 
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 7: LIMITATIONS AND DISCLAIMERS
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-7" className="mt-24 scroll-mt-24">
+        <div id="section-7" className="mt-8 scroll-mt-24">
           <SectionHeader
             num="7"
             title="LIMITATIONS"
@@ -3338,10 +3754,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
+        <SectionTransition num="08" name="data_sources" />
+
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 8: DATA SOURCES
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-8" className="mt-24 scroll-mt-24">
+        <div id="section-8" className="mt-8 scroll-mt-24">
           <SectionHeader
             num="8"
             title="DATA SOURCES"
@@ -3376,7 +3794,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                       src.tag === "PRIMARY"
                         ? GREEN
                         : src.tag === "CODE"
-                          ? "#B87333"
+                          ? COPPER
                           : TEXT_DIM,
                   }}
                 >
@@ -3413,10 +3831,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
+        <SectionTransition num="09" name="conclusions" />
+
         {/* ══════════════════════════════════════════════════════════════════
             SECTION 9: CONCLUSIONS
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-9" className="mt-24 scroll-mt-24">
+        <div id="section-9" className="mt-8 scroll-mt-24">
           <SectionHeader
             num="9"
             title="CONCLUSIONS"

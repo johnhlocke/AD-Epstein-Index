@@ -569,8 +569,8 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
     <div>
       <h2 className="mb-2 font-serif text-2xl font-bold">Aesthetic Profile</h2>
 
-      {/* Scored Home Qualities summary */}
-      {summary && (
+      {/* Scored Home Qualities summary — prefer Opus aesthetic_profile over template */}
+      {(feature.aesthetic_profile || summary) && (
         <div className="mb-6 rounded-lg border border-border bg-muted/30 p-5">
           <div className="flex items-center gap-2">
             <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
@@ -582,9 +582,15 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
               </span>
             )}
           </div>
-          <p className="mt-2 font-serif text-base leading-[1.7] text-foreground">
-            {summary}
-          </p>
+          {feature.aesthetic_profile ? (
+            <blockquote className="mt-3 border-l-2 border-foreground/20 pl-4 font-serif text-lg italic leading-[1.8] text-foreground">
+              {feature.aesthetic_profile}
+            </blockquote>
+          ) : (
+            <p className="mt-2 font-serif text-base leading-[1.7] text-foreground">
+              {summary}
+            </p>
+          )}
         </div>
       )}
 

@@ -6,6 +6,57 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-20 (Sessions 46-47)
+
+### Added — Agent Office Demo (Public)
+
+- **`tools/agent-office/agent-office-demo.html`** — Standalone demo version of the Agent Office dashboard with `FORCE_DEMO = true`. Features a 20-step narrative loop that simulates the full pipeline lifecycle (Scout discovering issues → Courier downloading → Reader extracting → Detective cross-referencing → Researcher building dossiers → Editor reviewing). Includes coordinated Agent Network states, Newsroom Chatter with personality-driven watercooler conversations, Miranda sprite pose variation, and DEMO badge overlay.
+- **`web/public/demo/`** — Deployed demo to Vercel at `wheretheylive.world/demo/`. 40 compressed PNG sprite/background assets (77MB → 13MB via `pngquant --quality=40-80`). Added `<base href="/demo/">` to fix relative path resolution after Vercel trailing-slash stripping.
+- **Data accuracy**: Replaced placeholder names (Ghislaine Maxwell, Leslie Wexner) with actual confirmed AD-featured homeowners (Mica Ertegun, Ronald Lauder) — demo should only reference real data.
+
+### Added — Utility Scripts
+
+- **`src/backfill_full_pages.py`** — Downloads all article pages for features with 0 images, using spread data page ranges and Azure Blob URLs. 276 lines.
+- **`src/normalize_locations.py`** — Location normalization pipeline for standardizing city/state/country values across all features. 221 lines.
+- **`src/haiku_name_recovery.py`** — Haiku-powered homeowner name recovery for Anonymous features using article images. 212 lines.
+
+### Added — Website Pages & Assets
+
+- **`web/src/app/fullgraph/page.tsx`** — Standalone full-screen Knowledge Graph page at `/fullgraph` with no nav offset, for embedding/sharing.
+- **`web/public/sidenotes/`** — 8 editorial sidenote images for methodology section (autonomy-robot, fedex-hub-spoke, icij-graph, newsroom-roles, react-pattern, zuckerman-dossier, ad-decades, coppola-fb).
+- **`web/public/*.svg`** — Architecture diagrams: `fig4-pipeline-v6.svg`, `hub-spoke-diagram.svg`, `monolithic-diagram.svg`, `decentralized-diagram.svg`.
+- **`docs/baseline-methodology.md`** — Full statistical methodology document for the aesthetic baseline comparison (PERMANOVA, Mann-Whitney U, Cliff's Delta, Elastic Net, bootstrap subsampling).
+
+### Changed — Scoring Pipeline v2.3
+
+- **`src/score_features.py`** — Version bumped to v2.3 with three key changes:
+  - **`aesthetic_summary`**: New 1-3 sentence design-critic assessment per feature ("A collector's fortress..." style). Added to prompt and DB write.
+  - **Structural overwrite on rescore**: `parse_structural(overwrite=True)` when `--rescore` flag is set — Opus values replace existing DB fields instead of only filling blanks.
+  - **Expanded `subject_category`**: `Designer` → `Design`, added `Art` (285) and `Media` (16) categories.
+  - **`--offset` flag**: Skip N features before processing (for resuming interrupted runs).
+  - **Checkpoint refresh**: Supabase client refreshed every 500 features to prevent stale connections.
+  - **Change tracking**: `track_changes()` logs homeowner_name changes to `data/name_changes.json` for audit.
+
+### Changed — Methodology Section Overhaul
+
+- **`web/src/components/landing/MethodologySection.tsx`** — Major rewrite (+896/-476 lines):
+  - **GridDivider component**: Full-width hairline dividers with tick marks at 6-column grid gutter centers.
+  - **SectionTransition component**: Python-style `# ── 03 SECTION_NAME ──` dividers between methodology sections.
+  - **CSS typography system** (`globals.css`): 7 utility classes (`.s-label`, `.s-title`, `.s-subtitle`, `.s-divider`, `.s-body`, `.s-subhead`, `.s-summary-label`) for consistent methodology section styling.
+  - **Sidenote images**: Editorial margin illustrations (hub-spoke diagram, ICIJ knowledge graph, newsroom roles, etc.) contextualized with real-world parallels.
+  - **Expanded content**: Agent Methodology text expanded from 3 paragraphs to 14, with academic citations and real-world parallels for every architectural decision.
+
+### Changed — Methodology Text Expansion
+
+- **`docs/text-edit/part2-agent-methodology.md`** — Agent Methodology narrative rewrite: 14 detailed paragraphs covering hub-and-spoke architecture, episodic memory, DOJ search challenges, cross-reference pipeline, LLM triage, and the autonomous agent workflow. Includes Bourdieu social capital theory framing.
+
+### Changed — Aesthetic Radar & Types
+
+- **`web/src/components/dossier/DossierAestheticRadar.tsx`** — Minor adjustments to radar chart rendering.
+- **`web/src/lib/types.ts`** — Added `aesthetic_profile: string | null` to Feature interface.
+
+---
+
 ## 2026-02-19 (Sessions 43-45)
 
 ### Added — Haiku Vision Feature Classifier

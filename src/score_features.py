@@ -37,7 +37,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleW
 AD_ARCHIVE_BLOB = "https://architecturaldigest.blob.core.windows.net/architecturaldigest{date}thumbnails/Pages/0x600/{page}.jpg"
 DEFAULT_MODEL = "claude-opus-4-6"
 MAX_IMAGES = 20  # No practical cap — longest AD articles are ~12 pages
-SCORING_VERSION = "v2.2"  # Added per-axis rationale (1-sentence explanation per score)
+SCORING_VERSION = "v2.3"  # Added aesthetic_summary, notes merge, structural overwrite on rescore
 
 # Score columns in the features table
 SCORE_COLUMNS = [
@@ -81,8 +81,9 @@ def fetch_features(sb, feature_id=None, rescore=False):
     """Fetch features needing scoring, joined with issue data."""
     query = sb.table("features").select(
         "id, issue_id, homeowner_name, article_title, designer_name, "
-        "location_city, location_state, location_country, design_style, "
-        "page_number, score_grandeur"
+        "architecture_firm, location_city, location_state, location_country, "
+        "design_style, page_number, score_grandeur, subject_category, "
+        "article_author, aesthetic_profile"
     )
 
     if feature_id:
@@ -400,11 +401,18 @@ Extract these fields from what you can read in the article pages:
 - social_circle: Mentions of social connections, parties, fundraisers, events hosted
 - previous_owners: Previous owners if mentioned
 
+═══ AESTHETIC SUMMARY ═══
+Write 1-3 short, declarative sentences that capture this home's aesthetic personality. Describe what makes this space distinctive — its character, mood, and what the overall score profile reveals. Write as a design critic, not a listing agent. Be specific and opinionated. Examples of good summaries:
+- "A collector's fortress. Every surface activated with museum-quality objects in deliberate conversation, yet the worn leather and dog beds betray a home that's lived in hard."
+- "Glossy, editorial, and performing for an audience. The Warhol above the fireplace isn't there because they love Warhol — it's there because you'll recognize it."
+- "Generational warmth in a house that's been slowly improved, never renovated. The patina is real. Nothing here was chosen to impress."
+
 RULES:
 - Score EVERY axis 1-5. No nulls for scores. If uncertain, use your best judgment.
 - For EACH score, write a 1-sentence rationale explaining WHY you chose that number for THIS specific home. Reference what you see in the images or read in the text. Be specific — name materials, rooms, objects, or article quotes that informed your score.
 - Extract structural data ONLY from what is stated or visible in the images. Use null for missing fields.
 - Read captions and small text — they contain designer credits, locations, and photographer names.
+- The aesthetic_summary should feel like a confident design critic's verdict — vivid, specific, no hedging.
 
 Respond with ONLY a JSON object:
 {{
@@ -426,6 +434,7 @@ Respond with ONLY a JSON object:
   "curation_rationale": "1 sentence why",
   "theatricality": <1-5>,
   "theatricality_rationale": "1 sentence why",
+  "aesthetic_summary": "1-3 declarative sentences",
   "homeowner_name": "Name or null",
   "designer_name": "Name or null",
   "architecture_firm": "Firm or null",
@@ -437,7 +446,7 @@ Respond with ONLY a JSON object:
   "square_footage": null,
   "cost": "Amount or null",
   "article_author": "Author name or null",
-  "subject_category": "Business|Celebrity|Designer|Socialite|Royalty|Politician|Private|Other",
+  "subject_category": "Business|Celebrity|Design|Art|Media|Socialite|Royalty|Politician|Private|Other",
   "notable_guests": [],
   "social_circle": "text or null",
   "previous_owners": []
@@ -511,38 +520,59 @@ def parse_scores(parsed):
     return scores
 
 
-def parse_structural(parsed, current_feature):
-    """Extract structural enrichment fields. Only update if new value is better."""
+def parse_structural(parsed, current_feature, overwrite=False):
+    """Extract structural enrichment fields.
+
+    If overwrite=True (rescore mode), always update fields with non-null Opus values.
+    If overwrite=False, only fill empty fields (original behavior).
+    """
     update = {}
 
-    def maybe_set(db_col, value):
-        if value and str(value).lower() not in ("null", "none", "n/a", "unknown", ""):
-            # Only update if currently empty or if this is a richer value
-            current = current_feature.get(db_col)
-            if not current or str(current).lower() in ("null", "none", "unknown", ""):
+    def _is_empty(val):
+        return not val or str(val).lower() in ("null", "none", "n/a", "unknown", "")
+
+    def _is_valid(val):
+        return val and str(val).lower() not in ("null", "none", "n/a", "unknown", "")
+
+    def set_field(db_col, value):
+        if _is_valid(value):
+            if overwrite or _is_empty(current_feature.get(db_col)):
                 update[db_col] = value
 
-    maybe_set("designer_name", parsed.get("designer_name"))
-    maybe_set("architecture_firm", parsed.get("architecture_firm"))
-    maybe_set("location_city", parsed.get("location_city"))
-    maybe_set("location_state", parsed.get("location_state"))
-    maybe_set("location_country", parsed.get("location_country"))
-    maybe_set("design_style", parsed.get("design_style"))
-    maybe_set("article_author", parsed.get("article_author"))
+    # These fields get overwritten on rescore (Opus reads actual article pages)
+    set_field("designer_name", parsed.get("designer_name"))
+    set_field("architecture_firm", parsed.get("architecture_firm"))
+    set_field("location_city", parsed.get("location_city"))
+    set_field("location_state", parsed.get("location_state"))
+    set_field("location_country", parsed.get("location_country"))
+    set_field("design_style", parsed.get("design_style"))
+    set_field("article_author", parsed.get("article_author"))
 
-    # Subject category
+    # Designer: if Opus says null and we're in overwrite mode, clear false positives
+    if overwrite:
+        opus_designer = parsed.get("designer_name")
+        if _is_empty(opus_designer) and not _is_empty(current_feature.get("designer_name")):
+            # Opus sees no designer credited — clear the field (likely a false positive)
+            update["designer_name"] = None
+
+    # Subject category — always set if valid
     cat = parsed.get("subject_category")
     if cat and str(cat).lower() not in ("null", "none", ""):
         valid_cats = {"Business", "Celebrity", "Design", "Art", "Media", "Socialite", "Royalty", "Politician", "Private", "Other"}
         if cat in valid_cats:
             update["subject_category"] = cat
 
-    # Homeowner name — only if currently Anonymous/Unknown
+    # Homeowner name — only upgrade Anonymous/Unknown, NEVER downgrade a real name
     hw = parsed.get("homeowner_name")
-    if hw and str(hw).lower() not in ("null", "none", "unknown", "anonymous", ""):
+    if _is_valid(hw):
         cur_name = current_feature.get("homeowner_name") or ""
         if cur_name.lower() in ("unknown", "anonymous", ""):
             update["homeowner_name"] = hw
+
+    # Aesthetic summary — always write
+    summary = parsed.get("aesthetic_summary")
+    if _is_valid(summary):
+        update["aesthetic_profile"] = str(summary)
 
     # Year built — integer
     yb = parsed.get("year_built")
@@ -580,6 +610,30 @@ def parse_rationale(parsed):
     return rationale
 
 
+def merge_social_into_notes(sb, feature_id, social_data):
+    """Merge social data into existing notes without destroying spread_pages etc."""
+    if not social_data:
+        return None
+
+    # Read current notes
+    result = sb.table("features").select("notes").eq("id", feature_id).single().execute()
+    existing = result.data.get("notes") if result.data else None
+
+    notes = {}
+    if existing:
+        if isinstance(existing, str):
+            try:
+                notes = json.loads(existing)
+            except (json.JSONDecodeError, TypeError):
+                notes = {}
+        elif isinstance(existing, dict):
+            notes = existing
+
+    # Merge social data (overwrite social keys, preserve spread keys)
+    notes.update(social_data)
+    return json.dumps(notes)
+
+
 def update_feature_scores(sb, feature_id, scores, structural, social_data, rationale=None):
     """Write scores + structural enrichment + rationale to Supabase."""
     update = {}
@@ -592,9 +646,10 @@ def update_feature_scores(sb, feature_id, scores, structural, social_data, ratio
     if rationale:
         update["scoring_rationale"] = rationale
 
-    # Store social data in notes if present
-    if social_data:
-        update["notes"] = json.dumps(social_data)
+    # MERGE social data into notes (preserves spread_pages, spread_page_count)
+    merged_notes = merge_social_into_notes(sb, feature_id, social_data)
+    if merged_notes:
+        update["notes"] = merged_notes
 
     try:
         sb.table("features").update(update).eq("id", feature_id).execute()
@@ -608,6 +663,39 @@ def update_feature_scores(sb, feature_id, scores, structural, social_data, ratio
 # Main
 # ═══════════════════════════════════════════════════════════
 
+CHANGE_LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "rescore_changes.jsonl")
+
+
+def log_change(feature_id, field, old_value, new_value):
+    """Append a change record to the change log."""
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "feature_id": feature_id,
+        "field": field,
+        "old": old_value,
+        "new": new_value,
+    }
+    os.makedirs(os.path.dirname(CHANGE_LOG_PATH), exist_ok=True)
+    with open(CHANGE_LOG_PATH, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def track_changes(feature_id, current_feature, structural):
+    """Log all field changes, with special attention to homeowner_name."""
+    name_changed = False
+    for field, new_val in structural.items():
+        old_val = current_feature.get(field)
+        # Normalize for comparison
+        old_str = str(old_val).lower() if old_val else ""
+        new_str = str(new_val).lower() if new_val else ""
+        if old_str != new_str:
+            log_change(feature_id, field, old_val, new_val)
+            if field == "homeowner_name":
+                name_changed = True
+                print(f"  *** NAME CHANGE: '{old_val}' → '{new_val}' ***")
+    return name_changed
+
+
 def main():
     parser = argparse.ArgumentParser(description="Score AD features with v2 aesthetic instrument")
     parser.add_argument("--dry-run", action="store_true", help="Preview without scoring")
@@ -615,20 +703,27 @@ def main():
     parser.add_argument("--id", type=int, help="Process single feature ID")
     parser.add_argument("--rescore", action="store_true", help="Re-score already-scored features")
     parser.add_argument("--model", default=DEFAULT_MODEL, help=f"Model to use (default: {DEFAULT_MODEL})")
+    parser.add_argument("--offset", type=int, default=0, help="Skip first N features (for resuming)")
     args = parser.parse_args()
 
     model = args.model
     pricing = MODEL_PRICING.get(model, MODEL_PRICING[DEFAULT_MODEL])
 
     print("=" * 60)
-    print("AESTHETIC SCORING v2 — Space / Story / Stage")
+    print(f"AESTHETIC SCORING {SCORING_VERSION} — Space / Story / Stage")
     print(f"Model: {model} (${pricing['input']}/{pricing['output']} per M tokens)")
+    if args.rescore:
+        print("MODE: RESCORE (overwriting structural fields)")
     print("=" * 60)
 
     sb = get_supabase()
 
     features = fetch_features(sb, feature_id=args.id, rescore=args.rescore)
     print(f"\nFound {len(features)} features to score")
+
+    if args.offset:
+        features = features[args.offset:]
+        print(f"Skipping first {args.offset}, starting from feature {args.offset + 1}")
 
     if args.limit:
         features = features[:args.limit]
@@ -640,6 +735,7 @@ def main():
     scored = 0
     skipped = 0
     errors = 0
+    name_changes = 0
 
     for i, feat in enumerate(features):
         fid = feat["feature_id"]
@@ -666,10 +762,9 @@ def main():
         print(f"  {len(images)} pages from {source}")
 
         if args.dry_run:
-            # Estimate cost: ~550 tokens per image + 2000 prompt + 700 output
-            # v2.2: output ~doubled from v2.1 due to per-axis rationale sentences
-            est_in = len(images) * 550 + 2000
-            est_out = 700
+            # Estimate cost: ~550 tokens per image + 2500 prompt + 900 output
+            est_in = len(images) * 550 + 2500
+            est_out = 900
             est_cost = (est_in / 1_000_000) * pricing["input"] + (est_out / 1_000_000) * pricing["output"]
             total_cost += est_cost
             scored += 1
@@ -700,10 +795,14 @@ def main():
         print(f"  SCORES: {score_str}")
         print(f"  TOKENS: {inp} in / {out} out / ${cost:.4f}")
 
-        # Parse structural enrichment
-        structural = parse_structural(parsed, feat)
+        # Parse structural enrichment (overwrite=True when rescoring)
+        structural = parse_structural(parsed, feat, overwrite=args.rescore)
         if structural:
             print(f"  ENRICHED: {', '.join(f'{k}={v}' for k, v in structural.items())}")
+
+        # Track and log all changes (especially homeowner_name)
+        if track_changes(fid, feat, structural):
+            name_changes += 1
 
         # Parse per-axis rationale
         rationale = parse_rationale(parsed)
@@ -712,6 +811,13 @@ def main():
             if len(rationale) < 9:
                 missing = [k for k in SCORE_KEY_MAP if k not in rationale]
                 print(f"  WARNING: Missing rationale for: {', '.join(missing)}")
+
+        # Aesthetic summary
+        summary = parsed.get("aesthetic_summary")
+        if summary and str(summary).lower() not in ("null", "none", ""):
+            # Truncate for display
+            display = summary[:80] + "..." if len(summary) > 80 else summary
+            print(f"  SUMMARY: {display}")
 
         # Parse social data
         social = {}
@@ -729,15 +835,22 @@ def main():
         # Rate limit
         time.sleep(0.5)
 
+        # Checkpoint: refresh Supabase client every 500 features
+        if (i + 1) % 500 == 0:
+            sb = get_supabase()
+            print(f"\n  --- CHECKPOINT: {scored} scored, ${total_cost:.2f} spent ---\n")
+
     # Summary
     print(f"\n{'=' * 60}")
     print(f"DONE: {scored} scored, {skipped} skipped, {errors} errors")
     print(f"COST: ${total_cost:.2f} ({total_tokens_in:,} in / {total_tokens_out:,} out)")
+    if name_changes:
+        print(f"NAME CHANGES: {name_changes} (see {CHANGE_LOG_PATH})")
     if args.dry_run:
         print(f"(DRY RUN — estimated cost for {scored} features)")
         per_feat = total_cost / scored if scored else 0
-        all_est = per_feat * 1600
-        print(f"Per feature: ~${per_feat:.4f} | All 1,600: ~${all_est:.0f}")
+        all_est = per_feat * len(features)
+        print(f"Per feature: ~${per_feat:.4f} | All {len(features)}: ~${all_est:.0f}")
 
 
 if __name__ == "__main__":

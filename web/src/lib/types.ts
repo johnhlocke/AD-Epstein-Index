@@ -51,6 +51,7 @@ export interface Feature {
   scoring_version: string | null;
   scoring_rationale: Record<string, string> | null;
   scored_at: string | null;
+  aesthetic_profile: string | null;
 }
 
 export interface Dossier {
