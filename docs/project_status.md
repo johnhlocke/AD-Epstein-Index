@@ -112,8 +112,8 @@ This file should be automatically updated when necessary to answer three key que
 | Opus Vision scoring pipeline (score_features.py) | Phase 2 | Done |
 | Run Opus Vision on all ~1,600 features (v2 scoring) | Phase 2 | Done (1,590 scored) |
 | Full archive re-extraction (spread data, 2,305 new features) | Phase 1 | Done |
-| Opus Vision scoring batch 2 (new features + rescore pre-update) | Phase 2 | In Progress (1,306 remaining) |
-| Subject category extraction for all features | Phase 2 | In Progress (2,785/4,080 done) |
+| Opus Vision scoring batch 2 (new features + rescore pre-update) | Phase 2 | Done (3,772/3,772) |
+| Subject category extraction for all features | Phase 2 | Done (3,769/3,769) |
 | Image backfill for features with 0 images | Phase 2 | Done (73 features) |
 | CLAUDE.md modernization (reflect current state) | Docs | Done |
 | Methodology section content overhaul (9 sections, citations) | Phase 3 | Done |
@@ -170,6 +170,10 @@ This file should be automatically updated when necessary to answer three key que
 | Full-screen Knowledge Graph page (/fullgraph) | Phase 3 | Done |
 | Baseline statistical methodology document | Phase 2 | Done |
 | Architecture SVG diagrams (hub-spoke, monolithic, decentralized, pipeline) | Phase 3 | Done |
+| Scorer mismatch flagging (never auto-overwrite/blank) | Tooling | Done |
+| Multi-feature Opus audit (homeowner vs designer verification) | Phase 2 | Done |
+| Multi-feature dossier linking (28 orphans → confirmed) | Phase 2 | Done |
+| Opus Vision scoring complete (3,772/3,772 at v2.3) | Phase 2 | Done |
 
 ## 2. What's Been Accomplished
 

@@ -37,7 +37,7 @@ HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleW
 AD_ARCHIVE_BLOB = "https://architecturaldigest.blob.core.windows.net/architecturaldigest{date}thumbnails/Pages/0x600/{page}.jpg"
 DEFAULT_MODEL = "claude-opus-4-6"
 MAX_IMAGES = 20  # No practical cap — longest AD articles are ~12 pages
-SCORING_VERSION = "v2.3"  # Added aesthetic_summary, notes merge, structural overwrite on rescore
+SCORING_VERSION = "v2.3"  # aesthetic_summary, mismatch flagging (never auto-overwrite/blank)
 
 # Score columns in the features table
 SCORE_COLUMNS = [
@@ -520,13 +520,35 @@ def parse_scores(parsed):
     return scores
 
 
-def parse_structural(parsed, current_feature, overwrite=False):
+MISMATCH_LOG_PATH = os.path.join(os.path.dirname(__file__), "..", "data", "rescore_mismatches.jsonl")
+
+
+def log_mismatch(feature_id, field, existing, opus_value):
+    """Log a mismatch for human review instead of auto-overwriting."""
+    entry = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "feature_id": feature_id,
+        "field": field,
+        "existing": existing,
+        "opus": opus_value,
+        "reviewed": False,
+    }
+    os.makedirs(os.path.dirname(MISMATCH_LOG_PATH), exist_ok=True)
+    with open(MISMATCH_LOG_PATH, "a") as f:
+        f.write(json.dumps(entry) + "\n")
+
+
+def parse_structural(parsed, current_feature):
     """Extract structural enrichment fields.
 
-    If overwrite=True (rescore mode), always update fields with non-null Opus values.
-    If overwrite=False, only fill empty fields (original behavior).
+    Behavior:
+    - Empty field + Opus has value → auto-fill (always)
+    - Non-empty field + Opus has SAME value → no-op
+    - Non-empty field + Opus has DIFFERENT value → flag mismatch for review (never auto-overwrite)
+    - Non-empty field + Opus returns null → flag mismatch for review (never auto-blank)
     """
     update = {}
+    feature_id = current_feature.get("id") or current_feature.get("feature_id")
 
     def _is_empty(val):
         return not val or str(val).lower() in ("null", "none", "n/a", "unknown", "")
@@ -534,12 +556,24 @@ def parse_structural(parsed, current_feature, overwrite=False):
     def _is_valid(val):
         return val and str(val).lower() not in ("null", "none", "n/a", "unknown", "")
 
-    def set_field(db_col, value):
-        if _is_valid(value):
-            if overwrite or _is_empty(current_feature.get(db_col)):
-                update[db_col] = value
+    def _normalize(val):
+        if not val:
+            return ""
+        return str(val).lower().strip()
 
-    # These fields get overwritten on rescore (Opus reads actual article pages)
+    def set_field(db_col, value):
+        current = current_feature.get(db_col)
+        if _is_empty(current):
+            # Empty field — auto-fill if Opus has a value
+            if _is_valid(value):
+                update[db_col] = value
+        elif _is_valid(value) and _normalize(current) != _normalize(value):
+            # Both have values but they differ — flag for review
+            log_mismatch(feature_id, db_col, current, value)
+        elif _is_empty(value) and not _is_empty(current):
+            # Opus returned null but we have a value — flag for review (never blank)
+            log_mismatch(feature_id, db_col, current, None)
+
     set_field("designer_name", parsed.get("designer_name"))
     set_field("architecture_firm", parsed.get("architecture_firm"))
     set_field("location_city", parsed.get("location_city"))
@@ -548,13 +582,6 @@ def parse_structural(parsed, current_feature, overwrite=False):
     set_field("design_style", parsed.get("design_style"))
     set_field("article_author", parsed.get("article_author"))
 
-    # Designer: if Opus says null and we're in overwrite mode, clear false positives
-    if overwrite:
-        opus_designer = parsed.get("designer_name")
-        if _is_empty(opus_designer) and not _is_empty(current_feature.get("designer_name")):
-            # Opus sees no designer credited — clear the field (likely a false positive)
-            update["designer_name"] = None
-
     # Subject category — always set if valid
     cat = parsed.get("subject_category")
     if cat and str(cat).lower() not in ("null", "none", ""):
@@ -562,12 +589,14 @@ def parse_structural(parsed, current_feature, overwrite=False):
         if cat in valid_cats:
             update["subject_category"] = cat
 
-    # Homeowner name — only upgrade Anonymous/Unknown, NEVER downgrade a real name
+    # Homeowner name — auto-fill if empty/Unknown/Anonymous, flag mismatch otherwise
     hw = parsed.get("homeowner_name")
+    cur_name = current_feature.get("homeowner_name") or ""
     if _is_valid(hw):
-        cur_name = current_feature.get("homeowner_name") or ""
         if cur_name.lower() in ("unknown", "anonymous", ""):
             update["homeowner_name"] = hw
+        elif _normalize(cur_name) != _normalize(hw):
+            log_mismatch(feature_id, "homeowner_name", cur_name, hw)
 
     # Aesthetic summary — always write
     summary = parsed.get("aesthetic_summary")
@@ -795,8 +824,8 @@ def main():
         print(f"  SCORES: {score_str}")
         print(f"  TOKENS: {inp} in / {out} out / ${cost:.4f}")
 
-        # Parse structural enrichment (overwrite=True when rescoring)
-        structural = parse_structural(parsed, feat, overwrite=args.rescore)
+        # Parse structural enrichment (auto-fill empty fields, flag mismatches for review)
+        structural = parse_structural(parsed, feat)
         if structural:
             print(f"  ENRICHED: {', '.join(f'{k}={v}' for k, v in structural.items())}")
 

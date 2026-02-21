@@ -6,6 +6,46 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-21 (Session 48)
+
+### Fixed — Scorer Mismatch Flagging (Never Auto-Overwrite)
+
+- **`src/score_features.py`** — Replaced destructive `overwrite=True` mode with safe mismatch flagging:
+  - Empty field + Opus value → auto-fill (always)
+  - Both have values but differ → logged to `data/rescore_mismatches.jsonl` for human review (DB untouched)
+  - Opus returns null but field has value → logged as mismatch (never blanks)
+  - Removed `overwrite` parameter from `parse_structural()` — behavior is now always safe
+  - Added `log_mismatch()` function and `MISMATCH_LOG_PATH` constant
+  - Homeowner name mismatches also flagged (previously silently ignored)
+- **929 blanked designers restored** from `data/rescore_changes.jsonl` — the v2.3 rescore had overwritten real designer names with null when Opus couldn't see credits in images
+
+### Fixed — Multi-Feature Homeowner Misattributions (Opus Audit)
+
+- **`src/audit_multi_features.py`** — New Opus Vision audit script: sends first 3 article images to Opus for each feature, asks who is the homeowner vs designer. $1.51 for 50 features.
+- **`src/audit_bradfield.py`** — Same audit for Geoffrey Bradfield's 7 features ($0.21). Result: 6 are his own homes, 1 is a client's home.
+- **Homeowner fixes applied**:
+  - #5749: Geoffrey Bradfield → Anonymous (client's Belgravia duplex)
+  - #5658: Karin Blake → Paul Attanasio and Katie Jacobs (Blake was designer)
+  - #6626: Pierre Yovanovitch → Anonymous (client's Belgian home)
+  - #9121, #9118: Michael Jackson → Anonymous (completely different articles misattributed)
+  - #7557: Mr. Peggotty → Anonymous + designer fixed to Robert Venturi and Denise Scott Brown
+- **Features deleted** (not home tours): #5226 (Alexa Hampton shopping guide), #9081 (Steve Wynn's Encore hotel), #9730 (Sara Zewde landscape article), #7201 (Nina Simone), #6039 (Suzanne Rheinstein regional roundup)
+
+### Added — Multi-Feature Dossier Linking
+
+- **28 new confirmed dossiers** created for orphaned features belonging to already-confirmed Epstein connections. Each copies evidence from the source dossier with linking metadata.
+- Confirmed dossiers: 150 → **178**. Unique confirmed people unchanged (138). Epstein treatment group for statistical analysis now covers 178 scored features.
+- Key people linked: Karin Blake (4 homes), Candice Bergen (3), Geoffrey Bradfield (2), Clive Davis (2), Sara Story (1), Sharon Stone (1), Steve Wynn (1), Mica Ertegun (1), + 20 more.
+
+### Database
+
+- **3,769 features** (was 3,773 — 5 deleted, 1 deleted earlier)
+- **178 confirmed dossiers** (was 150 — 28 linked)
+- **1,048 total dossiers**
+- **All 3,772 features scored v2.3** (last holdout #8139 rescored)
+
+---
+
 ## 2026-02-20 (Sessions 46-47)
 
 ### Added — Agent Office Demo (Public)
