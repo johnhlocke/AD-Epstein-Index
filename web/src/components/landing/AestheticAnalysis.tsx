@@ -39,7 +39,7 @@ export function AestheticAnalysis() {
             To quantify the aesthetic patterns, a six-dimension taxonomy was
             developed covering architectural period, decorative philosophy,
             cultural orientation, material palette, art and display, and spatial
-            character. Each of the 1,628 cataloged homes was tagged across all
+            character. Each of the 3,763 cataloged homes was tagged across all
             six dimensions using AI-assisted classification trained on the
             original magazine text and page imagery.
           </p>

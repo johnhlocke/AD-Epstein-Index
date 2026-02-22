@@ -6,6 +6,45 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-22 (Session 49)
+
+### Added — Reliability Appendix Enrichment
+
+- **`src/export_reliability_data.py`** — New enrichment script that queries Supabase for feature images and article titles, generates pattern-based per-feature insight text, and outputs enriched `data.json` for the `/reliability` appendix page
+- **Image contact-sheet row** — Each of the 100 test-retest cards now displays all article page images in a horizontal row above the header (flex-wrap at 6 per row, 200px height, grayscale filter, lazy-loaded)
+- **Analysis callout** — Warm amber-tinted callout at bottom of each card with copper left border accent, showing pattern-based insight (e.g., which axes disagree, directional drift, group clustering)
+- **Numbered section headers** — Large "Test–Retest: 01" through "Test–Retest: 100" headers above each card with increased spacing between cards (`gap-14`)
+
+### Fixed — Non-Home Features Removed from Test-Retest Sample
+
+- **5 non-home features deleted from Supabase** (features + images + cross-references + dossiers):
+  - #9221 "Revival of the Fittest" (yacht)
+  - #5394 "The Doris Duke Auction" (auction)
+  - #8812 "JEWELS by Design" (jewelry article)
+  - #9208 "SEA WORTHY" (boat builder)
+  - #6671 "Flock Star" (not a home tour)
+- **5 replacement features scored** with blind A/B Opus Vision runs ($1.71):
+  - #7299 Diana Phipps — "Ringing In the Old" (9/9 perfect)
+  - #7280 Unknown — "On Presidio Heights" (9/9 perfect)
+  - #7510 Carol and Randolph Updyke — "Cherokee Plantation" (7/9)
+  - #4519 Ramon Novarro — "Ramon Novarro" (7/9)
+  - #9271 Unknown — "Speaking Volumes" (8/9)
+- **Updated all hardcoded stats** across website:
+  - Feature count: 3,768 → **3,763** (9 files across BaselineAesthetic, PCAChart, AestheticMethodologySection, AestheticAnalysis)
+  - ICC range: 0.954–0.991 → **0.949–0.991** (Theatricality now lowest)
+  - Exact agreement: 90.9% (818/900) → **91.1% (820/900)**
+  - Within ±1: 99.9% → **100%** (zero comparisons exceeding ±1)
+  - Study cost: $33.18 → **$34.89** (including replacements)
+  - Full ICC table updated per-axis (9 rows + mean row)
+
+### Database
+
+- **3,763 features** (was 3,769 — 6 deleted: 5 test-retest + 1 dossier cascade)
+- **178 confirmed dossiers** (unchanged)
+- **100 test-retest features** refreshed (5 swapped, all legitimate home tours)
+
+---
+
 ## 2026-02-21 (Session 48)
 
 ### Fixed — Scorer Mismatch Flagging (Never Auto-Overwrite)

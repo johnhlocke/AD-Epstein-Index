@@ -10,6 +10,7 @@ import {
   Tooltip,
 } from "recharts";
 import { useMounted } from "@/lib/use-mounted";
+import { GROUP_COLORS } from "@/lib/design-tokens";
 
 // ── Warm dark-cream palette — scholarly instrument, not terminal ─────────────
 const MONO = "JetBrains Mono, monospace";
@@ -261,11 +262,7 @@ const radarData = groups.flatMap((g) => g.axes).map((axis) => ({
 const axisGroupMap: Record<string, string> = {};
 groups.forEach((g) => g.axes.forEach((a) => (axisGroupMap[a.name] = g.label)));
 
-const GROUP_COLORS: Record<string, string> = {
-  SPACE: "#B0A594",   // TEXT_MID — neutral
-  STORY: "#D2AA64",   // GOLD — warm
-  STAGE: "#B87333",   // COPPER — hot
-};
+// GROUP_COLORS imported from @/lib/design-tokens
 
 function RadarAxisTick({ payload, x, y, textAnchor }: any) {
   const name = payload.value as string;
@@ -901,10 +898,13 @@ export function AestheticMethodologySection() {
                 className="mt-3 text-[13px] leading-[1.7]"
                 style={{ fontFamily: BODY, color: TEXT_MID }}
               >
-                Test&ndash;retest reliability study completed: 100 stratified
-                features scored three independent times (2,700 comparisons).{" "}
-                <span style={{ color: GOLD }}>87% exact agreement</span>,{" "}
-                <span style={{ color: GOLD }}>99.7% within &plusmn;1</span>.
+                Test&ndash;retest reliability study completed: 100 random
+                features scored three independent times (900 comparisons).
+                ICC(3,1) ranged{" "}
+                <span style={{ color: GOLD }}>0.949&ndash;0.991</span>{" "}
+                across all nine axes (&ldquo;Excellent&rdquo;).{" "}
+                <span style={{ color: GOLD }}>91.1% exact agreement</span>,{" "}
+                <span style={{ color: GOLD }}>100% within &plusmn;1</span>.
                 See Section 4 below for full results and methodology.
               </p>
             </div>
@@ -946,7 +946,7 @@ export function AestheticMethodologySection() {
           <SectionHeader
             num="4"
             title="SCORING RELIABILITY"
-            subtitle="Three independent runs. 2,700 comparisons. Strong measurement consistency."
+            subtitle="Three independent runs. 900 axis-comparisons. ICC(3,1) &ge; 0.949 on all nine axes."
           />
 
           {/* ── Key Findings — hero stats ── */}
@@ -963,9 +963,9 @@ export function AestheticMethodologySection() {
 
             <div className="mt-6 grid gap-6 md:grid-cols-3">
               {[
-                { stat: "87%", label: "Exact Agreement", note: "Identical scores across all three runs" },
-                { stat: "99.7%", label: "Within \u00B11", note: "Only 3 outlier scores out of 900 per run" },
-                { stat: "0.00", label: "Systematic Bias", note: "Mean axis deviations all near zero" },
+                { stat: "91.1%", label: "Exact Agreement", note: "Identical scores across all three runs (820/900)" },
+                { stat: "100%", label: "Within \u00B11", note: "Zero comparisons out of 900 exceeded \u00B11" },
+                { stat: "0.969", label: "Median ICC", note: "Excellent reliability on all nine axes (Koo & Li)" },
               ].map((item) => (
                 <div key={item.label} className="text-center">
                   <p
@@ -1005,22 +1005,28 @@ export function AestheticMethodologySection() {
                   </p>
                   <div className="mt-2 flex flex-col gap-1.5">
                     {[
-                      { axis: "Grandeur", r2: "92%", r3: "89%", note: "Most stable axis" },
-                      { axis: "Theatricality", r2: "90%", r3: "85%", note: "Consistent wealth signal" },
-                      { axis: "Formality", r2: "88%", r3: "91%", note: "Run 3 even better" },
+                      { axis: "Material Warmth", icc: "0.991", exact: "98%", note: "Highest ICC" },
+                      { axis: "Grandeur", icc: "0.990", exact: "97%", note: "Near-perfect stability" },
+                      { axis: "Historicism", icc: "0.982", exact: "92%", note: "100% within \u00B11" },
                     ].map((row) => (
                       <div key={row.axis} className="flex items-baseline gap-3">
                         <span
-                          className="w-[100px] text-[11px]"
+                          className="w-[110px] text-[11px]"
                           style={{ fontFamily: MONO, color: TEXT_LIGHT }}
                         >
                           {row.axis}
                         </span>
                         <span
-                          className="text-[11px] font-bold"
+                          className="w-[42px] text-[11px] font-bold"
                           style={{ fontFamily: MONO, color: GREEN }}
                         >
-                          {row.r2} / {row.r3}
+                          {row.icc}
+                        </span>
+                        <span
+                          className="w-[32px] text-[10px]"
+                          style={{ fontFamily: MONO, color: TEXT_MID }}
+                        >
+                          {row.exact}
                         </span>
                         <span
                           className="text-[9px]"
@@ -1037,26 +1043,32 @@ export function AestheticMethodologySection() {
                     className="text-[9px] font-bold tracking-wider"
                     style={{ fontFamily: MONO, color: GOLD }}
                   >
-                    LEAST STABLE (STILL STRONG)
+                    LEAST STABLE (STILL EXCELLENT)
                   </p>
                   <div className="mt-2 flex flex-col gap-1.5">
                     {[
-                      { axis: "Hospitality", r2: "87%", r3: "84%", note: "Hardest to score" },
-                      { axis: "Curation", r2: "85%", r3: "87%", note: "100% within \u00B11" },
-                      { axis: "Historicism", r2: "85%", r3: "86%", note: "100% within \u00B11" },
+                      { axis: "Theatricality", icc: "0.949", exact: "86%", note: "Lowest ICC, still Excellent" },
+                      { axis: "Provenance", icc: "0.966", exact: "87%", note: "100% within \u00B11" },
+                      { axis: "Curation", icc: "0.967", exact: "91%", note: "100% within \u00B11" },
                     ].map((row) => (
                       <div key={row.axis} className="flex items-baseline gap-3">
                         <span
-                          className="w-[100px] text-[11px]"
+                          className="w-[110px] text-[11px]"
                           style={{ fontFamily: MONO, color: TEXT_LIGHT }}
                         >
                           {row.axis}
                         </span>
                         <span
-                          className="text-[11px] font-bold"
+                          className="w-[42px] text-[11px] font-bold"
                           style={{ fontFamily: MONO, color: GOLD }}
                         >
-                          {row.r2} / {row.r3}
+                          {row.icc}
+                        </span>
+                        <span
+                          className="w-[32px] text-[10px]"
+                          style={{ fontFamily: MONO, color: TEXT_MID }}
+                        >
+                          {row.exact}
                         </span>
                         <span
                           className="text-[9px]"
@@ -1084,23 +1096,21 @@ export function AestheticMethodologySection() {
               Study Design
             </p>
             <p className="-mt-2">
-              100 features were selected using stratified random sampling: 25
-              from each decade (1990s, 2000s, 2010s, 2020s) to ensure coverage
-              across different eras of magazine photography, formatting, and
-              architectural trends. Each feature was scored three independent
-              times using the same model (Claude Opus) and the same rubric
-              (nine axes, 1&ndash;5 scale), producing 2,700 individual score
-              comparisons.
+              100 features were randomly sampled (seed=42 for reproducibility)
+              from the full corpus of 3,763 scored homes. Each feature was
+              scored three independent times using the same model (Claude Opus
+              4.6) and the same v2.3 rubric (nine axes, 1&ndash;5 scale),
+              producing 900 axis-comparisons across three runs.
             </p>
             <p>
               Sample size of 100 exceeds the Koo &amp; Li (2016) recommended
               minimum of 30 heterogeneous samples for ICC reliability studies.
               Three independent scoring runs satisfy their recommendation of
-              at least three raters or occasions. For our expected ICC (~0.85)
-              and minimum acceptable ICC (~0.75), the Walter, Eliasziw &amp;
-              Donner (1998) formula requires approximately 20&ndash;40
-              subjects with three observations each &mdash; our 100 is well
-              above that threshold.
+              at least three raters or occasions. For our observed ICC range
+              (0.949&ndash;0.991) and minimum acceptable ICC (~0.75), the
+              Walter, Eliasziw &amp; Donner (1998) formula requires
+              approximately 20&ndash;40 subjects with three observations
+              each &mdash; our 100 is well above that threshold.
             </p>
 
             <p
@@ -1114,12 +1124,12 @@ export function AestheticMethodologySection() {
               stateless: every call sends a fresh HTTP request with no session
               ID, no conversation thread, and no memory of prior calls. The
               prompt sends only the page images, homeowner name, issue date,
-              and rubric &mdash; never prior scores. The 13% disagreement rate
-              is itself evidence of independence: a caching system would
+              and rubric &mdash; never prior scores. The 9.1% disagreement
+              rate is itself evidence of independence: a caching system would
               produce 100% agreement. Furthermore, when the model assigns the
-              same score across runs, it writes different rationale text each
-              time &mdash; arriving at the same conclusion through a fresh
-              evaluation, not retrieving a cached answer.
+              same score across runs, it writes different aesthetic summary
+              text each time &mdash; arriving at the same conclusion through
+              a fresh evaluation, not retrieving a cached answer.
             </p>
 
             <p
@@ -1129,18 +1139,25 @@ export function AestheticMethodologySection() {
               Results
             </p>
             <p className="-mt-2">
-              Across all nine axes, Run 2 showed a mean absolute deviation
-              (MAD) of 0.12 from Run 1 scores, with 87.7% exact agreement.
-              Run 3 showed a MAD of 0.14 from Run 1, with 86.6% exact
-              agreement. 99.7% of all scores fell within &plusmn;1 of the
-              original &mdash; only 3 outlier comparisons per run out of 900.
-              Grandeur was the most stable axis (92%/89% exact across Runs
-              2/3), while Hospitality showed the most variability (87%/84%)
-              but still achieved 99% within &plusmn;1.
+              Intraclass Correlation Coefficients (ICC(3,1), two-way mixed,
+              consistency) ranged from 0.949 (Theatricality) to 0.991
+              (Material Warmth) &mdash; all nine axes in the
+              &ldquo;Excellent&rdquo; range (&gt;0.90) by the Koo &amp; Li
+              classification. Composite scores were even more stable: STAGE
+              ICC=0.982, SPACE ICC=0.987, total 9-axis mean ICC=0.987.
+              Run A showed 93.9% mean exact agreement with the original; Run
+              B showed 94.4%. Across all three runs, 91.1% of comparisons
+              were exact matches (820/900), and 100% fell within &plusmn;1
+              &mdash; not a single comparison out of 900 exceeded &plusmn;1.
+              No systematic drift was detected: all
+              axis means shifted by less than 0.04 points between runs.
             </p>
             <p>
-              Total cost for scoring 100 features across three runs: $16.41
-              ($5.47 per run). The instrument is both reliable and economical.
+              Total cost for scoring 100 features across three runs: $34.89
+              ($0.17 per feature per run). The instrument is both reliable
+              and economical. For context, human inter-rater reliability in
+              aesthetic judgment studies typically ranges from ICC 0.60&ndash;0.80;
+              this AI scorer exceeds that threshold on every axis.
             </p>
           </div>
 
@@ -1500,7 +1517,7 @@ export function AestheticMethodologySection() {
                 className="text-[10px] font-bold tracking-wider"
                 style={{ fontFamily: MONO, color: GOLD_DIM }}
               >
-                TEST&ndash;RETEST RELIABILITY &mdash; 3 RUNS &times; 100 FEATURES &times; 9 AXES
+                TEST&ndash;RETEST RELIABILITY &mdash; ICC(3,1) &mdash; 3 RUNS &times; 100 FEATURES &times; 9 AXES
               </p>
             </div>
             <div className="overflow-x-auto p-4">
@@ -1514,33 +1531,33 @@ export function AestheticMethodologySection() {
                       Axis
                     </th>
                     <th className="px-3 py-2 text-right" style={{ color: GREEN }}>
-                      Run 2 MAD
+                      ICC(3,1)
                     </th>
                     <th className="px-3 py-2 text-right" style={{ color: GREEN }}>
-                      Run 2 Exact
+                      Run A Exact
                     </th>
                     <th className="px-3 py-2 text-right" style={{ color: COPPER }}>
-                      Run 3 MAD
-                    </th>
-                    <th className="px-3 py-2 text-right" style={{ color: COPPER }}>
-                      Run 3 Exact
+                      Run B Exact
                     </th>
                     <th className="px-3 py-2 text-right" style={{ color: GOLD }}>
-                      Run 3 &plusmn;1
+                      3-Way Exact
+                    </th>
+                    <th className="px-3 py-2 text-right" style={{ color: TEXT_MID }}>
+                      3-Way &plusmn;1
                     </th>
                   </tr>
                 </thead>
                 <tbody>
                   {[
-                    { axis: "Grandeur", r2mad: "0.08", r2ex: "92%", r3mad: "0.11", r3ex: "89%", r3pm: "100%" },
-                    { axis: "Material Warmth", r2mad: "0.12", r2ex: "88%", r3mad: "0.16", r3ex: "85%", r3pm: "99%" },
-                    { axis: "Maximalism", r2mad: "0.12", r2ex: "88%", r3mad: "0.13", r3ex: "87%", r3pm: "100%" },
-                    { axis: "Historicism", r2mad: "0.15", r2ex: "85%", r3mad: "0.14", r3ex: "86%", r3pm: "100%" },
-                    { axis: "Provenance", r2mad: "0.14", r2ex: "86%", r3mad: "0.15", r3ex: "85%", r3pm: "100%" },
-                    { axis: "Hospitality", r2mad: "0.14", r2ex: "87%", r3mad: "0.17", r3ex: "84%", r3pm: "99%" },
-                    { axis: "Formality", r2mad: "0.12", r2ex: "88%", r3mad: "0.10", r3ex: "91%", r3pm: "99%" },
-                    { axis: "Curation", r2mad: "0.15", r2ex: "85%", r3mad: "0.13", r3ex: "87%", r3pm: "100%" },
-                    { axis: "Theatricality", r2mad: "0.10", r2ex: "90%", r3mad: "0.16", r3ex: "85%", r3pm: "99%" },
+                    { axis: "Grandeur", icc: "0.990", aex: "97%", bex: "98%", tex: "97%", tw: "100%" },
+                    { axis: "Material Warmth", icc: "0.991", aex: "100%", bex: "98%", tex: "98%", tw: "100%" },
+                    { axis: "Maximalism", icc: "0.980", aex: "93%", bex: "97%", tex: "92%", tw: "100%" },
+                    { axis: "Historicism", icc: "0.982", aex: "96%", bex: "93%", tex: "92%", tw: "100%" },
+                    { axis: "Provenance", icc: "0.966", aex: "90%", bex: "94%", tex: "87%", tw: "100%" },
+                    { axis: "Hospitality", icc: "0.969", aex: "91%", bex: "96%", tex: "89%", tw: "100%" },
+                    { axis: "Formality", icc: "0.968", aex: "93%", bex: "92%", tex: "88%", tw: "100%" },
+                    { axis: "Curation", icc: "0.967", aex: "93%", bex: "93%", tex: "91%", tw: "100%" },
+                    { axis: "Theatricality", icc: "0.949", aex: "92%", bex: "89%", tex: "86%", tw: "100%" },
                   ].map((row) => (
                     <tr
                       key={row.axis}
@@ -1550,19 +1567,19 @@ export function AestheticMethodologySection() {
                         {row.axis}
                       </td>
                       <td className="px-3 py-2 text-right" style={{ color: GREEN }}>
-                        {row.r2mad}
+                        {row.icc}
                       </td>
                       <td className="px-3 py-2 text-right" style={{ color: GREEN }}>
-                        {row.r2ex}
+                        {row.aex}
                       </td>
                       <td className="px-3 py-2 text-right" style={{ color: COPPER }}>
-                        {row.r3mad}
-                      </td>
-                      <td className="px-3 py-2 text-right" style={{ color: COPPER }}>
-                        {row.r3ex}
+                        {row.bex}
                       </td>
                       <td className="px-3 py-2 text-right" style={{ color: GOLD }}>
-                        {row.r3pm}
+                        {row.tex}
+                      </td>
+                      <td className="px-3 py-2 text-right" style={{ color: TEXT_MID }}>
+                        {row.tw}
                       </td>
                     </tr>
                   ))}
@@ -1577,36 +1594,52 @@ export function AestheticMethodologySection() {
                       className="px-3 py-2 text-right font-bold"
                       style={{ color: GREEN }}
                     >
-                      0.12
+                      0.974
                     </td>
                     <td
                       className="px-3 py-2 text-right font-bold"
                       style={{ color: GREEN }}
                     >
-                      87.7%
+                      93.9%
                     </td>
                     <td
                       className="px-3 py-2 text-right font-bold"
                       style={{ color: COPPER }}
                     >
-                      0.14
-                    </td>
-                    <td
-                      className="px-3 py-2 text-right font-bold"
-                      style={{ color: COPPER }}
-                    >
-                      86.6%
+                      94.4%
                     </td>
                     <td
                       className="px-3 py-2 text-right font-bold"
                       style={{ color: GOLD }}
                     >
-                      99.7%
+                      91.1%
+                    </td>
+                    <td
+                      className="px-3 py-2 text-right font-bold"
+                      style={{ color: TEXT_MID }}
+                    >
+                      100%
                     </td>
                   </tr>
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* Appendix link */}
+          <div className="mt-8 text-center">
+            <a
+              href="/reliability"
+              className="inline-block rounded border px-6 py-3 text-[12px] font-bold tracking-wider transition-colors hover:opacity-80"
+              style={{
+                fontFamily: MONO,
+                color: COPPER,
+                borderColor: COPPER,
+                backgroundColor: "rgba(184, 115, 51, 0.08)",
+              }}
+            >
+              VIEW ALL 100 HOMES &rarr; FULL APPENDIX
+            </a>
           </div>
         </div>
       </div>

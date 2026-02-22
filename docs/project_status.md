@@ -174,6 +174,9 @@ This file should be automatically updated when necessary to answer three key que
 | Multi-feature Opus audit (homeowner vs designer verification) | Phase 2 | Done |
 | Multi-feature dossier linking (28 orphans → confirmed) | Phase 2 | Done |
 | Opus Vision scoring complete (3,772/3,772 at v2.3) | Phase 2 | Done |
+| Reliability appendix enrichment (images, insights, headers) | Phase 3 | Done |
+| Non-home feature cleanup in test-retest sample (5 swapped) | Phase 2 | Done |
+| Test-retest ICC recomputation (100% within ±1) | Phase 2 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -333,7 +336,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 1,396 issues, **3,775 features** (after 621 non-home deletions), 1,106 cross-references (309 YES), 420 dossiers, **84+ confirmed connections**
+- **Final stats**: 1,396 issues, **3,763 features** (after 621 non-home + 6 additional deletions), 1,106 cross-references (309 YES), 420 dossiers, **84+ confirmed connections**
 - Scoring v2.3: aesthetic_summary field, structural overwrite on rescore, expanded subject_category (Art/Media/Design), --offset flag, checkpoint refresh
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
@@ -350,7 +353,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - Image data now clean: spread data ground truth for 3,642 features, all wrong images removed, missing pages downloaded. 133 features without spread data (department home tours, AD VISITS) retain original images. 297 unmatched fully resolved (164 deleted, 133 kept).
 - After scoring: cross-reference all new homeowner names against BB + DOJ
 - Run Detective → Researcher → Editor pipeline on new hits
-- Test-retest validation COMPLETE: 3 runs × 100 features, 87% exact agreement, 99.8% within ±1, zero systematic bias
+- Test-retest validation COMPLETE: 3 runs × 100 features, 91.1% exact agreement, 100% within ±1, ICC 0.949–0.991 ("Excellent"), $34.89
 - Validate with human calibration set (25-30 features)
 - Opus name recovery: Only safe on features with verified article-specific images. 26/27 previous recoveries were cross-contamination (reverted). Need to re-run on clean images.
 
