@@ -3106,6 +3106,168 @@ export function AestheticMethodologySection() {
         </div>
 
         {/* ══════════════════════════════════════════════════════════════════
+            PLAIN-ENGLISH VALIDATION SUMMARY (between Sections 5 and 6)
+        ══════════════════════════════════════════════════════════════════ */}
+        <div className="mt-24">
+          <p
+            className="text-[10px] font-bold uppercase tracking-[0.18em]"
+            style={{ fontFamily: MONO, color: COPPER }}
+          >
+            In Plain English
+          </p>
+          <p
+            className="mt-2 text-[22px] font-light leading-[1.4]"
+            style={{ fontFamily: BODY, color: TEXT_LIGHT }}
+          >
+            Three tests, one question: can we trust the numbers?
+          </p>
+
+          <div
+            className="mt-10 flex flex-col gap-8 text-[14px] leading-[1.75] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+            style={{ fontFamily: BODY, color: TEXT_MID }}
+          >
+            {/* Test-Retest */}
+            <div>
+              <p
+                className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em]"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                Test 1 &mdash; Test-Retest Reliability
+              </p>
+              <p>
+                <em style={{ color: TEXT_DIM }}>&ldquo;If the same AI scores the same home twice,
+                does it give the same answer?&rdquo;</em>
+              </p>
+              <p className="mt-2">
+                We had Opus score 100 homes three separate times. Result:{" "}
+                <strong style={{ color: TEXT_LIGHT }}>91.1% exact match</strong>,{" "}
+                <strong style={{ color: TEXT_LIGHT }}>100% within &plusmn;1 point</strong>.
+                ICC 0.949&ndash;0.991. The scorer is extremely consistent with
+                itself &mdash; like a bathroom scale that reads 150.2, then
+                150.1, then 150.3. Not perfectly identical each time, but close
+                enough to trust.
+              </p>
+            </div>
+
+            {/* Inter-Model */}
+            <div>
+              <p
+                className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em]"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                Test 2 &mdash; Inter-Model Agreement
+              </p>
+              <p>
+                <em style={{ color: TEXT_DIM }}>&ldquo;If a different AI scores the same home with
+                the same rubric, does it agree?&rdquo;</em>
+              </p>
+              <p className="mt-2">
+                We gave 100 homes to three different Claude models (Opus,
+                Sonnet, Haiku) &mdash; same rubric, same images, same prompt.
+                Opus and Sonnet agree well (ICC 0.805, 96.8% within &plusmn;1).
+                Haiku, the smallest model, wobbles more on interpretive
+                judgments (ICC 0.676).
+              </p>
+              <p className="mt-2">
+                The pattern is telling:{" "}
+                <strong style={{ color: TEXT_LIGHT }}>physical axes</strong>{" "}
+                (how big, how ornate, how old something looks) get high
+                agreement across all three models.{" "}
+                <strong style={{ color: TEXT_LIGHT }}>Interpretive axes</strong>{" "}
+                (is this home performing for an audience? is it curated for
+                show?) diverge more &mdash; especially with the smallest model.
+                This is exactly what happens with human judges too. The rubric
+                drives the scoring, not the individual model&rsquo;s
+                personality.
+              </p>
+            </div>
+
+            {/* PCA / Construct Validation */}
+            <div>
+              <p
+                className="mb-2 text-[11px] font-bold uppercase tracking-[0.14em]"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                Test 3 &mdash; Construct Validation
+              </p>
+              <p>
+                <em style={{ color: TEXT_DIM }}>&ldquo;Do the 9 axes measure real, distinct
+                things &mdash; or are some of them just measuring the same
+                thing?&rdquo;</em>
+              </p>
+              <p className="mt-2">
+                Principal Component Analysis on all 3,763 scored homes shows
+                the 9 axes collapse into{" "}
+                <strong style={{ color: TEXT_LIGHT }}>two dominant dimensions</strong>{" "}
+                explaining 66% of the variance:{" "}
+                <strong style={{ color: TEXT_LIGHT }}>Performance</strong>{" "}
+                (Theatricality + Curation + Formality &mdash; &ldquo;Is this home a
+                stage?&rdquo;) and{" "}
+                <strong style={{ color: TEXT_LIGHT }}>Authenticity</strong>{" "}
+                (Provenance + Material Warmth + Historicism &mdash; &ldquo;Is this home
+                earned?&rdquo;). These two dimensions are nearly independent: a
+                home can be high-performance and high-authenticity, or one
+                without the other.
+              </p>
+            </div>
+
+            {/* Bottom line */}
+            <div
+              className="mt-2 rounded border px-5 py-4"
+              style={{
+                backgroundColor: CARD_BG,
+                borderColor: BORDER,
+                boxShadow: CARD_GLOW,
+              }}
+            >
+              <p
+                className="mb-3 text-[11px] font-bold uppercase tracking-[0.14em]"
+                style={{ fontFamily: MONO, color: COPPER }}
+              >
+                The Bottom Line
+              </p>
+              <table
+                className="w-full text-[13px]"
+                style={{ fontFamily: BODY, borderCollapse: "collapse" }}
+              >
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <th className="px-3 py-2 text-left font-bold" style={{ color: TEXT_LIGHT }}>Test</th>
+                    <th className="px-3 py-2 text-left font-bold" style={{ color: TEXT_LIGHT }}>What It Proves</th>
+                    <th className="px-3 py-2 text-left font-bold" style={{ color: TEXT_LIGHT }}>Strength</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <td className="px-3 py-2" style={{ color: TEXT_MID }}>Test-retest</td>
+                    <td className="px-3 py-2" style={{ color: TEXT_MID }}>The scorer doesn&rsquo;t contradict itself</td>
+                    <td className="px-3 py-2" style={{ color: GREEN }}>Excellent</td>
+                  </tr>
+                  <tr style={{ borderBottom: `1px solid ${BORDER}` }}>
+                    <td className="px-3 py-2" style={{ color: TEXT_MID }}>Inter-model</td>
+                    <td className="px-3 py-2" style={{ color: TEXT_MID }}>The rubric drives scoring, not the model</td>
+                    <td className="px-3 py-2" style={{ color: GREEN }}>Good <span style={{ color: TEXT_DIM }}>(Moderate with Haiku)</span></td>
+                  </tr>
+                  <tr>
+                    <td className="px-3 py-2" style={{ color: TEXT_MID }}>PCA</td>
+                    <td className="px-3 py-2" style={{ color: TEXT_MID }}>The 9 axes measure 2 real constructs</td>
+                    <td className="px-3 py-2" style={{ color: GREEN }}>Strong</td>
+                  </tr>
+                </tbody>
+              </table>
+              <p
+                className="mt-3 text-[13px] leading-[1.6]"
+                style={{ fontFamily: BODY, color: TEXT_MID }}
+              >
+                Together: the scoring instrument is consistent, reproducible
+                across models, and measures real aesthetic dimensions &mdash;
+                not noise.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* ══════════════════════════════════════════════════════════════════
             SECTION 6: THE AD BASELINE
         ══════════════════════════════════════════════════════════════════ */}
         <div className="mt-24">

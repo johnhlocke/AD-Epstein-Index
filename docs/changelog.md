@@ -6,6 +6,27 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-22 (Session 51)
+
+### Changed — Investigation Methodology: Case Studies & Pipeline Consistency
+
+- **Case study pipeline trace tag chains** — All three case studies (Mottola, Goldsmith, Ertegun) now display state-machine-style tag chains with consistent role attribution prefixes (`Detective:`, `Researcher:`, `Editor:`) in 6px dim text. Source tags (BB/DOJ) and human steps (dashed border) are self-labeling
+- **Case study titles** now include subject names: "Case Study 01 — Tommy Mottola:", "Case Study 02 — Isabel Goldsmith:", "Case Study 03 — Mica Ertegun:"
+- **Case 01 chain**: `BB: NO MATCH → DOJ: 681 DOCS → Detective: LIKELY → Researcher: HIGH → Editor: CONFIRMED → PUBLISHED` — removed incorrect HUMAN REVIEW step (confirmed cases go straight to publication)
+- **Case 02 chain**: `BB: MATCH → Detective: STRONG MATCH → Researcher: ADVERSARIAL → Editor: REJECTED (ADVERSARIAL) → HUMAN AUDIT → UPHELD → RUBRIC UPDATED` — moved ADVERSARIAL from DOJ source label to Researcher finding position, added rejection reason to Editor tag, added RUBRIC UPDATED with justifying prose
+- **Case 03 chain**: `BB: NO MATCH → DOJ: DINING EVIDENCE → Detective: LIKELY → Researcher: LOW → Editor: REJECTED → HUMAN AUDIT → REOPENED → Editor: CONFIRMED → RUBRIC UPDATED → PUBLISHED` — clarified override mechanism ("case was reopened and re-adjudicated; the Editor then wrote CONFIRMED"), added DOJ node to explain LIKELY derivation, added RUBRIC UPDATED tag
+- **Case 03 prose split** into two paragraphs: (1) what went wrong and how it was caught, (2) the policy update and human-in-the-loop feedback cycle argument
+- **Case 03 rejection explanation** now state-machine aligned: "the Researcher assigned LOW strength and the Editor rejected the dossier as INSUFFICIENT"
+- **Case 03 policy update explicit**: rule written into "the Researcher's investigation rubric" (not vague "system instructions"), "cannot recur" softened to "reduce the chance of the same failure mode recurring"
+- **Case 02 prose tightened**: removed redundant "dislike is not proximity" repetitions, policy rule now a single quotable sentence ("adversarial context is negative evidence and should be treated as grounds for REJECTED (ADVERSARIAL)")
+- **Human review contradiction resolved**: "every confirmed dossier is reviewed" vs "20% manual review" — now distinguishes publication sanity-check (all) from substantive human adjudication (~20%)
+- **Fig. 14 ADJUDICATE text**: "Human reviews every dossier" → "Human adjudicates escalated dossiers. Resolves conflicts, overrides verdicts."
+- **"154 rejected dossiers" scope clarified**: now reads "Editor-terminal REJECTED dossiers" everywhere, distinguishing from Researcher triage dismissals
+- **What Counts / What Does Not Count lists**: em dashes replaced with colons throughout for cleaner policy-spec formatting
+- **Case study section divider**: `s-divider` with `maxWidth: CONTENT_NARROW` added after case studies, before "Quantifying a Connection"
+
+---
+
 ## 2026-02-22 (Session 50)
 
 ### Added — Inter-Model Reliability Study

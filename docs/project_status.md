@@ -180,6 +180,8 @@ This file should be automatically updated when necessary to answer three key que
 | Inter-model reliability study (Sonnet + Haiku, N=100, ICC analysis) | Phase 2 | Done |
 | Construct validation moved to methodology (PCA as Section 5) | Phase 3 | Done |
 | `intermodel_scores` Supabase table | Database | Done |
+| Case study pipeline traces (state-machine tag chains) | Phase 3 | Done |
+| Methodology text: human review distinction, rejection taxonomy, policy rules | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
