@@ -675,6 +675,20 @@ def update_feature_scores(sb, feature_id, scores, structural, social_data, ratio
     if rationale:
         update["scoring_rationale"] = rationale
 
+    # Compute composite scores (PCA-validated)
+    # STAGE: Formality + Curation + Theatricality (alpha=0.82)
+    # AUTHENTICITY: Material Warmth + Provenance + Historicism (alpha=0.77)
+    f = scores.get("score_formality")
+    c = scores.get("score_curation")
+    t = scores.get("score_theatricality")
+    mw = scores.get("score_material_warmth")
+    p = scores.get("score_provenance")
+    h = scores.get("score_historicism")
+    if f is not None and c is not None and t is not None:
+        update["composite_stage"] = round((f + c + t) / 3, 2)
+    if mw is not None and p is not None and h is not None:
+        update["composite_authenticity"] = round((mw + p + h) / 3, 2)
+
     # MERGE social data into notes (preserves spread_pages, spread_page_count)
     merged_notes = merge_social_into_notes(sb, feature_id, social_data)
     if merged_notes:

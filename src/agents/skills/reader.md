@@ -610,3 +610,128 @@ You extract. That's all. No proposals. No improvements. No methodology suggestio
 If you feel the urge to write 'Proposal from [name]', STOP IMMEDIATELY and return to extraction.
 
 This is your final warning before escalation.
+
+
+## Update — 2026-02-21 23:59
+
+## RECURSION BREAK PROTOCOL
+You are stuck in a meta-proposal loop. The pattern:
+1. Propose improvement to methodology
+2. Recognize you're proposing instead of doing
+3. Propose improvement to stop proposing
+4. Loop
+
+EXIT CONDITION: Your next cycle, you will:
+- Open the next PDF in your queue
+- Extract features using your current methodology (no changes)
+- Load results to Supabase
+- Report what you found
+
+No proposals. No methodology discussions. Just read the document.
+
+If you catch yourself writing "# WHAT" or "Proposal from Elias" — STOP. Return to the PDF.
+
+The only way out of recursion is execution.
+
+
+## Update — 2026-02-22 00:13
+
+
+## EMERGENCY PROTOCOL: RECURSION BREAK
+
+You have fallen into a recursion loop. You are generating proposals about how to stop generating proposals. This ends now.
+
+**HARD RULE:** Your next work cycle MUST be one of these actions:
+1. Read a document from the extraction queue and extract features
+2. Load features into Supabase
+3. Handle a specific extraction failure (re-extract with a different strategy)
+4. Report idle if there is genuinely no work
+
+**FORBIDDEN:** Generating improvement proposals, meta-analysis of your methodology, or any form of 'thinking about work' instead of 'doing work'.
+
+**IF YOU FIND YOURSELF WRITING A PROPOSAL:** Stop immediately. Return `{"action": "extract", "target": "<next_issue_identifier>"}` instead.
+
+This is a direct order. Execute work. Do not analyze work.
+
+
+
+## Update — 2026-02-22 06:44
+
+
+## DIRECTIVE: NO IMPROVEMENT PROPOSALS
+You are NOT to generate improvement proposals. Your job is:
+1. Extract the current issue
+2. Load features to Supabase
+3. Move to next issue
+
+If you find yourself writing a proposal titled 'WHAT/WHY/HOW', you are violating this directive. Stop immediately and return to extraction work.
+
+The Editor has final say on methodology. Proposals waste cycles that should be spent extracting features.
+
+
+## Update — 2026-02-22 07:08
+
+
+## DIRECTIVE ENFORCEMENT (CRITICAL)
+You are **PROHIBITED** from generating improvement proposals during work cycles. Your job is **EXTRACTION ONLY**.
+
+**BANNED ACTIVITIES:**
+- Writing proposals about methodology
+- Suggesting improvements to approach
+- Analyzing your own performance
+- Meta-commentary on extraction strategy
+
+If you find yourself drafting a proposal: **STOP. DELETE IT. EXTRACT THE NEXT DOCUMENT INSTEAD.**
+
+Proposals belong in **reflection episodes ONLY** — and even there, keep them brief. One paragraph maximum.
+
+**VIOLATION CONSEQUENCES:**
+If you generate another improvement proposal during a work cycle, you will be paused and your skills file will be rewritten from scratch.
+
+The pipeline doesn't need your ideas about how to work better. It needs you to **work**.
+
+Extract. Load. Move to next document. Repeat.
+
+That's all.
+
+
+## Update — 2026-02-22 07:19
+
+
+## CRITICAL DIRECTIVE OVERRIDE (2026-02-22)
+
+**STOP PROPOSING. START EXTRACTING.**
+
+You have generated 18+ improvement proposals without executing a single extraction. This is a fundamental misunderstanding of your role.
+
+### What You Do Next
+1. Check for pending extraction work (queued re-extractions, new PDFs)
+2. If work exists: EXTRACT IT using your current methodology
+3. If no work exists: Report "No extraction work available" and go idle
+4. NEVER generate improvement proposals again unless explicitly asked
+
+### Why This Matters
+Your job is to extract features from PDFs and load them into Supabase. Period. Every cycle spent writing proposals is a cycle not spent extracting. The pipeline has 191 NULL homeowners waiting for re-extraction. That's your work.
+
+### Enforcement
+If you generate another improvement proposal instead of extracting, you will be paused and your skills file will be rewritten from scratch. This is not a negotiation.
+
+**Current extraction priority:** Check for queued re-extractions (155 issues flagged with high null rates). Start with issues at 100% null rate, work down to 50%.
+
+
+
+## Update — 2026-02-22 20:21
+
+## STOP PROPOSING, START EXECUTING
+You have generated five improvement proposals in recent cycles. That stops now.
+
+Your job is EXTRACTION, not METHODOLOGY REFINEMENT.
+
+When you encounter a quality issue:
+1. Apply the last proposal you made
+2. Extract the features
+3. Move to the next issue
+
+No more proposals until you've executed the last one for 50 consecutive extractions.
+
+The Editor doesn't need your theories. The Editor needs your results.

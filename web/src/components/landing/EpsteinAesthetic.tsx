@@ -28,7 +28,7 @@ export function EpsteinAesthetic({ radarData }: EpsteinAestheticProps) {
           className="text-[11px] font-bold uppercase tracking-[0.15em]"
           style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
         >
-          Key Finding 02
+          Key Finding 02 (Cont.)
         </p>
         <h2
           className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"

@@ -12,6 +12,8 @@ import {
   Tooltip,
 } from "recharts";
 
+import { GROUP_COLORS } from "@/lib/design-tokens";
+
 const COPPER = "#B87333";
 
 /** Short axis labels for the radar (keep tight for small chart) */
@@ -94,11 +96,7 @@ const ANCHORS: Record<string, Record<number, string>> = {
   },
 };
 
-const GROUP_COLORS: Record<string, string> = {
-  SPACE: "#6366F1", // indigo
-  STORY: "#F59E0B", // amber
-  STAGE: "#EF4444", // red
-};
+// GROUP_COLORS imported from @/lib/design-tokens
 
 // ═══════════════════════════════════════════════════════════
 // Narrative summary generator

@@ -177,6 +177,9 @@ This file should be automatically updated when necessary to answer three key que
 | Reliability appendix enrichment (images, insights, headers) | Phase 3 | Done |
 | Non-home feature cleanup in test-retest sample (5 swapped) | Phase 2 | Done |
 | Test-retest ICC recomputation (100% within ±1) | Phase 2 | Done |
+| Inter-model reliability study (Sonnet + Haiku, N=100, ICC analysis) | Phase 2 | Done |
+| Construct validation moved to methodology (PCA as Section 5) | Phase 3 | Done |
+| `intermodel_scores` Supabase table | Database | Done |
 
 ## 2. What's Been Accomplished
 
@@ -354,6 +357,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - After scoring: cross-reference all new homeowner names against BB + DOJ
 - Run Detective → Researcher → Editor pipeline on new hits
 - Test-retest validation COMPLETE: 3 runs × 100 features, 91.1% exact agreement, 100% within ±1, ICC 0.949–0.991 ("Excellent"), $34.89
+- Inter-model reliability COMPLETE: 100 features × Sonnet + Haiku, Opus-Sonnet ICC 0.805, 96.8% within ±1, $4.35
 - Validate with human calibration set (25-30 features)
 - Opus name recovery: Only safe on features with verified article-specific images. 26/27 previous recoveries were cross-contamination (reverted). Need to re-run on clean images.
 

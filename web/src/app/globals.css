@@ -215,6 +215,25 @@ html {
   font-weight: 700;
   color: #E0E0E5;
 }
+.s-item-head {
+  margin-top: 2rem;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 12px;
+  font-weight: 700;
+  color: #E0E0E5;
+  max-width: var(--content-narrow);
+}
+.s-item-head span {
+  color: rgba(184, 115, 51, 0.85);
+}
+.s-note-img {
+  margin-bottom: 0.5rem;
+  border-radius: 0.25rem;
+  width: calc((100% - 24px) / 2);
+  max-height: 120px;
+  object-fit: cover;
+  filter: grayscale(1) contrast(1.1);
+}
 .s-summary-label {
   margin-top: 1rem;
   font-family: var(--font-jetbrains-mono), monospace;

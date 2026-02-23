@@ -6,6 +6,27 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-22 (Session 50)
+
+### Added — Inter-Model Reliability Study
+
+- **`src/intermodel_reliability.py`** — New script that scores 100 stratified features with Sonnet 4.5 and Haiku 4.5 using the exact same prompt, rubric, and images as the canonical Opus scores. Stratified sampling by decade + STAGE composite range. Flags: `--dry-run`, `--limit N`, `--analyze`, `--model`. Writes to Supabase `intermodel_scores` table + local `data/intermodel_reliability.json`
+- **ICC analysis** (`--analyze` flag) — Computes ICC(2,1) two-way random between all model pairs (Opus-Sonnet, Opus-Haiku, Sonnet-Haiku) plus three-way ICC. Manual numpy-based computation (no scipy dependency). Results: Opus-Sonnet ICC 0.805 ("Good"), Opus-Haiku 0.676, Sonnet-Haiku 0.690. SPACE axes (physical) converge (0.68–0.84); STAGE axes (interpretive) diverge (0.52–0.64). 96.8% Opus-Sonnet within ±1. Total cost: $4.35
+- **Inter-Model Agreement subsection** in Aesthetic Methodology Section 3 (SCORING RELIABILITY) — Full ICC results table (9 axes × 3 pairs + 3-way + summary row), interpretation text, "What This Tells Us" prose explaining SPACE vs STAGE convergence pattern
+
+### Changed — Construct Validation Moved to Methodology
+
+- **PCA content moved** from `BaselineAesthetic.tsx` → `AestheticMethodologySection.tsx` as new **Section 5: CONSTRUCT VALIDATION** (PCA chart, two dominant dimensions prose, annotated correlation matrix, composites card with Cronbach's α)
+- **Section renumbering**: old Sections 5–8 → 6–9. All cross-references in prose updated (Section 4→3, Section 8→9, Section 5→6)
+- **Removed** from `BaselineAesthetic.tsx`: PCA section (lines 560–779), unused imports (`PCASection`, `GROUP_COLORS`), unused `N_FEATURES` constant
+
+### Database
+
+- **`intermodel_scores` table** created in Supabase — stores Sonnet and Haiku scores for 100 stratified features. Columns: feature_id (FK), model, 9 score columns (1-5), aesthetic_summary, scoring_rationale (JSONB), token counts, cost_usd. UNIQUE on (feature_id, model)
+- **200 rows** inserted (100 Sonnet + 100 Haiku)
+
+---
+
 ## 2026-02-22 (Session 49)
 
 ### Added — Reliability Appendix Enrichment

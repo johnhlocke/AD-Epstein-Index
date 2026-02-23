@@ -49,7 +49,7 @@ export function HeroSection({ stats }: HeroSectionProps) {
             className="mt-3 text-[22px] font-bold leading-[1.0] text-foreground/80 md:mt-4 md:text-[28px]"
             style={{ fontFamily: "futura-pt, sans-serif" }}
           >
-            A Visual Mapping of the Connections between Architectural Digest and the Epstein Files
+            Can We Use Architectural Digest to Define an &ldquo;Epstein Aesthetic?&rdquo;
           </p>
         </div>
 

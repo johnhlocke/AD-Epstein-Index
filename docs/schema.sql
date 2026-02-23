@@ -228,3 +228,34 @@ CREATE TABLE cross_references (
 
 CREATE INDEX idx_xref_combined_verdict ON cross_references(combined_verdict);
 CREATE INDEX idx_xref_homeowner_name ON cross_references(homeowner_name);
+
+-- ============================================================
+-- Inter-Model Reliability Study
+-- ============================================================
+
+-- Stores Sonnet and Haiku scores for 100 stratified features
+-- Opus scores remain canonical in the features table
+CREATE TABLE intermodel_scores (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE,
+  model TEXT NOT NULL,
+  score_grandeur INTEGER CHECK (score_grandeur BETWEEN 1 AND 5),
+  score_material_warmth INTEGER CHECK (score_material_warmth BETWEEN 1 AND 5),
+  score_maximalism INTEGER CHECK (score_maximalism BETWEEN 1 AND 5),
+  score_historicism INTEGER CHECK (score_historicism BETWEEN 1 AND 5),
+  score_provenance INTEGER CHECK (score_provenance BETWEEN 1 AND 5),
+  score_hospitality INTEGER CHECK (score_hospitality BETWEEN 1 AND 5),
+  score_formality INTEGER CHECK (score_formality BETWEEN 1 AND 5),
+  score_curation INTEGER CHECK (score_curation BETWEEN 1 AND 5),
+  score_theatricality INTEGER CHECK (score_theatricality BETWEEN 1 AND 5),
+  aesthetic_summary TEXT,
+  scoring_rationale JSONB,
+  input_tokens INTEGER,
+  output_tokens INTEGER,
+  cost_usd NUMERIC,
+  scored_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE (feature_id, model)
+);
+
+CREATE INDEX idx_intermodel_feature_id ON intermodel_scores(feature_id);
+CREATE INDEX idx_intermodel_model ON intermodel_scores(model);

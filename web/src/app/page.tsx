@@ -9,6 +9,7 @@ import { ConfirmedTimeline } from "@/components/charts/ConfirmedTimeline";
 // import { GraphPreview } from "@/components/graph/GraphPreview"; // Disabled — Neo4j queries slow down page load
 import { DossierExample } from "@/components/landing/DossierExample";
 import { AestheticPivotBridge } from "@/components/landing/AestheticPivotBridge";
+import { BaselineAesthetic } from "@/components/landing/BaselineAesthetic";
 import { EpsteinAesthetic } from "@/components/landing/EpsteinAesthetic";
 import { AestheticAnalysis } from "@/components/landing/AestheticAnalysis";
 import { TestingAesthetic } from "@/components/landing/TestingAesthetic";
@@ -122,7 +123,10 @@ export default async function Home() {
       {/* ── Bridge: The Aesthetic Pivot ── */}
       <AestheticPivotBridge />
 
-      {/* ── E: Is There an Epstein Aesthetic? (Key Finding 02) ── */}
+      {/* ── D2: Determining the AD Baseline Aesthetic (Key Finding 02) ── */}
+      <BaselineAesthetic />
+
+      {/* ── E: Is There an Epstein Aesthetic? (Key Finding 02 cont.) ── */}
       <EpsteinAesthetic radarData={radarData} />
 
       {/* ── F: An Aesthetic Analysis (Key Finding 02 cont.) ── */}

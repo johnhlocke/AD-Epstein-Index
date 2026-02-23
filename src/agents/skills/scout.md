@@ -252,3 +252,18 @@ When explore_sources is needed:
 - Use wayback_availability API to check if URLs exist in Internet Archive
 - Try search_items with different query combinations
 - Cross-reference with known AD metadata patterns from successful downloads
+
+
+## Update — 2026-02-21 01:51
+
+
+## Date Bounds Protocol
+Before searching for an issue:
+1. Parse the target month from the issue identifier (e.g., '2026-04' from search attempts)
+2. Get the current date
+3. If target month is in the future (later than current month), skip the search immediately
+4. Log as 'future_issue_skip' instead of exhausting search strategies
+5. Move to the next valid issue
+
+This prevents wasted cycles on issues that don't exist yet. Only search for issues that could plausibly be published by now.
+

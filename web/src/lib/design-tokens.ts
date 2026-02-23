@@ -31,6 +31,11 @@ export const colors = {
   chart3: "#4A7C8F",
   chart4: "#9B7653",
   chart5: "#6B5B73",
+  // Aesthetic group colors — SPACE / STORY / STAGE
+  // Clay / Olive / Wisteria — tonally consistent at ~55% lightness
+  groupSpace: "#A0785C",   // Clay — the physical experience
+  groupStory: "#858145",   // Olive — the narrative it tells
+  groupStage: "#9590A8",   // Wisteria — who it's performing for
   // Neutrals
   border: "#E5E5E5",
   muted: "#737373",
@@ -130,6 +135,16 @@ export const grid = {
   templateColumns: "repeat(3, 1fr)",
   /** CSS gap value */
   gap: "24px",
+} as const;
+
+/**
+ * Aesthetic group colors — single source of truth.
+ * Used in radar charts, Feltron area charts, distribution strips, methodology section.
+ */
+export const GROUP_COLORS: Record<string, string> = {
+  SPACE: colors.groupSpace,
+  STORY: colors.groupStory,
+  STAGE: colors.groupStage,
 } as const;
 
 export const verdictConfig = {

@@ -1,0 +1,209 @@
+{
+  "grandeur": {
+    "axis": "Grandeur",
+    "low": {
+      "featureId": 7137,
+      "homeowner": "Fernanda Pompermayer",
+      "articleTitle": "MADE IN S\u00c3O PAULO",
+      "year": 2025,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/7137/page_081.jpg",
+      "caption": "A raw, utilitarian artist's studio with standard ceiling heights, exposed shelving, and basic drywall/plaster walls \u2014 no architectural ambition beyond functional workspace.",
+      "dossierId": null
+    },
+    "high": {
+      "featureId": 6118,
+      "homeowner": "Aileen Mehle",
+      "articleTitle": "Shall We Dance?",
+      "year": 2012,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/6118/page_191.jpg",
+      "caption": "The apartment is a former ballroom in a 1903 Horace Trumbauer-designed townhouse with soaring ceilings, arched windows, gilded ornamental plasterwork, and a massive French crystal chandelier \u2014 the architecture absolutely dominates its occupants.",
+      "dossierId": null
+    }
+  },
+  "material_warmth": {
+    "axis": "Material Warmth",
+    "low": {
+      "featureId": 6971,
+      "homeowner": "Mariko Mori",
+      "articleTitle": "personal statement",
+      "year": 2022,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/6971/page_083.jpg",
+      "caption": "Almost entirely white \u2014 white concrete walls, white cast-acrylic staircase, white floors, white furniture \u2014 with the only warmth coming from subtle amber LED strips and the single tatami-covered tea room; this is an intentionally cold, luminous environment.",
+      "dossierId": null
+    },
+    "high": {
+      "featureId": 4584,
+      "homeowner": "Josephine Hart",
+      "articleTitle": "Josephine Hart in Sussex",
+      "year": 1995,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/4584/page_065.jpg",
+      "caption": "Oak paneling, brocade-draped tables, linen slipcovers, tapestry carpets, stone fireplaces, and abundant greenery both inside and out create an overwhelmingly tactile, warm environment.",
+      "dossierId": null
+    }
+  },
+  "maximalism": {
+    "axis": "Maximalism",
+    "low": {
+      "featureId": 7179,
+      "homeowner": "Kelly Klein",
+      "articleTitle": "SPARE TIME",
+      "year": 2025,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/7179/page_105.jpg",
+      "caption": "Radically spare \u2014 the article explicitly describes it as 'chic, minimal, and spare as can be' with 'nothing to distract the eye,' featuring only a handful of carefully placed objects in vast open space.",
+      "dossierId": 859
+    },
+    "high": {
+      "featureId": 5162,
+      "homeowner": "Young Huh",
+      "articleTitle": "FOREVER YOUNG",
+      "year": 2026,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5162/page_161.jpg",
+      "caption": "Pattern-on-pattern wallpaper covering walls and ceilings, canopy beds draped in coordinating printed fabrics, floral upholstery layered with embroidered pillows, and every surface activated with coherent botanical and folk motifs \u2014 this is maximum density with maximum internal dialogue.",
+      "dossierId": null
+    }
+  },
+  "historicism": {
+    "axis": "Historicism",
+    "low": {
+      "featureId": 6554,
+      "homeowner": "Mike D",
+      "articleTitle": "Beach Boys",
+      "year": 2017,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/6554/page_111.jpg",
+      "caption": "No historical period commitment whatsoever; the compound is a thoroughly contemporary California modern remodel with no period references beyond a general mid-century ranch DNA.",
+      "dossierId": null
+    },
+    "high": {
+      "featureId": 5377,
+      "homeowner": "Alexa Hampton",
+      "articleTitle": "A Legacy Continues",
+      "year": 2004,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5377/page_193.jpg",
+      "caption": "Full Louis XV and XVI commitment from the original paneling to the period chairs, commodes, and Clarence House silks \u2014 no visible anachronisms, with Hampton specifically replacing Jacobean panels with historically appropriate Louis XVI-inspired paneling.",
+      "dossierId": 1171
+    }
+  },
+  "provenance": {
+    "axis": "Provenance",
+    "low": {
+      "featureId": 7054,
+      "homeowner": "Kelly Behun",
+      "articleTitle": "TOUCH THE SKY",
+      "year": 2024,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/7054/page_149.jpg",
+      "caption": "Everything arrived at once for this relatively new apartment \u2014 the article describes moving in about three years ago with interiors requiring little updating, and every piece reads as freshly purchased contemporary design and blue-chip art.",
+      "dossierId": 965
+    },
+    "high": {
+      "featureId": 4602,
+      "homeowner": "David Copperfield",
+      "articleTitle": "Architectural Digest Visits: David Copperfield",
+      "year": 1995,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/4602/page_101.jpg",
+      "caption": "This is a genuine accumulation of historically significant objects \u2014 Houdini's baby shoes, his metamorphosis trunk, Kellar's unpublished biography manuscript, Dante's spirit cabinet \u2014 each with documented lineage and real age.",
+      "dossierId": 208
+    }
+  },
+  "hospitality": {
+    "axis": "Hospitality",
+    "low": {
+      "featureId": 7143,
+      "homeowner": "Catherine Kwong",
+      "articleTitle": "AD VISITS Ranch Style",
+      "year": 2025,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/7143/page_018.jpg",
+      "caption": "The article describes a family retreat focused on private life \u2014 foraging, bike rides, tide-based beach plans, silk scarf acrobatics with the kids \u2014 with no mention of entertaining or guests.",
+      "dossierId": null
+    },
+    "high": {
+      "featureId": 7069,
+      "homeowner": "Sofia Vergara",
+      "articleTitle": "WARM WELCOME",
+      "year": 2024,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/7069/page_081.jpg",
+      "caption": "The article explicitly states Vergara designed the home for entertaining friends and family \u2014 she says 'I love decorating for parties, setting beautiful tables, and watching people enjoy my home,' with friends from Colombia finding 'any excuse to visit,' a pool house, loggia she calls her 'command center,' and open doors as the article's central theme.",
+      "dossierId": 338
+    }
+  },
+  "formality": {
+    "axis": "Formality",
+    "low": {
+      "featureId": 5161,
+      "homeowner": "Pinocrest Israels",
+      "articleTitle": "PARADISE FOUND",
+      "year": 2026,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5161/page_141.jpg",
+      "caption": "Floor cushions for seating, kids sprawled on sleeping boards playing chess, bare wood everywhere, a fireplace hearth you sit beside on the ground \u2014 the article literally compares living here to 'going camping,' and every surface invites barefoot, relaxed habitation.",
+      "dossierId": null
+    },
+    "high": {
+      "featureId": 6744,
+      "homeowner": "Jacques Garcia",
+      "articleTitle": "DIVINE INTERVENTION",
+      "year": 2019,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/6744/page_113.jpg",
+      "caption": "The imperial Roman-style grand gallery with its marble Athena, the gilded Rococo dining room with silver service, the chapel with altar, and the bedroom with canopy and silk damask walls all enforce strict behavioral codes \u2014 these are rooms that make you feel small and reverential.",
+      "dossierId": 932
+    }
+  },
+  "curation": {
+    "axis": "Curation",
+    "low": {
+      "featureId": 9729,
+      "homeowner": "Stephen White",
+      "articleTitle": "Lights Fantastic",
+      "year": 2026,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9729/page_199.jpg",
+      "caption": "White's spaces are entirely self-directed by decades of making; the hanging sculptures, stacked materials, and worn surfaces reflect an artist's organic workflow, not a designer's styled arrangement.",
+      "dossierId": 828
+    },
+    "high": {
+      "featureId": 7102,
+      "homeowner": "Jana Bezdek",
+      "articleTitle": "DRAMA QUEEN",
+      "year": 2024,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/7102/page_111.jpg",
+      "caption": "Every room is a fully composed Studio Shamshiri set piece \u2014 the parlor mural commissioned specifically for the walls, the zodiac glass panels illuminated in the millwork, the Lalanne-inspired mirror, custom bronze chairs, and precisely styled vignettes throughout reveal total designer direction for editorial and experiential impact.",
+      "dossierId": null
+    }
+  },
+  "theatricality": {
+    "axis": "Theatricality",
+    "low": {
+      "featureId": 4961,
+      "homeowner": "Charles and Harriette Greene",
+      "articleTitle": "OJAI ARTS AND CRAFTS",
+      "year": 1999,
+      "score": 1,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/4961/page_237.jpg",
+      "caption": "This is pure 'if you know, you know' \u2014 a historically significant bungalow in a remote Ojai hillside whose wealth is expressed through craft knowledge and period expertise rather than brand display, with the owner noting the desire to share it with others rather than perform with it.",
+      "dossierId": null
+    },
+    "high": {
+      "featureId": 9615,
+      "homeowner": "Stacey Bendet",
+      "articleTitle": "COLORFUL CHARACTER",
+      "year": 2022,
+      "score": 5,
+      "imageUrl": "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9615/page_111.jpg",
+      "caption": "Julian Schnabel portraits, Francesco Clemente frescoes, Claes Oldenburg lithographs, Roy Lichtenstein in the bathroom, a Yves Klein table, rugs from the Ritz Hotel in Madrid \u2014 plus the Architectural Digest photo shoot in couture ruffled gowns \u2014 this home is performing at maximum volume for a knowing audience.",
+      "dossierId": null
+    }
+  }
+}
