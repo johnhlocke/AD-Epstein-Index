@@ -8,11 +8,52 @@ import {
   PolarRadiusAxis,
   ResponsiveContainer,
   Tooltip,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Cell,
+  LineChart,
+  Line,
+  Legend,
+  ScatterChart,
+  Scatter,
+  ZAxis,
+  ReferenceLine,
 } from "recharts";
+import Image from "next/image";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useMounted } from "@/lib/use-mounted";
 import { GROUP_COLORS } from "@/lib/design-tokens";
 import { PCASection } from "@/components/charts/PCAChart";
 import axisExemplars from "./axis-exemplars.json";
+import somRaw from "./som-data.json";
+
+// ── SOM data types ────────────────────────────────────────────────────────
+interface SomData {
+  metadata: {
+    grid_size: number;
+    topology: string;
+    n_features: number;
+    n_axes: number;
+    axis_names: string[];
+    axis_groups: string[];
+    n_clusters: number;
+    quantization_error: number;
+    topographic_error: number;
+    cluster_names: string[];
+    decades: string[];
+  };
+  component_planes: Record<string, number[][]>;
+  u_matrix: number[][];
+  cluster_map: number[][];
+  hit_map: number[][];
+  decade_maps: Record<string, number[][]>;
+  cluster_centroids: { cluster_id: number; name: string; centroid: number[] }[];
+  bmu_assignments: { feature_id: number; bmu_x: number; bmu_y: number }[];
+}
+const somData = somRaw as SomData;
 
 // ── Exemplar types ─────────────────────────────────────────────────────────
 interface Exemplar {
@@ -346,6 +387,147 @@ const radarData = [
   { axis: "Theatricality", baseline: 2.37, epstein: 3.8 },
 ];
 
+// ── Score distribution data (% of features scoring 1-5 per axis) ──
+const AXIS_LABELS_SHORT = ["GR", "MW", "MX", "HI", "PR", "HO", "FO", "CU", "TH"] as const;
+const AXIS_LABELS_FULL = [
+  "Grandeur", "Material Warmth", "Maximalism", "Historicism",
+  "Provenance", "Hospitality", "Formality", "Curation", "Theatricality",
+] as const;
+const AXIS_GROUPS = ["SPACE","SPACE","SPACE","STORY","STORY","STORY","STAGE","STAGE","STAGE"] as const;
+
+const distributionData: { axis: string; short: string; group: string; pcts: number[] }[] = [
+  { axis: "Grandeur",        short: "GR", group: "SPACE", pcts: [1.6, 12.2, 27.9, 42.4, 15.9] },
+  { axis: "Material Warmth", short: "MW", group: "SPACE", pcts: [0.9, 4.7, 14.7, 40.4, 39.2] },
+  { axis: "Maximalism",      short: "MX", group: "SPACE", pcts: [4.8, 11.3, 23.5, 39.6, 20.9] },
+  { axis: "Historicism",     short: "HI", group: "STORY", pcts: [11.5, 14.5, 24.2, 37.5, 12.4] },
+  { axis: "Provenance",      short: "PR", group: "STORY", pcts: [7.2, 11.5, 35.3, 31.9, 14.1] },
+  { axis: "Hospitality",     short: "HO", group: "STORY", pcts: [5.7, 14.4, 35.9, 34.5, 9.5] },
+  { axis: "Formality",       short: "FO", group: "STAGE", pcts: [14.0, 22.8, 31.9, 26.7, 4.5] },
+  { axis: "Curation",        short: "CU", group: "STAGE", pcts: [2.2, 10.6, 22.8, 56.3, 8.0] },
+  { axis: "Theatricality",   short: "TH", group: "STAGE", pcts: [16.9, 42.8, 28.9, 9.1, 2.3] },
+];
+
+// Correlation matrix (Spearman, row-major order matching AXIS_LABELS_FULL)
+const CORR_MATRIX = [
+  [ 1.000, -0.284,  0.065,  0.186, -0.194,  0.470,  0.646,  0.419,  0.493],
+  [-0.284,  1.000,  0.333,  0.381,  0.456, -0.124, -0.445, -0.387, -0.490],
+  [ 0.065,  0.333,  1.000,  0.500,  0.464,  0.083,  0.087, -0.046,  0.021],
+  [ 0.186,  0.381,  0.500,  1.000,  0.539,  0.101,  0.181, -0.110, -0.212],
+  [-0.194,  0.456,  0.464,  0.539,  1.000, -0.179, -0.298, -0.583, -0.544],
+  [ 0.470, -0.124,  0.083,  0.101, -0.179,  1.000,  0.319,  0.346,  0.410],
+  [ 0.646, -0.445,  0.087,  0.181, -0.298,  0.319,  1.000,  0.628,  0.612],
+  [ 0.419, -0.387, -0.046, -0.110, -0.583,  0.346,  0.628,  1.000,  0.694],
+  [ 0.493, -0.490,  0.021, -0.212, -0.544,  0.410,  0.612,  0.694,  1.000],
+];
+
+// Decade evolution data
+const decadeData = [
+  { decade: "1988-99", n: 1398, means: [3.47, 4.35, 3.89, 3.66, 3.71, 3.12, 2.87, 3.34, 2.14] },
+  { decade: "2000-09", n: 1065, means: [3.68, 4.09, 3.29, 3.16, 3.06, 3.36, 3.01, 3.71, 2.40] },
+  { decade: "2010-19", n: 850,  means: [3.78, 3.80, 3.54, 2.90, 3.12, 3.51, 2.89, 3.79, 2.69] },
+  { decade: "2020-25", n: 433,  means: [3.33, 4.07, 3.61, 2.82, 3.30, 2.33, 3.54, 2.40, 3.14] },
+];
+
+// ── Cluster typology data (k-means, k=6, StandardScaler) ──
+interface ClusterType {
+  id: number;
+  name: string;
+  subtitle: string;
+  pct: string;
+  n: number;
+  centroid: number[];
+  description: string;
+  examples: string[];
+}
+
+const CLUSTER_TYPES: ClusterType[] = [
+  {
+    id: 0, name: "The Lived-In Retreat", subtitle: "Warm, layered, unpretentious",
+    pct: "17.6%", n: 662,
+    centroid: [2.44, 4.73, 3.85, 3.39, 4.29, 2.30, 1.43, 2.39, 1.33],
+    description: "Maximum warmth, maximum provenance, near-zero performance. These are homes that have accumulated objects and character over decades. Wood, linen, personal collections, inherited furniture. The design was not 'directed' — it grew. Low Hospitality suggests private retreats, not social spaces.",
+    examples: ["Felicity Huffman & William H. Macy", "Teri Garr", "Gerson Castelo Branco"],
+  },
+  {
+    id: 1, name: "The Clean Slate", subtitle: "Contemporary, minimal, designed",
+    pct: "13.6%", n: 510,
+    centroid: [3.42, 3.66, 2.27, 1.96, 2.37, 2.90, 2.65, 3.71, 2.28],
+    description: "Low on history, provenance, and maximalism — these are new builds with clean-line contemporary design. No accumulated objects, no historical character. A designer directed the space (Curation 3.71) but there is nothing to inherit and nothing to display. The aesthetic is restraint, not abundance.",
+    examples: ["Michael & Carol Newman", "Farmhouse Now", "No Boundaries"],
+  },
+  {
+    id: 2, name: "The Grand Heritage", subtitle: "Old, grand, layered, unperformed",
+    pct: "12.1%", n: 454,
+    centroid: [4.19, 4.50, 4.29, 4.50, 4.56, 3.45, 3.21, 3.04, 1.75],
+    description: "Everything high except performance. Grand rooms filled with historical character, real provenance, warm materials — and low Theatricality. These are the English country houses, Tuscan villas, and old New York apartments that accumulated grandeur over centuries. The building does the talking; no staging needed.",
+    examples: ["Dede Pratesi", "Adrian & Irena Csáky", "Miguel de Oriol e Ybarra"],
+  },
+  {
+    id: 3, name: "The Designer Showcase", subtitle: "Grand, curated, theatrical",
+    pct: "19.6%", n: 737,
+    centroid: [4.46, 3.88, 4.25, 3.87, 3.13, 3.96, 4.06, 4.24, 3.44],
+    description: "The most 'performed' cluster. High across nearly every axis — grand, maximalist, historical, curated, formal, and theatrical. A professional designer directed the space to impress. Provenance is notably lower (3.13) — these homes display period references but the objects are sourced, not inherited.",
+    examples: ["Penny Drue Baird", "Park Avenue Classic", "Fisher Island estate"],
+  },
+  {
+    id: 4, name: "The Comfortable Middle", subtitle: "Warm, moderate, designer-touched",
+    pct: "28.2%", n: 1060,
+    centroid: [3.35, 4.50, 3.78, 3.36, 3.41, 3.40, 2.58, 3.77, 2.24],
+    description: "The AD center of gravity. Warm materials, moderate grandeur, moderate provenance, professionally curated but not theatrical. This is the 'typical AD home' — a well-appointed living space with designer involvement that doesn't call attention to itself. It represents over a quarter of all features.",
+    examples: ["A Civilized Rustic", "East by Far East", "Quick-Change Artistry"],
+  },
+  {
+    id: 5, name: "The Cold Stage", subtitle: "Cool, curated, rootless, performative",
+    pct: "9.0%", n: 340,
+    centroid: [4.10, 2.49, 2.27, 1.54, 1.58, 3.66, 3.64, 4.31, 3.46],
+    description: "The inverse of Cluster 0. Cold materials, no history, no provenance, but maximum curation and high theatricality. These are the blue-chip gallery apartments, the marble-and-chrome penthouses, the spaces designed to impress. The lowest Historicism and Provenance of any cluster — everything is new and purchased.",
+    examples: ["Night and Day", "Steven & Claire Stull", "Martin & Toni Sosnoff"],
+  },
+];
+
+// ── Cluster visualization constants ──
+const CLUSTER_COLORS: Record<number, string> = {
+  0: "#C9A96E", // Lived-In Retreat — warm amber
+  1: "#6B8FA3", // Clean Slate — slate blue
+  2: "#D4A574", // Grand Heritage — antique gold
+  3: "#C97B84", // Designer Showcase — dusty rose
+  4: "#7BA07B", // Comfortable Middle — sage
+  5: "#8CB4C9", // Cold Stage — ice blue
+};
+
+// Compute STAGE and AUTH composites from centroids
+// AUTH = (Material Warmth + Provenance + Historicism) / 3
+// STAGE = (Formality + Curation + Theatricality) / 3
+const CLUSTER_COMPOSITES = CLUSTER_TYPES.map((c) => ({
+  id: c.id,
+  name: c.name,
+  n: c.n,
+  pct: c.pct,
+  stage: (c.centroid[6] + c.centroid[7] + c.centroid[8]) / 3,
+  auth: (c.centroid[1] + c.centroid[4] + c.centroid[3]) / 3,
+}));
+
+// Decade-level cluster proportions (% of features per era)
+const DECADE_CLUSTER_PROPORTIONS = [
+  { decade: "1988–99", n: 1398, pcts: [20.0, 8.7, 19.0, 18.0, 28.0, 6.3] },
+  { decade: "2000–09", n: 1065, pcts: [18.0, 11.0, 14.0, 20.0, 28.0, 9.0] },
+  { decade: "2010–19", n: 850,  pcts: [15.0, 15.0, 8.0, 21.0, 29.0, 12.0] },
+  { decade: "2020–25", n: 433,  pcts: [14.0, 17.1, 4.6, 20.0, 30.0, 14.3] },
+];
+
+// Axis name shortcodes for cluster radars
+const CLUSTER_RADAR_AXES = [
+  { key: "GR", full: "Grandeur" },
+  { key: "MW", full: "Material Warmth" },
+  { key: "MX", full: "Maximalism" },
+  { key: "HI", full: "Historicism" },
+  { key: "PR", full: "Provenance" },
+  { key: "HO", full: "Hospitality" },
+  { key: "FO", full: "Formality" },
+  { key: "CU", full: "Curation" },
+  { key: "TH", full: "Theatricality" },
+];
+
 // Group label mapping for colored axis labels
 const axisGroupMap: Record<string, string> = {};
 groups.forEach((g) => g.axes.forEach((a) => (axisGroupMap[a.name] = g.label)));
@@ -393,6 +575,988 @@ function RadarTooltipContent({ active, payload }: any) {
       <p className="text-[10px]" style={{ color: COPPER }}>
         Epstein Orbit: {data.epstein.toFixed(1)}
       </p>
+    </div>
+  );
+}
+
+// ── Case Study data & component ──────────────────────────────────────────────
+
+interface CaseStudy {
+  num: number;
+  featureId: number;
+  homeowner: string;
+  articleTitle: string;
+  year: number;
+  location: string;
+  scores: {
+    grandeur: number;
+    material_warmth: number;
+    maximalism: number;
+    historicism: number;
+    provenance: number;
+    hospitality: number;
+    formality: number;
+    curation: number;
+    theatricality: number;
+  };
+  stageComposite: number;
+  authComposite: number;
+  aestheticSummary: string;
+  teachingLabel: string;
+  teachingPoint: string;
+  imageUrls: string[];
+}
+
+const CASE_STUDIES: CaseStudy[] = [
+  {
+    num: 1,
+    featureId: 8515,
+    homeowner: "Charles S. Cohen",
+    articleTitle: "French Twist",
+    year: 2006,
+    location: "New York",
+    scores: { grandeur: 5, material_warmth: 4, maximalism: 5, historicism: 4, provenance: 2, hospitality: 4, formality: 5, curation: 5, theatricality: 5 },
+    stageComposite: 5.0,
+    authComposite: 3.33,
+    aestheticSummary: "A real estate developer\u2019s fantasy of Parisian grandeur, built from rubble on Park Avenue. Every boiserie panel, every Louis XVI chair, every ormolu mount is museum-grade \u2014 and every inch screams acquisition, not inheritance.",
+    teachingLabel: "MAXIMUM STAGE, LOW PROVENANCE",
+    teachingPoint: "STAGE scores 5/5/5 while Provenance sits at 2. The rubric captures something specific here: spectacular material investment with no historical root system. Everything is real \u2014 the boiserie, the ormolu \u2014 but nothing grew here. The STAGE composite was designed to measure exactly this kind of purchased-wholesale grandeur.",
+    imageUrls: [
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_116.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_117.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_118.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_119.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_120.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_121.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_122.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_123.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_124.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8515/page_125.jpg",
+    ],
+  },
+  {
+    num: 2,
+    featureId: 7834,
+    homeowner: "Jim Dine",
+    articleTitle: "A Litchfield Landscape",
+    year: 2012,
+    location: "Litchfield County, CT",
+    scores: { grandeur: 2, material_warmth: 5, maximalism: 4, historicism: 4, provenance: 5, hospitality: 2, formality: 1, curation: 1, theatricality: 1 },
+    stageComposite: 1.0,
+    authComposite: 4.67,
+    aestheticSummary: "An artist\u2019s farmhouse where every object is an artifact of a lived creative life, not a curated display. Paint-spattered floors, handmade tools on the walls, decades of accumulated meaning in every room.",
+    teachingLabel: "THE OPPOSITE PROFILE",
+    teachingPoint: "Maximum Authenticity (4.67), zero STAGE (1.0). The radar inverts completely \u2014 every axis that was high in Cohen is low here, and vice versa. This proves the two composites are genuinely independent dimensions, not just a single opulence slider. A home can be maximalist (4) and historically rich (4) while scoring rock-bottom on performance.",
+    imageUrls: [
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_110.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_111.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_112.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_113.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_114.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_115.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_116.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/7834/page_117.jpg",
+    ],
+  },
+  {
+    num: 3,
+    featureId: 8841,
+    homeowner: "Nancy Cain Marcus",
+    articleTitle: "Neoclassical Beauty",
+    year: 2014,
+    location: "New York",
+    scores: { grandeur: 5, material_warmth: 3, maximalism: 5, historicism: 5, provenance: 3, hospitality: 4, formality: 5, curation: 5, theatricality: 5 },
+    stageComposite: 5.0,
+    authComposite: 3.67,
+    aestheticSummary: "A Napoleonic fever dream built from scratch on the 36th floor of Park Avenue. Molyneux conjures a Roman palazzo from thin air \u2014 barrel vaults, trompe-l\u2019\u0153il skies, a library that could be the study of a Medici prince.",
+    teachingLabel: "PERFORMANCE \u2260 SHALLOW",
+    teachingPoint: "Both STAGE and Historicism maxed at 5. This is the key orthogonality test: theatrical homes can have genuine intellectual depth and historical rigor. The performance here is learned, not cynical \u2014 Molyneux\u2019s neoclassicism is scholarly. The rubric correctly registers that spectacle and knowledge can coexist.",
+    imageUrls: [
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_190.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_191.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_192.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_193.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_194.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_195.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_196.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/8841/page_197.jpg",
+    ],
+  },
+  {
+    num: 4,
+    featureId: 6918,
+    homeowner: "Adam Frampton & Karolina Czeczek",
+    articleTitle: "Slim Chance",
+    year: 2018,
+    location: "Brooklyn",
+    scores: { grandeur: 3, material_warmth: 2, maximalism: 1, historicism: 1, provenance: 1, hospitality: 1, formality: 2, curation: 3, theatricality: 1 },
+    stageComposite: 2.0,
+    authComposite: 1.33,
+    aestheticSummary: "An architect\u2019s proof-of-concept squeezed onto a 15-foot-wide Brooklyn lot, where perforated metal, concrete, and poured floors create a cool, luminous vertical laboratory.",
+    teachingLabel: "THE LOW END WORKS",
+    teachingPoint: "The rubric doesn\u2019t bias toward abundance. Minimalist restraint registers as a coherent position, not a failure to score. Curation picks up a 3 because the design is intentional \u2014 every constraint is a material decision. This is philosophical opposition to display, accurately captured. Low scores are not punitive; they\u2019re descriptive.",
+    imageUrls: [
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/6918/page_038.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/6918/page_042.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/6918/page_052.jpg",
+    ],
+  },
+  {
+    num: 5,
+    featureId: 9308,
+    homeowner: "Giancarlo Giammetti",
+    articleTitle: "The High Life",
+    year: 2010,
+    location: "New York",
+    scores: { grandeur: 5, material_warmth: 3, maximalism: 4, historicism: 2, provenance: 3, hospitality: 4, formality: 4, curation: 5, theatricality: 5 },
+    stageComposite: 4.67,
+    authComposite: 2.67,
+    aestheticSummary: "A sky-high Manhattan trophy penthouse where every surface broadcasts blue-chip credentials \u2014 Picasso flanked by Basquiat, a Calder mobile spinning against the skyline. Jacques Grange\u2019s hand is everywhere: disciplined, professional, expensive.",
+    teachingLabel: "CURATOR VS DEVELOPER",
+    teachingPoint: "Compare with Cohen (#1). Both are high-STAGE Manhattan interiors. But Giammetti\u2019s space has Jacques Grange\u2019s professional hand: higher Hospitality (4), lower Formality (4 vs 5), lower Historicism (2 vs 4). The 9-axis system distinguishes between a curator\u2019s performance and a developer\u2019s fantasy \u2014 a distinction a single \u201copulence\u201d score would collapse.",
+    imageUrls: [
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_122.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_123.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_124.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_125.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_126.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_127.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_128.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_129.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_130.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_131.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_132.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/dossier-images/9308/page_133.jpg",
+    ],
+  },
+  {
+    num: 6,
+    featureId: 5937,
+    homeowner: "Nick & Christian Candy",
+    articleTitle: "The View from the Top",
+    year: 2015,
+    location: "Monte Carlo",
+    scores: { grandeur: 5, material_warmth: 3, maximalism: 5, historicism: 4, provenance: 2, hospitality: 4, formality: 5, curation: 5, theatricality: 5 },
+    stageComposite: 5.0,
+    authComposite: 3.0,
+    aestheticSummary: "New money\u2019s fantasy of old money, executed at staggering scale. The Candy brothers built a Belle \u00c9poque theme park atop Monte Carlo \u2014 nothing has ever been touched, only displayed.",
+    teachingLabel: "DISPLAY VS INHABIT",
+    teachingPoint: "The Opus summary nails it: \u201cnothing has ever been touched, only displayed.\u201d Maximum STAGE with Historicism at 4 \u2014 they know the references. But Provenance at 2 betrays the artifice: these rooms quote history without having any. The gap between Historicism and Provenance is one of the rubric\u2019s sharpest diagnostic signals.",
+    imageUrls: [
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_148.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_149.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_150.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_151.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_152.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_153.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_154.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_155.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_156.jpg",
+      "https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/feature-images/5937/page_157.jpg",
+    ],
+  },
+];
+
+const SCORE_AXES: { key: keyof CaseStudy["scores"]; label: string; group: string }[] = [
+  { key: "grandeur", label: "G", group: "SPACE" },
+  { key: "material_warmth", label: "MW", group: "SPACE" },
+  { key: "maximalism", label: "MX", group: "SPACE" },
+  { key: "historicism", label: "H", group: "STORY" },
+  { key: "provenance", label: "P", group: "STORY" },
+  { key: "hospitality", label: "HO", group: "STORY" },
+  { key: "formality", label: "F", group: "STAGE" },
+  { key: "curation", label: "CU", group: "STAGE" },
+  { key: "theatricality", label: "TH", group: "STAGE" },
+];
+
+function CaseStudyCard({ study, mounted }: { study: CaseStudy; mounted: boolean }) {
+  const chartData = SCORE_AXES.map((a) => ({
+    axis: a.label,
+    fullName: a.key.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    value: study.scores[a.key],
+    group: a.group,
+  }));
+
+  return (
+    <div
+      className="overflow-hidden rounded border md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+      style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+    >
+      {/* Magazine spread pages */}
+      {study.imageUrls.length > 0 && (
+        <div
+          className="grid grid-cols-3 gap-px sm:grid-cols-4"
+          style={{ backgroundColor: BORDER }}
+        >
+          {study.imageUrls.map((url, i) => (
+            <div key={i} className="relative aspect-[3/4]" style={{ backgroundColor: CARD_BG }}>
+              <Image
+                src={url}
+                alt={`${study.homeowner} — page ${i + 1}`}
+                fill
+                sizes="(min-width: 768px) 160px, 25vw"
+                className="object-cover"
+              />
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Header bar */}
+      <div
+        className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b px-5 py-3"
+        style={{ borderColor: BORDER }}
+      >
+        <span
+          className="text-[11px] font-bold tracking-wider"
+          style={{ fontFamily: MONO, color: COPPER }}
+        >
+          CASE {study.num}
+        </span>
+        <span
+          className="text-[14px] font-bold"
+          style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+        >
+          {study.homeowner}
+        </span>
+        <span
+          className="text-[12px] italic"
+          style={{ fontFamily: BODY, color: TEXT_MID }}
+        >
+          &ldquo;{study.articleTitle}&rdquo;
+        </span>
+        <span
+          className="text-[11px]"
+          style={{ fontFamily: MONO, color: TEXT_DIM }}
+        >
+          {study.location}, {study.year}
+        </span>
+      </div>
+
+      {/* Body: radar + prose */}
+      <div className="grid gap-6 p-5 md:grid-cols-[250px_1fr]">
+        {/* Radar chart */}
+        <div style={{ width: 250, height: 250, flexShrink: 0 }}>
+          {mounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="68%">
+                <PolarGrid stroke={BORDER} strokeDasharray="2 4" />
+                <PolarAngleAxis
+                  dataKey="axis"
+                  tick={{ fontSize: 9, fill: TEXT_DIM, fontFamily: MONO }}
+                  tickLine={false}
+                />
+                <PolarRadiusAxis
+                  domain={[1, 5]}
+                  tickCount={5}
+                  tick={{ fontSize: 8, fill: "rgba(176,165,148,0.4)", fontFamily: MONO }}
+                  axisLine={false}
+                />
+                <Radar
+                  dataKey="value"
+                  stroke={COPPER}
+                  fill={COPPER}
+                  fillOpacity={0.15}
+                  strokeWidth={1.5}
+                  dot={{ r: 2.5, fill: COPPER }}
+                />
+                <Tooltip content={<CaseStudyTooltip />} />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ width: 250, height: 250, backgroundColor: CARD_BG, borderRadius: 4 }} />
+          )}
+        </div>
+
+        {/* Text content */}
+        <div className="flex flex-col gap-4">
+          {/* Score pills */}
+          <div className="flex flex-wrap gap-1.5">
+            {SCORE_AXES.map((a) => (
+              <span
+                key={a.key}
+                className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
+                style={{
+                  fontFamily: MONO,
+                  backgroundColor: "rgba(0,0,0,0.3)",
+                  color: GROUP_COLORS[a.group] || TEXT_MID,
+                  border: `1px solid ${GROUP_COLORS[a.group] || BORDER}33`,
+                }}
+              >
+                {a.label}
+                <span style={{ color: TEXT_LIGHT }}>{study.scores[a.key]}</span>
+              </span>
+            ))}
+            <span className="mx-1" />
+            <span
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
+              style={{
+                fontFamily: MONO,
+                backgroundColor: "rgba(184,115,51,0.1)",
+                color: COPPER,
+                border: `1px solid rgba(184,115,51,0.25)`,
+              }}
+            >
+              STAGE {study.stageComposite.toFixed(2)}
+            </span>
+            <span
+              className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[10px] font-bold"
+              style={{
+                fontFamily: MONO,
+                backgroundColor: "rgba(46,204,113,0.06)",
+                color: GREEN,
+                border: `1px solid rgba(46,204,113,0.15)`,
+              }}
+            >
+              AUTH {study.authComposite.toFixed(2)}
+            </span>
+          </div>
+
+          {/* Aesthetic summary (Opus voice) */}
+          <p
+            className="text-[13px] italic leading-[1.7]"
+            style={{ fontFamily: BODY, color: TEXT_MID }}
+          >
+            {study.aestheticSummary}
+          </p>
+
+          {/* Teaching point */}
+          <div>
+            <p
+              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ fontFamily: MONO, color: GOLD }}
+            >
+              {study.teachingLabel}
+            </p>
+            <p
+              className="mt-1.5 text-[13px] leading-[1.7]"
+              style={{ fontFamily: BODY, color: TEXT_LIGHT }}
+            >
+              {study.teachingPoint}
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CaseStudyTooltip({ active, payload }: any) {
+  if (!active || !payload?.length) return null;
+  const data = payload[0]?.payload;
+  if (!data) return null;
+  return (
+    <div
+      className="rounded border px-3 py-2"
+      style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, fontFamily: MONO }}
+    >
+      <p className="text-[11px] font-bold" style={{ color: TEXT_LIGHT }}>
+        {data.fullName}
+      </p>
+      <p className="mt-0.5 text-[10px]" style={{ color: COPPER }}>
+        Score: {data.value}/5
+      </p>
+    </div>
+  );
+}
+
+// ── Cluster Typology Card ────────────────────────────────────────────────────
+
+function ClusterTypologyCard({
+  cluster,
+  mounted,
+}: {
+  cluster: (typeof CLUSTER_TYPES)[number];
+  mounted: boolean;
+}) {
+  const color = CLUSTER_COLORS[cluster.id] || TEXT_MID;
+  const radarData = CLUSTER_RADAR_AXES.map((a, i) => ({
+    axis: a.key,
+    fullName: a.full,
+    value: cluster.centroid[i],
+  }));
+
+  return (
+    <div
+      className="rounded border"
+      style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+    >
+      {/* Header */}
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b px-5 py-3"
+        style={{ borderColor: BORDER }}
+      >
+        <span
+          className="text-[10px] font-bold tracking-wider"
+          style={{ fontFamily: MONO, color }}
+        >
+          C{cluster.id}
+        </span>
+        <span
+          className="text-[14px] font-bold"
+          style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+        >
+          {cluster.name}
+        </span>
+        <span
+          className="text-[11px] italic"
+          style={{ fontFamily: BODY, color: TEXT_DIM }}
+        >
+          {cluster.subtitle}
+        </span>
+      </div>
+
+      {/* Body: radar + prose */}
+      <div className="grid gap-5 p-5 md:grid-cols-[220px_1fr]">
+        {/* Mini radar */}
+        <div style={{ width: 220, height: 220, flexShrink: 0 }}>
+          {mounted ? (
+            <ResponsiveContainer width="100%" height="100%">
+              <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="68%">
+                <PolarGrid stroke={BORDER} strokeDasharray="2 4" />
+                <PolarAngleAxis
+                  dataKey="axis"
+                  tick={{ fontSize: 8, fill: TEXT_DIM, fontFamily: MONO }}
+                  tickLine={false}
+                />
+                <PolarRadiusAxis
+                  domain={[1, 5]}
+                  tickCount={5}
+                  tick={false}
+                  axisLine={false}
+                />
+                <Radar
+                  dataKey="value"
+                  stroke={color}
+                  fill={color}
+                  fillOpacity={0.15}
+                  strokeWidth={1.5}
+                  dot={{ r: 2, fill: color }}
+                />
+                <Tooltip
+                  content={({ active, payload }: any) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0]?.payload;
+                    if (!d) return null;
+                    return (
+                      <div
+                        className="rounded border px-2 py-1"
+                        style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, fontFamily: MONO }}
+                      >
+                        <p className="text-[10px] font-bold" style={{ color: TEXT_LIGHT }}>
+                          {d.fullName}
+                        </p>
+                        <p className="text-[10px]" style={{ color }}>
+                          {d.value.toFixed(2)}
+                        </p>
+                      </div>
+                    );
+                  }}
+                />
+              </RadarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div style={{ width: 220, height: 220, backgroundColor: CARD_BG, borderRadius: 4 }} />
+          )}
+        </div>
+
+        {/* Stats + description */}
+        <div className="flex flex-col gap-3">
+          {/* Stat pills */}
+          <div className="flex flex-wrap gap-2">
+            <span
+              className="rounded px-2 py-0.5 text-[10px] font-bold"
+              style={{ fontFamily: MONO, backgroundColor: `${color}18`, color, border: `1px solid ${color}33` }}
+            >
+              {cluster.pct} of AD &middot; n={cluster.n.toLocaleString()}
+            </span>
+          </div>
+
+          {/* Description */}
+          <p
+            className="text-[13px] leading-[1.7]"
+            style={{ fontFamily: BODY, color: TEXT_MID }}
+          >
+            {cluster.description}
+          </p>
+
+          {/* Example homes */}
+          <div className="flex flex-wrap gap-1.5">
+            {cluster.examples.map((ex) => (
+              <span
+                key={ex}
+                className="rounded px-2 py-0.5 text-[9px] italic"
+                style={{
+                  fontFamily: BODY,
+                  backgroundColor: "rgba(58,51,42,0.4)",
+                  color: TEXT_DIM,
+                }}
+              >
+                {ex}
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── SOM Hex Grid Helpers ─────────────────────────────────────────────────────
+
+const SOM_GRID = somData.metadata.grid_size; // 20
+const HEX_R = 14; // hex radius in px
+const HEX_W = HEX_R * Math.sqrt(3);
+const HEX_H = HEX_R * 2;
+const SOM_SVG_W = SOM_GRID * HEX_W + HEX_W * 0.5 + 4;
+const SOM_SVG_H = SOM_GRID * HEX_H * 0.75 + HEX_H * 0.25 + 4;
+
+/** Hex center in SVG coords. Even columns offset down. */
+function hexCenter(col: number, row: number): [number, number] {
+  const x = 2 + HEX_W * 0.5 + col * HEX_W;
+  const y = 2 + HEX_R + row * HEX_H * 0.75 + (col % 2 === 1 ? HEX_H * 0.375 : 0);
+  return [x, y];
+}
+
+/** Flat-top hexagon path. */
+function hexPath(cx: number, cy: number, r: number): string {
+  const pts: string[] = [];
+  for (let i = 0; i < 6; i++) {
+    const a = (Math.PI / 180) * (60 * i);
+    pts.push(`${cx + r * Math.cos(a)},${cy + r * Math.sin(a)}`);
+  }
+  return `M${pts.join("L")}Z`;
+}
+
+/** Map value to a color via linear interpolation between two RGB stops. */
+function lerpColor(t: number, c0: [number, number, number], c1: [number, number, number]): string {
+  const r = Math.round(c0[0] + (c1[0] - c0[0]) * t);
+  const g = Math.round(c0[1] + (c1[1] - c0[1]) * t);
+  const b = Math.round(c0[2] + (c1[2] - c0[2]) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+/** 3-stop color ramp: low → mid → high */
+function colorRamp3(t: number, low: [number, number, number], mid: [number, number, number], high: [number, number, number]): string {
+  if (t <= 0.5) return lerpColor(t * 2, low, mid);
+  return lerpColor((t - 0.5) * 2, mid, high);
+}
+
+const SOM_CLUSTER_COLORS: Record<number, string> = {
+  0: "#6B8FA3", // Lived-In Retreat — slate blue
+  1: "#8CB4C9", // Clean Slate — ice blue
+  2: "#D4A574", // Grand Heritage — antique gold
+  3: "#C97B84", // Designer Showcase — dusty rose
+  4: "#7BA07B", // Comfortable Middle — sage
+  5: "#C9A96E", // Cold Stage — warm gold
+};
+
+/** Shared SOM hex grid SVG. Renders 20×20 hexes with per-cell coloring. */
+function SomHexGrid({
+  colorFn,
+  opacityFn,
+  tooltipFn,
+}: {
+  colorFn: (col: number, row: number) => string;
+  opacityFn?: (col: number, row: number) => number;
+  tooltipFn?: (col: number, row: number) => string;
+}) {
+  const hexes: React.ReactNode[] = [];
+  for (let col = 0; col < SOM_GRID; col++) {
+    for (let row = 0; row < SOM_GRID; row++) {
+      const [cx, cy] = hexCenter(col, row);
+      hexes.push(
+        <path
+          key={`${col}-${row}`}
+          d={hexPath(cx, cy, HEX_R - 0.5)}
+          fill={colorFn(col, row)}
+          fillOpacity={opacityFn ? opacityFn(col, row) : 1}
+          stroke="rgba(27,24,21,0.6)"
+          strokeWidth={0.5}
+        >
+          {tooltipFn && <title>{tooltipFn(col, row)}</title>}
+        </path>
+      );
+    }
+  }
+  return (
+    <svg
+      viewBox={`0 0 ${SOM_SVG_W} ${SOM_SVG_H}`}
+      className="w-full"
+      style={{ maxHeight: 420 }}
+    >
+      {hexes}
+    </svg>
+  );
+}
+
+// ── SOM Temporal Drift (animated) ──────────────────────────────────────────
+
+const DECADE_MS = 3000; // time per decade in the animation
+
+/** Precompute per-decade cluster percentages */
+function computeDecadeClusterPcts(): Record<string, Record<number, number>> {
+  const decades = somData.metadata.decades;
+  const cm = somData.cluster_map;
+  const result: Record<string, Record<number, number>> = {};
+  for (const decade of decades) {
+    const dmap = somData.decade_maps[decade];
+    const counts: Record<number, number> = {};
+    let total = 0;
+    for (let c = 0; c < SOM_GRID; c++) {
+      for (let r = 0; r < SOM_GRID; r++) {
+        const hits = dmap[c][r];
+        if (hits > 0) {
+          const cid = cm[c][r];
+          counts[cid] = (counts[cid] || 0) + hits;
+          total += hits;
+        }
+      }
+    }
+    const pcts: Record<number, number> = {};
+    for (let cid = 0; cid < 6; cid++) {
+      pcts[cid] = total > 0 ? ((counts[cid] || 0) / total) * 100 : 0;
+    }
+    result[decade] = pcts;
+  }
+  return result;
+}
+
+const DECADE_CLUSTER_PCTS = computeDecadeClusterPcts();
+
+function SomTemporalDrift({ mounted }: { mounted: boolean }) {
+  const decades = somData.metadata.decades as string[];
+  const [decadeIdx, setDecadeIdx] = useState(0);
+  const [playing, setPlaying] = useState(false);
+  const [hasStarted, setHasStarted] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const animRef = useRef<number>(0);
+  const startRef = useRef(0);
+
+  // Auto-play on scroll into view
+  useEffect(() => {
+    if (!mounted) return;
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !hasStarted) {
+          setPlaying(true);
+          setHasStarted(true);
+        }
+      },
+      { threshold: 0.3 },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [mounted, hasStarted]);
+
+  // Animation loop — cycles through decades
+  useEffect(() => {
+    if (!playing) return;
+    startRef.current = performance.now();
+    const tick = (now: number) => {
+      const elapsed = now - startRef.current;
+      const totalDuration = decades.length * DECADE_MS;
+      const loopTime = elapsed % totalDuration;
+      const idx = Math.floor(loopTime / DECADE_MS) % decades.length;
+      setDecadeIdx(idx);
+      animRef.current = requestAnimationFrame(tick);
+    };
+    animRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(animRef.current);
+  }, [playing, decades.length]);
+
+  const handleClick = useCallback(() => {
+    if (playing) {
+      setPlaying(false);
+    } else {
+      setPlaying(true);
+      if (!hasStarted) setHasStarted(true);
+    }
+  }, [playing, hasStarted]);
+
+  const currentDecade = decades[decadeIdx];
+  const prevDecade = decades[(decadeIdx - 1 + decades.length) % decades.length];
+  const dmap = somData.decade_maps[currentDecade];
+  const prevDmap = somData.decade_maps[prevDecade];
+  const cm = somData.cluster_map;
+
+  // Max hits across all decades for consistent scaling
+  let globalMax = 0;
+  for (const d of decades) {
+    const dm = somData.decade_maps[d];
+    for (let c = 0; c < SOM_GRID; c++)
+      for (let r = 0; r < SOM_GRID; r++)
+        if (dm[c][r] > globalMax) globalMax = dm[c][r];
+  }
+
+  const pcts = DECADE_CLUSTER_PCTS[currentDecade];
+
+  // Biggest movers vs previous decade
+  const prevPcts = DECADE_CLUSTER_PCTS[prevDecade];
+
+  return (
+    <div
+      ref={containerRef}
+      className="mt-6 rounded border p-6"
+      style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+    >
+      <div className="flex items-baseline justify-between">
+        <p
+          className="text-[10px] font-bold tracking-wider"
+          style={{ fontFamily: MONO, color: GOLD_DIM }}
+        >
+          7C &mdash; THE AESTHETIC MAP &amp; HOW TASTE MIGRATES
+        </p>
+        <span
+          className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
+          style={{
+            fontFamily: MONO,
+            color: GREEN,
+            backgroundColor: "rgba(46, 204, 113, 0.08)",
+          }}
+        >
+          LIVE
+        </span>
+      </div>
+
+      {mounted && (
+        <div
+          className="mt-4 grid grid-cols-1 gap-6 md:grid-cols-[1fr_1fr] cursor-pointer"
+          onClick={handleClick}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => { if (e.key === " " || e.key === "Enter") handleClick(); }}
+          aria-label={playing ? "Pause animation" : "Play animation"}
+        >
+          {/* Left: Static reference map */}
+          <div>
+            <p
+              className="mb-2 text-center text-[10px] font-bold tracking-wider"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              ALL HOMES (n=3,763)
+            </p>
+            <SomHexGrid
+              colorFn={(col, row) => {
+                const clusterId = cm[col][row];
+                return SOM_CLUSTER_COLORS[clusterId] ?? "#3A332A";
+              }}
+              opacityFn={(col, row) => {
+                const hits = somData.hit_map[col][row];
+                return hits === 0 ? 0.25 : Math.min(0.4 + (hits / 33) * 0.6, 1);
+              }}
+              tooltipFn={(col, row) => {
+                const clusterId = cm[col][row];
+                const hits = somData.hit_map[col][row];
+                return `${somData.metadata.cluster_names[clusterId]}\n${hits} homes`;
+              }}
+            />
+            {/* Cluster legend */}
+            <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
+              {somData.metadata.cluster_names.map((name: string, i: number) => (
+                <div key={name} className="flex items-center gap-1">
+                  <div
+                    className="h-2 w-2 rounded-sm"
+                    style={{ backgroundColor: SOM_CLUSTER_COLORS[i] }}
+                  />
+                  <span
+                    className="text-[8px]"
+                    style={{ fontFamily: MONO, color: TEXT_DIM }}
+                  >
+                    {name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Right: Animated decade map */}
+          <div>
+            <p
+              className="mb-2 text-center text-[13px] font-bold tracking-wider"
+              style={{
+                fontFamily: MONO,
+                color: TEXT_LIGHT,
+                transition: "color 0.3s",
+              }}
+            >
+              {currentDecade}
+            </p>
+
+            {/* Animated hex grid — same cluster colors, opacity by decade hits */}
+            <svg
+              viewBox={`0 0 ${SOM_SVG_W} ${SOM_SVG_H}`}
+              className="w-full"
+              style={{ maxHeight: 420 }}
+            >
+              {(() => {
+                const hexes: React.ReactNode[] = [];
+                for (let col = 0; col < SOM_GRID; col++) {
+                  for (let row = 0; row < SOM_GRID; row++) {
+                    const [cx, cy] = hexCenter(col, row);
+                    const clusterId = cm[col][row];
+                    const color = SOM_CLUSTER_COLORS[clusterId] ?? "#3A332A";
+                    const hits = dmap[col][row];
+                    const prevHits = prevDmap[col][row];
+                    // Blend current and previous for smoother visual
+                    const blendHits = hits * 0.8 + prevHits * 0.2;
+                    const opacity = blendHits === 0
+                      ? 0.08
+                      : Math.min(0.15 + (blendHits / globalMax) * 0.85, 1);
+
+                    hexes.push(
+                      <path
+                        key={`${col}-${row}`}
+                        d={hexPath(cx, cy, HEX_R - 0.5)}
+                        fill={color}
+                        fillOpacity={opacity}
+                        stroke="rgba(27,24,21,0.6)"
+                        strokeWidth={0.5}
+                        style={{ transition: "fill-opacity 0.6s ease" }}
+                      >
+                        <title>{`${currentDecade}: ${hits} homes\n${somData.metadata.cluster_names[clusterId]}`}</title>
+                      </path>
+                    );
+                  }
+                }
+                return hexes;
+              })()}
+              {/* Play/pause indicator */}
+              {!playing && hasStarted && (
+                <g transform={`translate(${SOM_SVG_W / 2}, ${SOM_SVG_H / 2})`} opacity={0.4}>
+                  <polygon points="-10,-14 -10,14 14,0" fill="white" />
+                </g>
+              )}
+            </svg>
+
+            {/* Decade progress dots */}
+            <div className="mt-2 flex items-center justify-center gap-2">
+              {decades.map((d: string, i: number) => (
+                <button
+                  key={d}
+                  onClick={(e) => { e.stopPropagation(); setDecadeIdx(i); setPlaying(false); }}
+                  className="flex flex-col items-center gap-0.5"
+                >
+                  <div
+                    className="rounded-full"
+                    style={{
+                      width: i === decadeIdx ? 10 : 6,
+                      height: i === decadeIdx ? 10 : 6,
+                      backgroundColor: i === decadeIdx ? TEXT_LIGHT : TEXT_DIM,
+                      opacity: i === decadeIdx ? 1 : 0.4,
+                      transition: "all 0.3s",
+                    }}
+                  />
+                  <span
+                    className="text-[7px]"
+                    style={{
+                      fontFamily: MONO,
+                      color: i === decadeIdx ? TEXT_LIGHT : TEXT_DIM,
+                      opacity: i === decadeIdx ? 1 : 0.5,
+                      transition: "all 0.3s",
+                    }}
+                  >
+                    {d}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* Cluster breakdown for current decade */}
+            <div className="mt-3 grid grid-cols-3 gap-x-2 gap-y-1">
+              {[0, 1, 2, 3, 4, 5].map((cid) => {
+                const pct = pcts[cid];
+                const prev = prevPcts[cid];
+                const delta = pct - prev;
+                const name = somData.metadata.cluster_names[cid].replace("The ", "");
+                return (
+                  <div key={cid} className="flex items-center gap-1">
+                    <div
+                      className="h-1.5 w-1.5 rounded-full flex-shrink-0"
+                      style={{ backgroundColor: SOM_CLUSTER_COLORS[cid] }}
+                    />
+                    <span
+                      className="text-[8px] tabular-nums"
+                      style={{
+                        fontFamily: MONO,
+                        color: TEXT_MID,
+                        transition: "color 0.3s",
+                      }}
+                    >
+                      {pct.toFixed(0)}%
+                      {decadeIdx > 0 && (
+                        <span style={{ color: delta > 1 ? GREEN : delta < -1 ? "#C97B84" : TEXT_DIM, marginLeft: 2 }}>
+                          {delta > 0 ? "+" : ""}{delta.toFixed(0)}
+                        </span>
+                      )}
+                    </span>
+                    <span
+                      className="text-[7px] truncate"
+                      style={{ fontFamily: MONO, color: TEXT_DIM }}
+                    >
+                      {name}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+
+            <p
+              className="mt-2 text-center text-[8px]"
+              style={{ fontFamily: MONO, color: TEXT_DIM, opacity: 0.6 }}
+            >
+              {playing ? "click to pause" : "click to play"}
+            </p>
+          </div>
+        </div>
+      )}
+      {!mounted && (
+        <div
+          className="mt-4 flex items-center justify-center rounded"
+          style={{
+            height: 360,
+            backgroundColor: "rgba(58, 51, 42, 0.15)",
+            border: `1px dashed ${BORDER}`,
+          }}
+        >
+          <p
+            className="text-[11px] tracking-wider"
+            style={{ fontFamily: MONO, color: TEXT_DIM }}
+          >
+            Loading aesthetic map&hellip;
+          </p>
+        </div>
+      )}
+
+      <div
+        className="mt-5 flex flex-col gap-3 text-[13px] leading-[1.7]"
+        style={{ fontFamily: BODY, color: TEXT_MID }}
+      >
+        <p>
+          <strong style={{ color: TEXT_LIGHT }}>The map:</strong>{" "}
+          On the left, each hexagon is colored by its k-means cluster
+          assignment, with opacity encoding density&mdash;brighter
+          hexagons contain more homes. Regions that touch each other
+          share a family resemblance. Regions far apart on the map are
+          aesthetically distant. This spatial arrangement is information
+          that k-means alone cannot provide, because k-means discards
+          topology.
+        </p>
+        <p>
+          <strong style={{ color: TEXT_LIGHT }}>The drift:</strong>{" "}
+          On the right, the same cluster-colored map animates through
+          four decades. Watch the lights shift: Grand Heritage (gold)
+          dims from 19% to 5%, Clean Slate (ice blue) brightens from
+          9% to 17%, and Cold Stage (warm gold) holds steady
+          throughout&mdash;the Epstein-associated aesthetic persists
+          even as the magazine&rsquo;s overall taste evolves.
+          The map doesn&rsquo;t change shape&mdash;the aesthetic
+          landscape is fixed&mdash;but the <em>population</em> moves
+          across it.
+        </p>
+      </div>
     </div>
   );
 }
@@ -1463,6 +2627,65 @@ export function AestheticMethodologySection() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* ════════════════════════════════════════════════════════════════
+              THE INSTRUMENT IN ACTION — SIX SCORED HOMES
+          ════════════════════════════════════════════════════════════════ */}
+          <div className="mt-14">
+            <p
+              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ fontFamily: MONO, color: COPPER }}
+            >
+              The Instrument in Action
+            </p>
+            <p
+              className="mt-3 text-[13px] leading-[1.7] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+              style={{ fontFamily: BODY, color: TEXT_MID }}
+            >
+              Six homes from the scored dataset, each chosen to illustrate a
+              different lesson about how the 9-axis rubric behaves in practice.
+              The radar charts plot raw scores; STAGE and Authenticity composites
+              are computed from the group means.
+            </p>
+
+            <div className="mt-8 flex flex-col gap-10">
+              {CASE_STUDIES.map((cs) => (
+                <CaseStudyCard key={cs.num} study={cs} mounted={mounted} />
+              ))}
+            </div>
+
+            {/* Link to full appendix */}
+            <a
+              href="/aestheticscores"
+              className="mt-10 block rounded border p-6 transition-colors hover:border-[#B87333]"
+              style={{
+                backgroundColor: CARD_BG,
+                borderColor: BORDER,
+                boxShadow: CARD_GLOW,
+                maxWidth: "calc(4*(100% - 5*24px)/6 + 3*24px)",
+              }}
+            >
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.18em]"
+                style={{ fontFamily: MONO, color: COPPER }}
+              >
+                Appendix
+              </p>
+              <p
+                className="mt-2 text-[18px] font-bold leading-tight"
+                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+              >
+                Full Aesthetic Scores for All Features &rarr;
+              </p>
+              <p
+                className="mt-2 text-[13px] leading-[1.6]"
+                style={{ fontFamily: BODY, color: TEXT_MID }}
+              >
+                Search and browse the 9-axis scores, radar profiles, and
+                AI-generated aesthetic summaries for every home in the dataset.
+              </p>
+            </a>
           </div>
         </div>
 
@@ -3277,32 +4500,6 @@ export function AestheticMethodologySection() {
             subtitle="What does Architectural Digest actually look like, statistically? Define the population before measuring anything against it."
           />
 
-          {/* Status banner */}
-          <div
-            className="mt-10 rounded border px-6 py-4"
-            style={{
-              backgroundColor: "rgba(184, 115, 51, 0.06)",
-              borderColor: COPPER,
-              borderStyle: "dashed",
-            }}
-          >
-            <div className="flex items-center gap-3">
-              <span
-                className="text-[10px] font-bold tracking-wider"
-                style={{ fontFamily: MONO, color: COPPER }}
-              >
-                STATUS: PENDING
-              </span>
-              <span
-                className="text-[12px]"
-                style={{ fontFamily: BODY, color: TEXT_DIM }}
-              >
-                Charts and statistics will be populated after scoring is
-                complete across all 3,763 features.
-              </span>
-            </div>
-          </div>
-
           {/* Why baseline first */}
           <div
             className="mt-6 flex flex-col gap-4 text-[14px] leading-[1.75] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
@@ -3442,44 +4639,78 @@ export function AestheticMethodologySection() {
                 className="text-[10px] font-bold tracking-wider"
                 style={{ fontFamily: MONO, color: GOLD_DIM }}
               >
-                5A &mdash; DISTRIBUTION SHAPE: VIOLIN PLOTS
+                5A &mdash; DISTRIBUTION SHAPE: GROUPED BAR CHART
               </p>
               <span
                 className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
                 style={{
                   fontFamily: MONO,
-                  color: COPPER,
-                  backgroundColor: "rgba(184, 115, 51, 0.1)",
+                  color: "#4a7c59",
+                  backgroundColor: "rgba(74, 124, 89, 0.12)",
                 }}
               >
-                PENDING
+                RENDERED
               </span>
             </div>
-            {/* Chart placeholder */}
-            <div
-              className="mt-4 flex items-center justify-center rounded"
-              style={{
-                height: 280,
-                backgroundColor: "rgba(58, 51, 42, 0.15)",
-                border: `1px dashed ${BORDER}`,
-              }}
-            >
-              <div className="text-center">
-                <p
-                  className="text-[11px] tracking-wider"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  9 violin plots &middot; one per axis &middot; grouped
-                  by SPACE / STORY / STAGE
-                </p>
-                <p
-                  className="mt-1 text-[9px]"
-                  style={{ fontFamily: MONO, color: COPPER }}
-                >
-                  Median + IQR box embedded in each violin
-                </p>
-              </div>
-            </div>
+            {/* Chart 5A: Distribution grouped bar chart */}
+            {mounted && (() => {
+              const scoreData = [1, 2, 3, 4, 5].map((score) => {
+                const row: Record<string, number | string> = { score: String(score) };
+                distributionData.forEach((d) => {
+                  row[d.short] = d.pcts[score - 1];
+                });
+                return row;
+              });
+              const axisGroupColor = Object.fromEntries(
+                distributionData.map((d) => [d.short, GROUP_COLORS[d.group] || TEXT_MID])
+              );
+              return (
+                <div className="mt-4">
+                  <ResponsiveContainer width="100%" height={280}>
+                    <BarChart data={scoreData} margin={{ top: 8, right: 12, bottom: 0, left: -8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke={BORDER} />
+                      <XAxis
+                        dataKey="score"
+                        tick={{ fill: TEXT_MID, fontSize: 11, fontFamily: MONO }}
+                        axisLine={{ stroke: BORDER }}
+                        tickLine={{ stroke: BORDER }}
+                        label={{ value: "Score", position: "insideBottom", offset: -2, fill: TEXT_DIM, fontSize: 10, fontFamily: MONO }}
+                      />
+                      <YAxis
+                        tick={{ fill: TEXT_MID, fontSize: 10, fontFamily: MONO }}
+                        axisLine={{ stroke: BORDER }}
+                        tickLine={{ stroke: BORDER }}
+                        label={{ value: "%", angle: -90, position: "insideLeft", offset: 16, fill: TEXT_DIM, fontSize: 10, fontFamily: MONO }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#111",
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: 6,
+                          fontFamily: MONO,
+                          fontSize: 11,
+                          color: TEXT_LIGHT,
+                        }}
+                        labelFormatter={(v) => `Score ${v}`}
+                        formatter={(value, name) => {
+                          const axis = distributionData.find((d) => d.short === name);
+                          return [`${value}%`, axis ? axis.axis : String(name)];
+                        }}
+                      />
+                      {distributionData.map((d) => (
+                        <Bar
+                          key={d.short}
+                          dataKey={d.short}
+                          fill={axisGroupColor[d.short]}
+                          opacity={0.85}
+                          radius={[2, 2, 0, 0]}
+                        />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
             <div
               className="mt-4 flex flex-col gap-3 text-[13px] leading-[1.7]"
               style={{ fontFamily: BODY, color: TEXT_MID }}
@@ -3504,6 +4735,32 @@ export function AestheticMethodologySection() {
                 (clustering at 1 or 5) reveal the natural boundaries of
                 the magazine&rsquo;s taste.
               </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  Technical detail.
+                </strong>{" "}
+                Material Warmth has 39.2% of all features at score 5 and only
+                0.9% at score 1. Theatricality inverts this: 16.9% at 1 and
+                just 2.3% at 5. Curation clusters at 4 with 56.3% of all
+                features. These asymmetries define the baseline
+                &mdash; each axis has a distinctive distributional shape that
+                reflects AD&rsquo;s editorial preferences across 3,763 scored
+                homes.
+              </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  In plain language.
+                </strong>{" "}
+                Think of each violin as a sideways histogram &mdash; a fat
+                bulge where most homes cluster. Material Warmth bulges at 4
+                and 5 (AD overwhelmingly prefers warm, tactile spaces).
+                Theatricality bulges at 1 and 2 (most AD homes are
+                understated, not showy). Curation bulges at 4 (virtually
+                everything in the magazine is professionally designed). The
+                shapes aren&rsquo;t all the same &mdash; and that&rsquo;s the
+                point. Each axis captures a genuinely different facet of
+                taste.
+              </p>
             </div>
           </div>
 
@@ -3523,35 +4780,84 @@ export function AestheticMethodologySection() {
                 className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
                 style={{
                   fontFamily: MONO,
-                  color: COPPER,
-                  backgroundColor: "rgba(184, 115, 51, 0.1)",
+                  color: GREEN,
+                  backgroundColor: "rgba(74, 222, 128, 0.08)",
                 }}
               >
-                PENDING
+                LIVE
               </span>
             </div>
-            <div
-              className="mt-4 flex items-center justify-center rounded"
-              style={{
-                height: 320,
-                backgroundColor: "rgba(58, 51, 42, 0.15)",
-                border: `1px dashed ${BORDER}`,
-              }}
-            >
-              <div className="text-center">
-                <p
-                  className="text-[11px] tracking-wider"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  9-axis radar &middot; AD population mean on each axis
-                </p>
-                <p
-                  className="mt-1 text-[9px]"
-                  style={{ fontFamily: MONO, color: COPPER }}
-                >
-                  Shaded &plusmn;1 SD band showing natural variation
-                </p>
-              </div>
+            <div className="mt-4" style={{ height: 320 }}>
+              {mounted ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <RadarChart
+                    data={baselineRadarData}
+                    cx="50%"
+                    cy="50%"
+                    outerRadius="70%"
+                  >
+                    <PolarGrid stroke="#1a1a1a" />
+                    <PolarAngleAxis
+                      dataKey="axis"
+                      tick={<RadarAxisTick />}
+                      tickLine={false}
+                    />
+                    <PolarRadiusAxis
+                      domain={[0, 5]}
+                      tick={false}
+                      axisLine={false}
+                    />
+                    <Radar
+                      name="AD Baseline"
+                      dataKey="mean"
+                      stroke="#d4a574"
+                      fill="#d4a574"
+                      fillOpacity={0.15}
+                      strokeWidth={2}
+                    />
+                    <Tooltip
+                      content={({ active, payload }: any) => {
+                        if (!active || !payload?.length) return null;
+                        const d = payload[0]?.payload;
+                        if (!d) return null;
+                        return (
+                          <div
+                            className="rounded border px-3 py-2"
+                            style={{
+                              backgroundColor: CARD_DEEP,
+                              borderColor: BORDER,
+                              fontFamily: MONO,
+                            }}
+                          >
+                            <p
+                              className="text-[10px] font-bold"
+                              style={{ color: TEXT_LIGHT }}
+                            >
+                              {d.axis}
+                            </p>
+                            <p
+                              className="mt-1 text-[10px]"
+                              style={{ color: "#d4a574" }}
+                            >
+                              Mean: {d.mean}
+                            </p>
+                          </div>
+                        );
+                      }}
+                      cursor={false}
+                    />
+                  </RadarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center">
+                  <p
+                    className="text-[12px] tracking-wider"
+                    style={{ fontFamily: MONO, color: TEXT_DIM }}
+                  >
+                    Loading chart&hellip;
+                  </p>
+                </div>
+              )}
             </div>
             <div
               className="mt-4 flex flex-col gap-3 text-[13px] leading-[1.7]"
@@ -3575,6 +4881,31 @@ export function AestheticMethodologySection() {
                 (diversity)? The radar answers the simplest question:
                 &ldquo;What does AD actually look like?&rdquo;
               </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  Technical detail.
+                </strong>{" "}
+                Overall means across all 3,763 features: Material Warmth 4.13
+                (highest), Maximalism 3.61, Grandeur 3.60, Curation 3.59,
+                Provenance 3.34, Historicism 3.25, Hospitality 3.28, Formality
+                2.85, Theatricality 2.38 (lowest). The SPACE group runs
+                consistently higher than the STAGE group, confirming that
+                AD&rsquo;s editorial preference leans toward physical warmth
+                and material presence over performative display.
+              </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  In plain language.
+                </strong>{" "}
+                Imagine averaging every home AD has ever published into a
+                single house. The radar shows that house&rsquo;s
+                &ldquo;personality profile&rdquo; &mdash; warm (Material
+                Warmth ~4.1), tastefully arranged (Curation ~3.6), but
+                notably understated (Theatricality ~2.4). The typical AD home
+                doesn&rsquo;t shout. This radar becomes the measuring stick:
+                when we later compare Epstein-connected homes, deviations
+                from this shape tell us something.
+              </p>
             </div>
           </div>
 
@@ -3594,36 +4925,59 @@ export function AestheticMethodologySection() {
                 className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
                 style={{
                   fontFamily: MONO,
-                  color: COPPER,
-                  backgroundColor: "rgba(184, 115, 51, 0.1)",
+                  color: "#8a9a6a",
+                  backgroundColor: "rgba(138, 154, 106, 0.1)",
                 }}
               >
-                PENDING
+                LIVE
               </span>
             </div>
-            <div
-              className="mt-4 flex items-center justify-center rounded"
-              style={{
-                height: 260,
-                backgroundColor: "rgba(58, 51, 42, 0.15)",
-                border: `1px dashed ${BORDER}`,
-              }}
-            >
-              <div className="text-center">
-                <p
-                  className="text-[11px] tracking-wider"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  9 &times; 9 Spearman correlation matrix &middot; full
-                  AD population
-                </p>
-                <p
-                  className="mt-1 text-[9px]"
-                  style={{ fontFamily: MONO, color: COPPER }}
-                >
-                  Hierarchical clustering to reveal axis grouping
-                  structure
-                </p>
+            <div className="mt-4" style={{ overflowX: "auto" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "40px repeat(9, 1fr)", gap: "2px", maxWidth: 500, margin: "0 auto" }}>
+                {/* Header row */}
+                <div />
+                {AXIS_LABELS_SHORT.map(label => (
+                  <div key={label} style={{ textAlign: "center", fontSize: 10, fontFamily: MONO, color: TEXT_MID, paddingBottom: 4 }}>{label}</div>
+                ))}
+                {/* Data rows */}
+                {CORR_MATRIX.map((row, i) => (
+                  <div key={i} style={{ display: "contents" }}>
+                    <div style={{ fontSize: 10, fontFamily: MONO, color: TEXT_MID, display: "flex", alignItems: "center", justifyContent: "flex-end", paddingRight: 4 }}>
+                      {AXIS_LABELS_SHORT[i]}
+                    </div>
+                    {row.map((val, j) => {
+                      const abs = Math.abs(val);
+                      const color = val >= 0
+                        ? `rgba(212, 165, 116, ${abs * 0.8})`
+                        : `rgba(100, 140, 180, ${abs * 0.8})`;
+                      return (
+                        <div
+                          key={j}
+                          title={`${AXIS_LABELS_SHORT[i]} \u00d7 ${AXIS_LABELS_SHORT[j]}: ${val.toFixed(3)}`}
+                          style={{
+                            aspectRatio: "1",
+                            backgroundColor: color,
+                            borderRadius: 2,
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            fontSize: 8,
+                            fontFamily: MONO,
+                            color: abs > 0.4 ? "#fff" : TEXT_DIM,
+                            cursor: "default",
+                          }}
+                        >
+                          {i !== j ? val.toFixed(2) : ""}
+                        </div>
+                      );
+                    })}
+                  </div>
+                ))}
+              </div>
+              {/* Legend */}
+              <div style={{ display: "flex", justifyContent: "center", gap: 16, marginTop: 12, fontSize: 11, fontFamily: MONO, color: TEXT_MID }}>
+                <span><span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: "rgba(100, 140, 180, 0.6)", borderRadius: 2, verticalAlign: "middle", marginRight: 4 }} />Negative</span>
+                <span><span style={{ display: "inline-block", width: 12, height: 12, backgroundColor: "rgba(212, 165, 116, 0.6)", borderRadius: 2, verticalAlign: "middle", marginRight: 4 }} />Positive</span>
               </div>
             </div>
             <div
@@ -3652,6 +5006,35 @@ export function AestheticMethodologySection() {
                 The internal correlation structure validates (or
                 challenges) the three-group taxonomy.
               </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  Technical detail.
+                </strong>{" "}
+                Strongest positive correlation: Curation &harr; Theatricality
+                (r&thinsp;=&thinsp;0.694) &mdash; curated homes tend to be
+                theatrical. Strongest negative: Provenance &harr; Curation
+                (r&thinsp;=&thinsp;&minus;0.583) &mdash; homes with genuine
+                history tend to be less overtly curated. Material Warmth
+                anti-correlates with the entire STAGE triad (&minus;0.387 to
+                &minus;0.490). Maximalism &harr; Historicism
+                (r&thinsp;=&thinsp;0.500) confirms that ornate historical
+                homes pack in detail.
+              </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  In plain language.
+                </strong>{" "}
+                Copper squares mean &ldquo;these two rise together.&rdquo;
+                Dark blue means &ldquo;when one goes up, the other goes
+                down.&rdquo; The biggest finding: homes with genuine history
+                (Provenance) tend to need less curatorial staging (Curation,
+                r&thinsp;=&thinsp;&minus;0.58) &mdash; think of a Tuscan
+                farmhouse that just <em>is</em>, versus a brand-new penthouse
+                styled to within an inch of its life. Meanwhile, Material
+                Warmth opposes the entire STAGE group &mdash; warm, lived-in
+                spaces and performative display are genuinely different
+                aesthetics, not just different words for the same thing.
+              </p>
             </div>
           </div>
 
@@ -3671,37 +5054,76 @@ export function AestheticMethodologySection() {
                 className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
                 style={{
                   fontFamily: MONO,
-                  color: COPPER,
-                  backgroundColor: "rgba(184, 115, 51, 0.1)",
+                  color: GREEN,
+                  backgroundColor: "rgba(46, 204, 113, 0.1)",
                 }}
               >
-                PENDING
+                LIVE
               </span>
             </div>
-            <div
-              className="mt-4 flex items-center justify-center rounded"
-              style={{
-                height: 300,
-                backgroundColor: "rgba(58, 51, 42, 0.15)",
-                border: `1px dashed ${BORDER}`,
-              }}
-            >
-              <div className="text-center">
-                <p
-                  className="text-[11px] tracking-wider"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  9 ridge plots &middot; 4 stacked density curves each
-                  (1988&ndash;99, 2000&ndash;09, 2010&ndash;19, 2020&ndash;25)
-                </p>
-                <p
-                  className="mt-1 text-[9px]"
-                  style={{ fontFamily: MONO, color: COPPER }}
-                >
-                  Small multiples matrix: 9 axes &times; 4 decades
-                </p>
-              </div>
-            </div>
+            {mounted && (() => {
+              const decadeChartData = decadeData.map(d => ({
+                decade: d.decade,
+                GR: d.means[0], MW: d.means[1], MX: d.means[2],
+                HI: d.means[3], PR: d.means[4], HO: d.means[5],
+                FO: d.means[6], CU: d.means[7], TH: d.means[8],
+              }));
+              const lines: { key: string; name: string; stroke: string }[] = [
+                { key: "GR", name: "Grandeur", stroke: "#d4a574" },
+                { key: "MW", name: "Material Warmth", stroke: "#b8956a" },
+                { key: "MX", name: "Maximalism", stroke: "#a07850" },
+                { key: "HI", name: "Historicism", stroke: "#8B7355" },
+                { key: "PR", name: "Provenance", stroke: "#7a654a" },
+                { key: "HO", name: "Hospitality", stroke: "#6b5940" },
+                { key: "FO", name: "Formality", stroke: "#C19A6B" },
+                { key: "CU", name: "Curation", stroke: "#aa8860" },
+                { key: "TH", name: "Theatricality", stroke: "#937650" },
+              ];
+              return (
+                <div className="mt-4">
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={decadeChartData} margin={{ top: 10, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(58, 51, 42, 0.3)" />
+                      <XAxis
+                        dataKey="decade"
+                        tick={{ fill: TEXT_DIM, fontFamily: MONO, fontSize: 11 }}
+                        stroke={BORDER}
+                      />
+                      <YAxis
+                        domain={[2, 4.5]}
+                        tick={{ fill: TEXT_DIM, fontFamily: MONO, fontSize: 11 }}
+                        stroke={BORDER}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: "#0a0a0a",
+                          border: "1px solid #1a1a1a",
+                          fontFamily: MONO,
+                          fontSize: 11,
+                        }}
+                        labelStyle={{ color: TEXT_LIGHT, fontFamily: MONO, fontSize: 11 }}
+                        itemStyle={{ fontFamily: MONO, fontSize: 10 }}
+                      />
+                      <Legend
+                        wrapperStyle={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM, paddingTop: 8 }}
+                      />
+                      {lines.map(l => (
+                        <Line
+                          key={l.key}
+                          dataKey={l.key}
+                          name={l.name}
+                          type="monotone"
+                          stroke={l.stroke}
+                          strokeWidth={2}
+                          dot={{ r: 3 }}
+                          activeDot={{ r: 5 }}
+                        />
+                      ))}
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              );
+            })()}
             <div
               className="mt-4 flex flex-col gap-3 text-[13px] leading-[1.7]"
               style={{ fontFamily: BODY, color: TEXT_MID }}
@@ -3729,6 +5151,31 @@ export function AestheticMethodologySection() {
                 the baseline is stable enough for decade-level
                 comparisons, or whether each era must be treated as its
                 own population.
+              </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  Technical detail.
+                </strong>{" "}
+                Theatricality rose from 2.14 (1988&ndash;99, n=1,398) to 3.14
+                (2020&ndash;25, n=433) &mdash; a full point on a 5-point
+                scale. Material Warmth dipped from 4.35 to 3.80 in the 2010s
+                before recovering to 4.07. Historicism fell steadily from 3.66
+                to 2.82. Hospitality collapsed from 3.12 to 2.33 in the most
+                recent period. The STAGE group&rsquo;s ascent mirrors the
+                STORY group&rsquo;s decline.
+              </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  In plain language.
+                </strong>{" "}
+                Think of this like fashion hemlines &mdash; aesthetic tastes
+                rise and fall in measurable waves. In the late 80s and 90s,
+                the typical AD home was a warm, historically rich Connecticut
+                estate. By the 2010s, it was a cool, theatrical, white-walled
+                gallery. Theatricality climbed a full point on a 5-point
+                scale &mdash; like a student going from a C to a B+.
+                Meanwhile, Historicism dropped almost a full point. AD&rsquo;s
+                taste literally shifted from old to new, from warm to staged.
               </p>
             </div>
           </div>
@@ -4404,6 +5851,1933 @@ export function AestheticMethodologySection() {
                 would produce meaningful structure, and it did &mdash;
                 strongly.
               </p>
+            </div>
+          </div>
+          {/* ════════════════════════════════════════════════════════════════
+              CLUSTER TYPOLOGY — SIX AESTHETIC ARCHETYPES
+          ════════════════════════════════════════════════════════════════ */}
+          <div className="mt-16">
+            <p
+              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ fontFamily: MONO, color: COPPER }}
+            >
+              Six Aesthetic Typologies
+            </p>
+            <h3
+              className="mt-2 text-[20px] font-bold leading-tight"
+              style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+            >
+              k-Means Clustering (k=6, n=3,763)
+            </h3>
+            <div
+              className="mt-4 flex flex-col gap-4 text-[14px] leading-[1.75] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+              style={{ fontFamily: BODY, color: TEXT_MID }}
+            >
+              <p>
+                Do the 3,763 scored homes organize into recognizable types?
+                k-means clustering on the 9-axis scores (StandardScaler
+                normalization) reveals six distinct aesthetic archetypes, each
+                with a characteristic radar shape. The silhouette score is
+                modest (0.17)&mdash;these are gradients, not hard
+                boxes&mdash;but the centroids are clearly differentiated and
+                the examples validate intuitively.
+              </p>
+              <p>
+                Two composites summarize each cluster: <strong style={{ color: COPPER }}>STAGE</strong>{" "}
+                (mean of Formality + Curation + Theatricality) measures
+                performance, while <strong style={{ color: GREEN }}>AUTH</strong>{" "}
+                (mean of Material Warmth + Historicism + Provenance) measures
+                accumulated authenticity. These two dimensions define the
+                terrain of AD&rsquo;s aesthetic space.
+              </p>
+            </div>
+
+            {/* ── 6 Individual Cluster Cards ── */}
+            <div className="mt-10 flex flex-col gap-6">
+              {CLUSTER_TYPES.map((c) => (
+                <ClusterTypologyCard key={c.id} cluster={c} mounted={mounted} />
+              ))}
+            </div>
+
+            {/* ── OVERLAY RADAR: All 6 Centroids ── */}
+            <div
+              className="mt-10 rounded border p-6"
+              style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+            >
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <p
+                    className="text-[10px] font-bold tracking-wider"
+                    style={{ fontFamily: MONO, color: GOLD_DIM }}
+                  >
+                    OVERLAY RADAR &mdash; ALL SIX CENTROIDS
+                  </p>
+                  <p
+                    className="mt-1 text-[12px]"
+                    style={{ fontFamily: BODY, color: TEXT_DIM }}
+                  >
+                    Each polygon is one cluster&rsquo;s centroid profile. Shape
+                    differences reveal where the archetypes diverge.
+                  </p>
+                </div>
+                <span
+                  className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
+                  style={{ fontFamily: MONO, color: GREEN, backgroundColor: "rgba(46,204,113,0.08)" }}
+                >
+                  LIVE
+                </span>
+              </div>
+              <div className="mt-4" style={{ height: 420 }}>
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <RadarChart
+                      data={CLUSTER_RADAR_AXES.map((a, i) => ({
+                        axis: a.key,
+                        fullName: a.full,
+                        ...Object.fromEntries(
+                          CLUSTER_TYPES.map((c) => [`c${c.id}`, c.centroid[i]])
+                        ),
+                      }))}
+                      cx="50%"
+                      cy="50%"
+                      outerRadius="68%"
+                    >
+                      <PolarGrid stroke={BORDER} strokeDasharray="2 4" />
+                      <PolarAngleAxis
+                        dataKey="axis"
+                        tick={({ payload, x, y, textAnchor }: any) => {
+                          const idx = CLUSTER_RADAR_AXES.findIndex((a) => a.key === payload.value);
+                          const group = idx < 3 ? "SPACE" : idx < 6 ? "STORY" : "STAGE";
+                          return (
+                            <text
+                              x={x} y={y} textAnchor={textAnchor}
+                              fontSize={10} fontFamily={MONO}
+                              fill={GROUP_COLORS[group] || TEXT_MID}
+                              fontWeight={600}
+                            >
+                              {payload.value}
+                            </text>
+                          );
+                        }}
+                        tickLine={false}
+                      />
+                      <PolarRadiusAxis
+                        domain={[1, 5]}
+                        tickCount={5}
+                        tick={{ fontSize: 8, fill: "rgba(176,165,148,0.3)", fontFamily: MONO }}
+                        axisLine={false}
+                      />
+                      {CLUSTER_TYPES.map((c) => (
+                        <Radar
+                          key={c.id}
+                          name={c.name}
+                          dataKey={`c${c.id}`}
+                          stroke={CLUSTER_COLORS[c.id]}
+                          fill={CLUSTER_COLORS[c.id]}
+                          fillOpacity={0.04}
+                          strokeWidth={1.5}
+                        />
+                      ))}
+                      <Legend
+                        wrapperStyle={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM, paddingTop: 12 }}
+                        formatter={(value) => (
+                          <span style={{ color: TEXT_MID }}>{value}</span>
+                        )}
+                      />
+                      <Tooltip
+                        content={({ active, payload, label }: any) => {
+                          if (!active || !payload?.length) return null;
+                          const axisObj = CLUSTER_RADAR_AXES.find((a) => a.key === label);
+                          return (
+                            <div
+                              className="rounded border px-3 py-2"
+                              style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, fontFamily: MONO }}
+                            >
+                              <p className="text-[10px] font-bold" style={{ color: TEXT_LIGHT }}>
+                                {axisObj?.full || label}
+                              </p>
+                              {payload.map((p: any) => (
+                                <p key={p.name} className="text-[9px]" style={{ color: p.stroke }}>
+                                  {p.name}: {typeof p.value === "number" ? p.value.toFixed(2) : p.value}
+                                </p>
+                              ))}
+                            </div>
+                          );
+                        }}
+                      />
+                    </RadarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <p className="text-[12px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                      Loading chart&hellip;
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── STAGE × AUTH SCATTER MAP ── */}
+            <div
+              className="mt-6 rounded border p-6"
+              style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+            >
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <p
+                    className="text-[10px] font-bold tracking-wider"
+                    style={{ fontFamily: MONO, color: GOLD_DIM }}
+                  >
+                    THE AESTHETIC MAP &mdash; STAGE &times; AUTHENTICITY
+                  </p>
+                  <p
+                    className="mt-1 text-[12px]"
+                    style={{ fontFamily: BODY, color: TEXT_DIM }}
+                  >
+                    Each bubble is a cluster centroid. Size encodes number of homes.
+                    The two axes define the primary tension in AD&rsquo;s aesthetic space.
+                  </p>
+                </div>
+                <span
+                  className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
+                  style={{ fontFamily: MONO, color: GREEN, backgroundColor: "rgba(46,204,113,0.08)" }}
+                >
+                  LIVE
+                </span>
+              </div>
+              <div className="mt-4" style={{ height: 380 }}>
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <ScatterChart margin={{ top: 20, right: 30, bottom: 20, left: 10 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(58,51,42,0.25)" />
+                      <XAxis
+                        type="number"
+                        dataKey="stage"
+                        domain={[1, 4.5]}
+                        name="STAGE"
+                        tick={{ fill: TEXT_DIM, fontFamily: MONO, fontSize: 10 }}
+                        axisLine={{ stroke: BORDER }}
+                        tickLine={{ stroke: BORDER }}
+                        label={{
+                          value: "STAGE composite →",
+                          position: "insideBottom",
+                          offset: -8,
+                          fill: COPPER,
+                          fontSize: 10,
+                          fontFamily: MONO,
+                        }}
+                      />
+                      <YAxis
+                        type="number"
+                        dataKey="auth"
+                        domain={[1, 5]}
+                        name="AUTH"
+                        tick={{ fill: TEXT_DIM, fontFamily: MONO, fontSize: 10 }}
+                        axisLine={{ stroke: BORDER }}
+                        tickLine={{ stroke: BORDER }}
+                        label={{
+                          value: "← AUTH composite",
+                          angle: -90,
+                          position: "insideLeft",
+                          offset: 8,
+                          fill: GREEN,
+                          fontSize: 10,
+                          fontFamily: MONO,
+                        }}
+                      />
+                      <ZAxis type="number" dataKey="n" range={[200, 900]} />
+                      <ReferenceLine
+                        x={2.93}
+                        stroke={BORDER}
+                        strokeDasharray="4 4"
+                        label={{
+                          value: "AD avg",
+                          position: "top",
+                          fill: TEXT_DIM,
+                          fontSize: 9,
+                          fontFamily: MONO,
+                        }}
+                      />
+                      <ReferenceLine
+                        y={3.57}
+                        stroke={BORDER}
+                        strokeDasharray="4 4"
+                        label={{
+                          value: "AD avg",
+                          position: "right",
+                          fill: TEXT_DIM,
+                          fontSize: 9,
+                          fontFamily: MONO,
+                        }}
+                      />
+                      <Tooltip
+                        content={({ active, payload }: any) => {
+                          if (!active || !payload?.length) return null;
+                          const d = payload[0]?.payload;
+                          if (!d) return null;
+                          return (
+                            <div
+                              className="rounded border px-3 py-2"
+                              style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, fontFamily: MONO }}
+                            >
+                              <p className="text-[11px] font-bold" style={{ color: CLUSTER_COLORS[d.id] }}>
+                                {d.name}
+                              </p>
+                              <p className="mt-1 text-[10px]" style={{ color: TEXT_MID }}>
+                                {d.pct} &middot; n={d.n.toLocaleString()}
+                              </p>
+                              <p className="text-[10px]" style={{ color: COPPER }}>
+                                STAGE: {d.stage.toFixed(2)}
+                              </p>
+                              <p className="text-[10px]" style={{ color: GREEN }}>
+                                AUTH: {d.auth.toFixed(2)}
+                              </p>
+                            </div>
+                          );
+                        }}
+                      />
+                      {CLUSTER_COMPOSITES.map((c) => (
+                        <Scatter
+                          key={c.id}
+                          name={c.name}
+                          data={[c]}
+                          fill={CLUSTER_COLORS[c.id]}
+                          stroke={CLUSTER_COLORS[c.id]}
+                          strokeWidth={1.5}
+                          fillOpacity={0.6}
+                        />
+                      ))}
+                    </ScatterChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <p className="text-[12px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                      Loading chart&hellip;
+                    </p>
+                  </div>
+                )}
+              </div>
+              {/* Cluster labels below scatter */}
+              <div
+                className="mt-4 flex flex-wrap justify-center gap-x-5 gap-y-2"
+                style={{ fontFamily: MONO, fontSize: 10 }}
+              >
+                {CLUSTER_TYPES.map((c) => (
+                  <div key={c.id} className="flex items-center gap-1.5">
+                    <div
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: CLUSTER_COLORS[c.id] }}
+                    />
+                    <span style={{ color: TEXT_MID }}>C{c.id} {c.name}</span>
+                  </div>
+                ))}
+              </div>
+              <div
+                className="mt-6 flex flex-col gap-3 text-[13px] leading-[1.7]"
+                style={{ fontFamily: BODY, color: TEXT_MID }}
+              >
+                <p>
+                  The STAGE &times; AUTH plane captures the primary structural
+                  tension revealed in the correlation analysis: performance
+                  versus authenticity. The clusters separate cleanly on this
+                  plane, with <strong style={{ color: TEXT_LIGHT }}>The Lived-In
+                  Retreat</strong> (high AUTH, low STAGE) and{" "}
+                  <strong style={{ color: TEXT_LIGHT }}>The Cold Stage</strong>{" "}
+                  (low AUTH, high STAGE) occupying opposite corners. The
+                  diagonal from bottom-left to top-right is the continuum from
+                  &ldquo;spaces that perform&rdquo; to &ldquo;spaces that
+                  simply are.&rdquo;
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>The Comfortable
+                  Middle</strong>&mdash;28.2% of all AD homes&mdash;sits near
+                  the population average on both axes. This is the magazine&rsquo;s
+                  center of gravity: warm, curated, not extreme on any
+                  dimension.
+                </p>
+              </div>
+            </div>
+
+            {/* ── DECADE PROPORTIONS: STACKED BAR ── */}
+            <div
+              className="mt-6 rounded border p-6"
+              style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+            >
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <p
+                    className="text-[10px] font-bold tracking-wider"
+                    style={{ fontFamily: MONO, color: GOLD_DIM }}
+                  >
+                    TEMPORAL STABILITY &mdash; CLUSTER PROPORTIONS BY DECADE
+                  </p>
+                  <p
+                    className="mt-1 text-[12px]"
+                    style={{ fontFamily: BODY, color: TEXT_DIM }}
+                  >
+                    All six archetypes appear in every era, but in shifting
+                    proportions.
+                  </p>
+                </div>
+                <span
+                  className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
+                  style={{ fontFamily: MONO, color: GREEN, backgroundColor: "rgba(46,204,113,0.08)" }}
+                >
+                  LIVE
+                </span>
+              </div>
+              <div className="mt-4" style={{ height: 320 }}>
+                {mounted ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart
+                      data={DECADE_CLUSTER_PROPORTIONS.map((d) => ({
+                        decade: d.decade,
+                        n: d.n,
+                        ...Object.fromEntries(
+                          CLUSTER_TYPES.map((c, i) => [c.name, d.pcts[i]])
+                        ),
+                      }))}
+                      margin={{ top: 10, right: 20, bottom: 5, left: 0 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="rgba(58,51,42,0.25)" />
+                      <XAxis
+                        dataKey="decade"
+                        tick={{ fill: TEXT_DIM, fontFamily: MONO, fontSize: 11 }}
+                        axisLine={{ stroke: BORDER }}
+                        tickLine={{ stroke: BORDER }}
+                      />
+                      <YAxis
+                        domain={[0, 100]}
+                        tick={{ fill: TEXT_DIM, fontFamily: MONO, fontSize: 10 }}
+                        axisLine={{ stroke: BORDER }}
+                        tickLine={{ stroke: BORDER }}
+                        label={{
+                          value: "% of features",
+                          angle: -90,
+                          position: "insideLeft",
+                          offset: 12,
+                          fill: TEXT_DIM,
+                          fontSize: 10,
+                          fontFamily: MONO,
+                        }}
+                      />
+                      <Tooltip
+                        contentStyle={{
+                          backgroundColor: CARD_DEEP,
+                          border: `1px solid ${BORDER}`,
+                          borderRadius: 6,
+                          fontFamily: MONO,
+                          fontSize: 10,
+                        }}
+                        labelStyle={{ color: TEXT_LIGHT, fontFamily: MONO, fontSize: 11 }}
+                        formatter={(value: any, name: any) => [
+                          `${Number(value).toFixed(1)}%`,
+                          String(name),
+                        ]}
+                      />
+                      <Legend
+                        wrapperStyle={{ fontFamily: MONO, fontSize: 9, paddingTop: 8 }}
+                        formatter={(value) => (
+                          <span style={{ color: TEXT_MID }}>{value}</span>
+                        )}
+                      />
+                      {CLUSTER_TYPES.map((c) => (
+                        <Bar
+                          key={c.id}
+                          dataKey={c.name}
+                          stackId="a"
+                          fill={CLUSTER_COLORS[c.id]}
+                          opacity={0.85}
+                        />
+                      ))}
+                    </BarChart>
+                  </ResponsiveContainer>
+                ) : (
+                  <div className="flex h-full items-center justify-center">
+                    <p className="text-[12px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                      Loading chart&hellip;
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div
+                className="mt-6 flex flex-col gap-3 text-[13px] leading-[1.7]"
+                style={{ fontFamily: BODY, color: TEXT_MID }}
+              >
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>
+                    The Grand Heritage is disappearing.
+                  </strong>{" "}
+                  From 19% of features in the 1990s to 4.6% in the 2020s. AD
+                  publishes fewer old-world estates with accumulated provenance.
+                  This is AD&rsquo;s version of a documented cultural
+                  shift&mdash;the inherited aristocratic home is being replaced.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>
+                    The Clean Slate is rising.
+                  </strong>{" "}
+                  From 8.7% to 17.1%. Contemporary new builds with minimal
+                  historical reference, directed by architects rather than
+                  inherited from grandparents. AD in the 2020s features nearly
+                  twice as many clean-line contemporary homes as in the 1990s.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>
+                    The Cold Stage grows with Theatricality.
+                  </strong>{" "}
+                  From 6.3% to 14.3%. These performative, historically rootless
+                  spaces mirror the decade-level Theatricality increase
+                  (2.14 &rarr; 3.14). AD&rsquo;s editorial window is opening wider
+                  to spaces that are designed to impress rather than to be
+                  lived in.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>
+                    The Comfortable Middle endures.
+                  </strong>{" "}
+                  Stable at ~28&ndash;30% across all four decades. The warm,
+                  moderate, professionally curated home is the one constant in
+                  AD&rsquo;s shifting aesthetic landscape. The center holds.
+                </p>
+              </div>
+            </div>
+
+            {/* ── SILHOUETTE + METHOD NOTE ── */}
+            <div
+              className="mt-6 rounded border p-5"
+              style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
+            >
+              <p
+                className="text-[10px] font-bold tracking-wider"
+                style={{ fontFamily: MONO, color: GOLD_DIM }}
+              >
+                METHODOLOGICAL NOTE
+              </p>
+              <p
+                className="mt-3 text-[12px] leading-[1.7]"
+                style={{ fontFamily: BODY, color: TEXT_DIM }}
+              >
+                k-means with k=6, StandardScaler normalization on all 9 axes.
+                Silhouette score: <strong style={{ color: TEXT_LIGHT }}>0.17</strong>.
+                This is modest&mdash;deliberately so. Homes exist on a continuum, not in
+                discrete bins. These typologies are <em>descriptions</em> of
+                recognizable aesthetic neighborhoods, not categorical diagnoses. A
+                silhouette of 0.7 would be suspicious, implying that the 9-axis space
+                had sharp natural boundaries&mdash;which would contradict
+                everything we know about taste as a gradient. The centroids are clearly
+                differentiated, the decade stability is real, and the examples
+                validate intuitively.
+              </p>
+            </div>
+          </div>
+
+          {/* ════════════════════════════════════════════════════════════════
+              SOM TOPOLOGY — SELF-ORGANIZING MAP VISUALIZATIONS
+          ════════════════════════════════════════════════════════════════ */}
+          <div className="mt-16">
+            <p
+              className="text-[10px] font-bold uppercase tracking-[0.18em]"
+              style={{ fontFamily: MONO, color: COPPER }}
+            >
+              Topology Preservation
+            </p>
+            <h3
+              className="mt-2 text-[20px] font-bold leading-tight"
+              style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+            >
+              Self-Organizing Map (20&times;20, n=3,763)
+            </h3>
+            <div
+              className="mt-4 flex flex-col gap-4 text-[14px] leading-[1.75] md:max-w-[calc(4*(100%-5*24px)/6+3*24px)]"
+              style={{ fontFamily: BODY, color: TEXT_MID }}
+            >
+              <p>
+                A Self-Organizing Map (SOM) is an unsupervised neural network
+                that takes the 9-dimensional aesthetic space and projects it
+                onto a 2D hexagonal grid&mdash;preserving neighborhood
+                relationships so that similar homes land on nearby hexagons.
+                Where k-means tells us <em>what</em> the clusters are, the SOM
+                tells us <em>how they relate to each other</em> in topological
+                space.
+              </p>
+              <p>
+                <strong style={{ color: TEXT_LIGHT }}>
+                  Think of it like a map of a continent.
+                </strong>{" "}
+                k-means is like naming the countries. The SOM is the actual
+                map&mdash;showing which countries share borders, where the
+                mountain ranges (boundaries) are, and which regions blend
+                smoothly into each other. The hexagons are neighborhoods,
+                and homes migrate to the hexagon that best represents their
+                aesthetic DNA.
+              </p>
+            </div>
+
+            {/* ── 7A: Component Planes ─────────────────────────────────── */}
+            <div
+              className="mt-10 rounded border p-6"
+              style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+            >
+              <div className="flex items-baseline justify-between">
+                <p
+                  className="text-[10px] font-bold tracking-wider"
+                  style={{ fontFamily: MONO, color: GOLD_DIM }}
+                >
+                  7A &mdash; COMPONENT PLANES: WHERE EACH AXIS LIVES
+                </p>
+                <span
+                  className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
+                  style={{
+                    fontFamily: MONO,
+                    color: GREEN,
+                    backgroundColor: "rgba(46, 204, 113, 0.08)",
+                  }}
+                >
+                  LIVE
+                </span>
+              </div>
+
+              {/* Intro */}
+              <p
+                className="mt-4 text-[13px] leading-[1.7]"
+                style={{ fontFamily: BODY, color: TEXT_MID }}
+              >
+                Each tile below shows one axis of the 9-dimensional scorer
+                projected onto the SOM grid. Bright hexagons score high on
+                that axis, dark ones low. When two planes light up in the same
+                region, those qualities travel together in real homes. When
+                they look like negatives of each other, the qualities are
+                opposites. Nine weather maps, one continent.
+              </p>
+
+              {!mounted && (
+                <div
+                  className="mt-4 flex items-center justify-center rounded"
+                  style={{
+                    height: 360,
+                    backgroundColor: "rgba(58, 51, 42, 0.15)",
+                    border: `1px dashed ${BORDER}`,
+                  }}
+                >
+                  <p
+                    className="text-[11px] tracking-wider"
+                    style={{ fontFamily: MONO, color: TEXT_DIM }}
+                  >
+                    Loading SOM component planes&hellip;
+                  </p>
+                </div>
+              )}
+
+              {mounted && (() => {
+                const groups: {
+                  label: string;
+                  subtitle: string;
+                  axes: string[];
+                  color: string;
+                  analysis: React.ReactNode;
+                }[] = [
+                  {
+                    label: "SPACE",
+                    subtitle: "The physical experience",
+                    axes: ["Grandeur", "Material Warmth", "Maximalism"],
+                    color: GROUP_COLORS.SPACE,
+                    analysis: (
+                      <>
+                        The weakest within-group coherence (avg <em>r</em> = 0.066).
+                        Grandeur actually <em>anti</em>-correlates with Material
+                        Warmth (<em>r</em> = &minus;0.39)&mdash;grand homes
+                        aren&rsquo;t warm. Meanwhile Material Warmth and
+                        Maximalism travel together (<em>r</em> = 0.51): richly
+                        layered homes use real materials. The surprise: Grandeur
+                        correlates more with STAGE axes than its own group
+                        (<em>r</em> = 0.82 with Formality). It behaves less like
+                        a physical property and more like a performance metric.
+                      </>
+                    ),
+                  },
+                  {
+                    label: "STORY",
+                    subtitle: "The narrative it tells",
+                    axes: ["Historicism", "Provenance", "Hospitality"],
+                    color: GROUP_COLORS.STORY,
+                    analysis: (
+                      <>
+                        Moderate group coherence (avg <em>r</em> = 0.186).
+                        Historicism and Provenance are strongly linked
+                        (<em>r</em> = 0.73)&mdash;old styles and old buildings
+                        travel together. The outlier is Hospitality: weakly related
+                        to both (<em>r</em> &asymp; 0.09, &minus;0.26) and
+                        actually more aligned with STAGE (<em>r</em> = 0.55 with
+                        Theatricality). A home can feel welcoming as a performance
+                        rather than as a consequence of its history.
+                      </>
+                    ),
+                  },
+                  {
+                    label: "STAGE",
+                    subtitle: "Who it's performing for",
+                    axes: ["Formality", "Curation", "Theatricality"],
+                    color: GROUP_COLORS.STAGE,
+                    analysis: (
+                      <>
+                        The strongest group coherence by far (avg within-group
+                        <em> r</em> = 0.768). All three planes light up in nearly
+                        the same region of the map&mdash;Formality, Curation, and
+                        Theatricality are almost interchangeable in how they
+                        distribute across homes. They also share strong
+                        anti-correlations with Material Warmth and Provenance: the
+                        &ldquo;performance vs. depth&rdquo; axis that the
+                        hypothesis test in Section 6 identified.
+                      </>
+                    ),
+                  },
+                ];
+
+                return (
+                  <div className="mt-5 flex flex-col gap-6">
+                    {groups.map((g) => {
+                      return (
+                        <div key={g.label}>
+                          {/* Group header */}
+                          <div className="mb-3 flex items-baseline gap-2">
+                            <span
+                              className="inline-block h-2 w-2 rounded-full"
+                              style={{ backgroundColor: g.color }}
+                            />
+                            <span
+                              className="text-[11px] font-bold tracking-widest"
+                              style={{ fontFamily: MONO, color: g.color }}
+                            >
+                              {g.label}
+                            </span>
+                            <span
+                              className="text-[10px] tracking-wide"
+                              style={{ fontFamily: MONO, color: TEXT_DIM }}
+                            >
+                              &mdash; {g.subtitle}
+                            </span>
+                          </div>
+
+                          {/* 3 hex grids for this group */}
+                          <div className="grid grid-cols-3 gap-3">
+                            {g.axes.map((axisName) => {
+                              const plane = somData.component_planes[axisName];
+                              let pMin = Infinity, pMax = -Infinity;
+                              for (let c = 0; c < SOM_GRID; c++) {
+                                for (let r = 0; r < SOM_GRID; r++) {
+                                  const v = plane[c][r];
+                                  if (v < pMin) pMin = v;
+                                  if (v > pMax) pMax = v;
+                                }
+                              }
+                              return (
+                                <div key={axisName}>
+                                  <p
+                                    className="mb-1.5 text-center text-[9px] font-bold tracking-wider"
+                                    style={{ fontFamily: MONO, color: g.color }}
+                                  >
+                                    {axisName.toUpperCase()}
+                                  </p>
+                                  <SomHexGrid
+                                    colorFn={(col, row) => {
+                                      const t = pMax > pMin ? (plane[col][row] - pMin) / (pMax - pMin) : 0.5;
+                                      return colorRamp3(
+                                        t,
+                                        [27, 24, 21],
+                                        [120, 90, 50],
+                                        [210, 170, 100]
+                                      );
+                                    }}
+                                    tooltipFn={(col, row) =>
+                                      `${axisName}: ${plane[col][row].toFixed(2)}`
+                                    }
+                                  />
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          {/* Group analysis */}
+                          <p
+                            className="mt-3 text-[12px] leading-[1.7]"
+                            style={{ fontFamily: BODY, color: TEXT_MID }}
+                          >
+                            {g.analysis}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })()}
+
+              {/* Grandeur cross-group callout */}
+              <div
+                className="mt-6 rounded border px-4 py-3"
+                style={{
+                  borderColor: `${GROUP_COLORS.SPACE}44`,
+                  backgroundColor: `${GROUP_COLORS.SPACE}0A`,
+                }}
+              >
+                <p
+                  className="text-[10px] font-bold tracking-wider"
+                  style={{ fontFamily: MONO, color: GROUP_COLORS.SPACE }}
+                >
+                  CROSS-GROUP FINDING
+                </p>
+                <p
+                  className="mt-1.5 text-[12px] leading-[1.7]"
+                  style={{ fontFamily: BODY, color: TEXT_MID }}
+                >
+                  Grandeur is formally assigned to{" "}
+                  <span style={{ color: GROUP_COLORS.SPACE }}>SPACE</span> but
+                  empirically behaves like a{" "}
+                  <span style={{ color: GROUP_COLORS.STAGE }}>STAGE</span> axis.
+                  Its correlation with Formality (<em>r</em> = 0.82) exceeds
+                  its correlation with its own groupmates Material Warmth
+                  (<em>r</em> = &minus;0.39) and Maximalism (<em>r</em> = 0.15).
+                  This was the axis-definition finding surfaced in{" "}
+                  <strong style={{ color: TEXT_LIGHT }}>Section 4</strong>&mdash;the
+                  SOM confirms it spatially.
+                </p>
+              </div>
+
+              {/* Ideal vs. Actual comparison — visual */}
+              <div
+                className="mt-6 rounded border p-4"
+                style={{ borderColor: BORDER, backgroundColor: "rgba(21, 18, 15, 0.6)" }}
+              >
+                <p
+                  className="text-[10px] font-bold tracking-wider"
+                  style={{ fontFamily: MONO, color: GOLD_DIM }}
+                >
+                  IDEAL vs. ACTUAL GROUP STRUCTURE
+                </p>
+                <p
+                  className="mt-2 text-[12px] leading-[1.7]"
+                  style={{ fontFamily: BODY, color: TEXT_MID }}
+                >
+                  If the three groups were perfectly coherent, all axes within a
+                  group would produce identical component planes, and planes across
+                  groups would look distinct. Left: what that would look like.
+                  Right: what we actually measured.
+                </p>
+
+                {/* Side-by-side mini hex grids */}
+                {mounted && (() => {
+                  const G = SOM_GRID; // 20
+
+                  // Compute group centroid planes (average of 3 real planes per group).
+                  // The "ideal" is: if all axes within a group were perfectly correlated,
+                  // every plane in the group would look like this centroid.
+                  const groupDefs: {
+                    label: string;
+                    color: string;
+                    axes: string[];
+                    verdict: "confirmed" | "partial" | "divergent";
+                    avgR: string;
+                  }[] = [
+                    { label: "SPACE", color: GROUP_COLORS.SPACE, axes: ["Grandeur", "Material Warmth", "Maximalism"], verdict: "divergent", avgR: "0.07" },
+                    { label: "STORY", color: GROUP_COLORS.STORY, axes: ["Historicism", "Provenance", "Hospitality"], verdict: "partial", avgR: "0.19" },
+                    { label: "STAGE", color: GROUP_COLORS.STAGE, axes: ["Formality", "Curation", "Theatricality"], verdict: "confirmed", avgR: "0.77" },
+                  ];
+
+                  // Build ideal planes: for each group, pick the axis with the most
+                  // spatial structure (highest variance across the SOM grid) as the
+                  // template. Averaging anti-correlated axes (e.g. SPACE) produces a
+                  // flat, structureless plane — picking the strongest signal is more
+                  // honest about what "ideal coherence" would look like.
+                  // Then boost contrast 20% so bright/dark regions are more defined.
+                  const centroidPlanes: Record<string, { grid: number[][]; min: number; max: number }> = {};
+                  for (const gd of groupDefs) {
+                    // Find the axis with the highest variance
+                    let bestAxis = gd.axes[0];
+                    let bestVar = -1;
+                    for (const ax of gd.axes) {
+                      const plane = somData.component_planes[ax];
+                      let sum = 0, sum2 = 0, count = 0;
+                      for (let c = 0; c < G; c++) {
+                        for (let r = 0; r < G; r++) {
+                          sum += plane[c][r];
+                          sum2 += plane[c][r] ** 2;
+                          count++;
+                        }
+                      }
+                      const variance = sum2 / count - (sum / count) ** 2;
+                      if (variance > bestVar) {
+                        bestVar = variance;
+                        bestAxis = ax;
+                      }
+                    }
+
+                    // Use the strongest axis as template, with 20% contrast boost
+                    const source = somData.component_planes[bestAxis];
+                    let rawMin = Infinity, rawMax = -Infinity;
+                    let mean = 0;
+                    for (let c = 0; c < G; c++)
+                      for (let r = 0; r < G; r++) {
+                        mean += source[c][r];
+                        if (source[c][r] < rawMin) rawMin = source[c][r];
+                        if (source[c][r] > rawMax) rawMax = source[c][r];
+                      }
+                    mean /= G * G;
+
+                    // Copy source with contrast boost
+                    let grid: number[][] = [];
+                    for (let c = 0; c < G; c++) {
+                      grid[c] = [];
+                      for (let r = 0; r < G; r++) {
+                        const boosted = mean + (source[c][r] - mean) * 1.2;
+                        grid[c][r] = Math.max(rawMin, Math.min(rawMax, boosted));
+                      }
+                    }
+
+                    // Spatial smoothing: 3 passes of hex-neighbor averaging.
+                    // Produces compact, regular blobs for the ideal visualization.
+                    const hexNbrs = (col: number, row: number): [number, number][] => {
+                      const even = col % 2 === 0;
+                      return [
+                        [col, row - 1], [col, row + 1],
+                        [col + 1, even ? row - 1 : row], [col + 1, even ? row : row + 1],
+                        [col - 1, even ? row - 1 : row], [col - 1, even ? row : row + 1],
+                      ];
+                    };
+                    for (let pass = 0; pass < 1; pass++) {
+                      const smoothed: number[][] = [];
+                      for (let c = 0; c < G; c++) {
+                        smoothed[c] = [];
+                        for (let r = 0; r < G; r++) {
+                          let sum = grid[c][r] * 2; // center weighted 2×
+                          let weight = 2;
+                          for (const [nc, nr] of hexNbrs(c, r)) {
+                            if (nc >= 0 && nc < G && nr >= 0 && nr < G) {
+                              sum += grid[nc][nr];
+                              weight++;
+                            }
+                          }
+                          smoothed[c][r] = sum / weight;
+                        }
+                      }
+                      grid = smoothed;
+                    }
+
+                    // Recompute min/max after smoothing
+                    let cMin = Infinity, cMax = -Infinity;
+                    for (let c = 0; c < G; c++)
+                      for (let r = 0; r < G; r++) {
+                        if (grid[c][r] < cMin) cMin = grid[c][r];
+                        if (grid[c][r] > cMax) cMax = grid[c][r];
+                      }
+                    centroidPlanes[gd.label] = { grid, min: cMin, max: cMax };
+                  }
+
+                  const groupRows = groupDefs;
+
+                  const verdictStyle = (v: "confirmed" | "partial" | "divergent") => {
+                    const c =
+                      v === "confirmed" ? GREEN : v === "partial" ? "#D4A843" : "#C97B84";
+                    const bg =
+                      v === "confirmed"
+                        ? "rgba(46,204,113,0.08)"
+                        : v === "partial"
+                        ? "rgba(212,168,67,0.08)"
+                        : "rgba(201,123,132,0.08)";
+                    return { color: c, backgroundColor: bg };
+                  };
+
+                  // ── Contour tracer for ideal grid blob outlines ──
+                  // Neighbor across each edge, by edge index. Back-edge is always (e+3)%6.
+                  function edgeNeighbor(col: number, row: number, edge: number): [number, number] {
+                    const even = col % 2 === 0;
+                    // Edge 0: right-lower, 1: bottom, 2: left-lower,
+                    //      3: left-upper, 4: top, 5: right-upper
+                    const offsets: [number, number][] = even
+                      ? [[1, 0], [0, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
+                      : [[1, 1], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, 0]];
+                    const [dc, dr] = offsets[edge];
+                    return [col + dc, row + dr];
+                  }
+
+                  // SVG coordinate of hex vertex at given index
+                  function vertexXY(col: number, row: number, v: number): [number, number] {
+                    const [cx, cy] = hexCenter(col, row);
+                    const a = (Math.PI / 180) * (60 * v);
+                    return [cx + HEX_R * Math.cos(a), cy + HEX_R * Math.sin(a)];
+                  }
+
+                  // Trace the outer contour of a hot blob → SVG path d.
+                  // Accepts any 2D grid + a percentile cutoff (0..1).
+                  function blobOutline(
+                    grid: number[][],
+                    pct: number
+                  ): string {
+                    const vals: number[] = [];
+                    for (let c = 0; c < G; c++)
+                      for (let r = 0; r < G; r++)
+                        vals.push(grid[c][r]);
+                    vals.sort((a, b) => a - b);
+                    const threshold = vals[Math.floor(vals.length * pct)];
+                    const hot = (c: number, r: number) =>
+                      c >= 0 && c < G && r >= 0 && r < G && grid[c][r] >= threshold;
+
+                    // Find a starting boundary edge: first hot hex with a cold neighbor
+                    let startC = -1, startR = -1, startE = -1;
+                    outer: for (let c = 0; c < G; c++) {
+                      for (let r = 0; r < G; r++) {
+                        if (!hot(c, r)) continue;
+                        for (let e = 0; e < 6; e++) {
+                          const [nc, nr] = edgeNeighbor(c, r, e);
+                          if (!hot(nc, nr)) {
+                            startC = c; startR = r; startE = e;
+                            break outer;
+                          }
+                        }
+                      }
+                    }
+                    if (startC < 0) return "";
+
+                    // Walk the contour: at each step, record the start vertex of
+                    // the current boundary edge, then advance clockwise.
+                    const points: string[] = [];
+                    let c = startC, r = startR, e = startE;
+                    let safety = G * G * 6; // max possible edges
+                    do {
+                      // Record start vertex of this boundary edge
+                      const [vx, vy] = vertexXY(c, r, e);
+                      points.push(`${vx.toFixed(1)},${vy.toFixed(1)}`);
+
+                      // Advance: try the next edge clockwise (e+1).
+                      // If the neighbor across (e+1) is hot, cross into it and
+                      // keep turning until we find a cold neighbor.
+                      let ne = (e + 1) % 6;
+                      let [nc, nr] = edgeNeighbor(c, r, ne);
+
+                      while (hot(nc, nr)) {
+                        // Cross to hot neighbor
+                        c = nc; r = nr;
+                        const backE = (ne + 3) % 6;
+                        ne = (backE + 1) % 6;
+                        [nc, nr] = edgeNeighbor(c, r, ne);
+                      }
+                      e = ne;
+                    } while ((c !== startC || r !== startR || e !== startE) && --safety > 0);
+
+                    if (points.length < 3) return "";
+                    return `M${points.join("L")}Z`;
+                  }
+
+                  // Cool blue-slate ramp for ideal grids (complementary to warm brown-gold actual)
+                  const idealColorRamp = (t: number) =>
+                    colorRamp3(
+                      t,
+                      [18, 22, 32],     // near-black with blue undertone
+                      [50, 62, 85],     // slate blue
+                      [140, 160, 195]   // steel blue
+                    );
+
+                  return (
+                    <div className="mt-5 grid grid-cols-2 gap-6">
+                      {/* IDEAL column */}
+                      <div>
+                        <p
+                          className="mb-3 text-center text-[13px] font-bold tracking-widest"
+                          style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                        >
+                          IDEAL
+                        </p>
+                        <div className="flex flex-col gap-3">
+                          {groupRows.map((g) => {
+                            const cp = centroidPlanes[g.label];
+                            const outline = blobOutline(centroidPlanes[g.label].grid, 0.72);
+                            return (
+                              <div key={`ideal-${g.label}`}>
+                                <p
+                                  className="mb-1 text-[8px] font-bold tracking-widest"
+                                  style={{ fontFamily: MONO, color: g.color }}
+                                >
+                                  {g.label}
+                                </p>
+                                <div className="grid grid-cols-3 gap-1">
+                                  {g.axes.map((axisName) => (
+                                    <div key={`ideal-${axisName}`}>
+                                      <p
+                                        className="mb-0.5 text-center text-[7px] tracking-wider"
+                                        style={{ fontFamily: MONO, color: `${g.color}88` }}
+                                      >
+                                        {axisName.split(" ").map(w => w[0]).join("")}
+                                      </p>
+                                      <svg
+                                        viewBox={`0 0 ${SOM_SVG_W} ${SOM_SVG_H}`}
+                                        className="w-full"
+                                      >
+                                        {/* Colored hexes */}
+                                        {Array.from({ length: G }, (_, col) =>
+                                          Array.from({ length: G }, (__, row) => {
+                                            const [cx, cy] = hexCenter(col, row);
+                                            const t = cp.max > cp.min
+                                              ? (cp.grid[col][row] - cp.min) / (cp.max - cp.min)
+                                              : 0.5;
+                                            return (
+                                              <path
+                                                key={`h-${col}-${row}`}
+                                                d={hexPath(cx, cy, HEX_R - 0.5)}
+                                                fill={idealColorRamp(t)}
+                                                stroke="rgba(18,22,32,0.5)"
+                                                strokeWidth={0.4}
+                                              />
+                                            );
+                                          })
+                                        )}
+                                        {/* Smooth blob outline */}
+                                        {outline && (
+                                          <path
+                                            d={outline}
+                                            fill="none"
+                                            stroke="rgba(255,255,255,0.95)"
+                                            strokeWidth={8}
+                                            strokeLinejoin="round"
+                                            strokeLinecap="round"
+                                          />
+                                        )}
+                                      </svg>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p
+                          className="mt-2 text-center text-[9px] italic leading-[1.5]"
+                          style={{ fontFamily: BODY, color: TEXT_DIM }}
+                        >
+                          Same white boundary, same position, all three.
+                        </p>
+                      </div>
+
+                      {/* ACTUAL column */}
+                      <div>
+                        <p
+                          className="mb-3 text-center text-[13px] font-bold tracking-widest"
+                          style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                        >
+                          ACTUAL
+                        </p>
+                        <div className="flex flex-col gap-3">
+                          {groupRows.map((g) => (
+                            <div key={`actual-${g.label}`}>
+                              <div className="mb-1 flex items-center justify-between">
+                                <p
+                                  className="text-[8px] font-bold tracking-widest"
+                                  style={{ fontFamily: MONO, color: g.color }}
+                                >
+                                  {g.label}
+                                </p>
+                                <span
+                                  className="rounded-full px-1.5 py-0.5 text-[7px] font-bold tracking-widest"
+                                  style={verdictStyle(g.verdict)}
+                                >
+                                  <em style={{ fontFamily: BODY, fontStyle: "normal" }}>r</em>
+                                  {" = "}{g.avgR}
+                                </span>
+                              </div>
+                              <div className="grid grid-cols-3 gap-1">
+                                {g.axes.map((axisName) => {
+                                  const plane = somData.component_planes[axisName];
+                                  let pMin = Infinity, pMax = -Infinity;
+                                  for (let c = 0; c < G; c++) {
+                                    for (let r = 0; r < G; r++) {
+                                      const v = plane[c][r];
+                                      if (v < pMin) pMin = v;
+                                      if (v > pMax) pMax = v;
+                                    }
+                                  }
+                                  // Raw data, lower threshold → messier, more diffuse blob
+                                  const actualOutline = blobOutline(plane, 0.50);
+                                  return (
+                                    <div key={`actual-${axisName}`}>
+                                      <p
+                                        className="mb-0.5 text-center text-[7px] tracking-wider"
+                                        style={{ fontFamily: MONO, color: `${g.color}88` }}
+                                      >
+                                        {axisName.split(" ").map(w => w[0]).join("")}
+                                      </p>
+                                      <svg
+                                        viewBox={`0 0 ${SOM_SVG_W} ${SOM_SVG_H}`}
+                                        className="w-full"
+                                      >
+                                        {Array.from({ length: G }, (_, col) =>
+                                          Array.from({ length: G }, (__, row) => {
+                                            const [cx, cy] = hexCenter(col, row);
+                                            const t = pMax > pMin
+                                              ? (plane[col][row] - pMin) / (pMax - pMin)
+                                              : 0.5;
+                                            return (
+                                              <path
+                                                key={`h-${col}-${row}`}
+                                                d={hexPath(cx, cy, HEX_R - 0.5)}
+                                                fill={colorRamp3(
+                                                  t,
+                                                  [27, 24, 21],
+                                                  [120, 90, 50],
+                                                  [210, 170, 100]
+                                                )}
+                                                stroke="rgba(27,24,21,0.6)"
+                                                strokeWidth={0.5}
+                                              />
+                                            );
+                                          })
+                                        )}
+                                        {actualOutline && (
+                                          <path
+                                            d={actualOutline}
+                                            fill="none"
+                                            stroke="rgba(255,255,255,0.85)"
+                                            strokeWidth={6}
+                                            strokeLinejoin="round"
+                                            strokeLinecap="round"
+                                          />
+                                        )}
+                                      </svg>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <p
+                          className="mt-2 text-center text-[9px] italic leading-[1.5]"
+                          style={{ fontFamily: BODY, color: TEXT_DIM }}
+                        >
+                          Three different boundaries. Three different stories.
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Narrative explanation */}
+                <p
+                  className="mt-5 text-[12px] leading-[1.75]"
+                  style={{ fontFamily: BODY, color: TEXT_MID }}
+                >
+                  <strong style={{ color: TEXT_LIGHT }}>Reading the boundaries:</strong>{" "}
+                  The white outlines trace where each axis concentrates its highest
+                  values on the map. On the left, every outline within a row is
+                  identical&mdash;that&rsquo;s what perfect group coherence looks
+                  like. The bright zone lives in exactly the same place for all
+                  three axes. On the right, reality: STAGE&rsquo;s three outlines
+                  nearly overlap (the group holds together), but SPACE&rsquo;s
+                  outlines land in different regions entirely&mdash;Grandeur peaks
+                  where Material Warmth doesn&rsquo;t, and vice versa. The shapes
+                  tell you what the correlation numbers can&rsquo;t: not just
+                  <em> how much</em> the axes agree, but <em>where</em> on the map
+                  they disagree.
+                </p>
+                <p
+                  className="mt-3 text-[12px] leading-[1.75]"
+                  style={{ fontFamily: BODY, color: TEXT_MID }}
+                >
+                  <strong style={{ color: TEXT_LIGHT }}>
+                    What this means for the instrument:
+                  </strong>{" "}
+                  The groupings aren&rsquo;t wrong&mdash;they&rsquo;re
+                  incomplete. STAGE works exactly as designed: Formality,
+                  Curation, and Theatricality measure one coherent thing. But
+                  Grandeur behaves empirically like a STAGE axis (it peaks in
+                  the same region), and a future version of the instrument
+                  should probably move it there. Hospitality drifts toward
+                  STAGE too&mdash;welcoming-as-performance rather than
+                  welcoming-as-narrative. Provenance isn&rsquo;t irrelevant,
+                  but it&rsquo;s married to Historicism, not to Hospitality.
+                  SPACE and STORY are less &ldquo;groups&rdquo; and more
+                  loose coalitions. None of this invalidates the
+                  scores&mdash;all nine axes still measure real, distinct
+                  qualities. It just means the three-group frame is a
+                  simplification, and the data is telling us where a
+                  four- or five-group structure might fit better.
+                </p>
+
+                <p className="mt-3 text-[12px] leading-[1.75]" style={{ fontFamily: BODY, color: TEXT_MID }}>
+                  <strong style={{ color: TEXT_LIGHT }}>Why the cross-wiring happens:</strong>{" "}
+                  When we designed the instrument, each group was meant to
+                  capture a separate dimension of the home. SPACE was the
+                  physical envelope&mdash;how big, how warm, how dense.
+                  STORY was the narrative&mdash;what era, what history,
+                  who&rsquo;s invited. STAGE was the performance&mdash;how
+                  formal, how directed, how theatrical. The assumption was that
+                  a room&rsquo;s size (Grandeur) would be independent of its
+                  theatricality&mdash;a cathedral can be humble and a jewel box
+                  can intimidate. That turned out to be wrong. In practice, the
+                  homes AD publishes use scale <em>as</em> theatre: the
+                  triple-height entry, the ballroom that dwarfs its visitors,
+                  the glossy marble that reflects light like a stage set. The
+                  high-Grandeur homes don&rsquo;t just occupy more cubic
+                  feet&mdash;they weaponize that volume to create the same
+                  power dynamics that Formality and Theatricality measure. The
+                  architecture <em>is</em> the performance.
+                </p>
+
+                <p className="mt-3 text-[12px] leading-[1.75]" style={{ fontFamily: BODY, color: TEXT_MID }}>
+                  Provenance and Historicism were meant to measure different
+                  things: Historicism tracks era commitment (does the room pick
+                  a period and stay there?), while Provenance tracks
+                  accumulated life (did these objects grow into this building,
+                  or arrive on a truck?). We expected them to diverge&mdash;a
+                  brand-new house could be filled with genuine antiques (high
+                  Historicism, low Provenance), and an old farmhouse could be
+                  stripped to bare walls (low Historicism, high Provenance). But
+                  r&nbsp;=&nbsp;0.59 says otherwise. In Architectural
+                  Digest&rsquo;s world, the two travel together: homes that
+                  commit to a period almost always <em>are</em> old, and homes
+                  that feel genuinely accumulated almost always commit to an
+                  era. The synthetic version&mdash;new house, purchased
+                  antiques, decorator costuming a period&mdash;scores low on
+                  both, because Opus reads the anachronisms. The real surprise
+                  is Hospitality. We grouped it with STORY because we imagined
+                  hospitality as a narrative choice&mdash;the homeowner who
+                  designs for guests is telling a story about generosity. The
+                  data says it&rsquo;s actually a staging choice. Hospitality
+                  correlates with Theatricality (r&nbsp;=&nbsp;0.42) more than
+                  with either of its groupmates, because in AD homes,
+                  entertaining isn&rsquo;t generosity&mdash;it&rsquo;s a
+                  production.
+                </p>
+
+                <p className="mt-3 text-[12px] leading-[1.75]" style={{ fontFamily: BODY, color: TEXT_MID }}>
+                  <strong style={{ color: TEXT_LIGHT }}>What the instrument gets right:</strong>{" "}
+                  Not everything defied expectations. Material Warmth and
+                  Maximalism correlate at r&nbsp;=&nbsp;0.41, exactly as the
+                  SPACE grouping predicted&mdash;homes built from leather,
+                  wide-plank oak, and linen also tend to be layered with rugs,
+                  folk art, and collected objects. Warm materials invite
+                  accumulation; cold surfaces repel it. That&rsquo;s the
+                  instrument reading a real physical relationship. The
+                  anti-correlations are even more confirming: Material Warmth
+                  runs opposite to Theatricality
+                  (r&nbsp;=&nbsp;&minus;0.48) and Formality
+                  (r&nbsp;=&nbsp;&minus;0.42). Warm, tactile homes
+                  don&rsquo;t perform. Performing homes aren&rsquo;t warm.
+                  That&rsquo;s SPACE vs. STAGE working exactly as designed. And
+                  the strongest single anti-correlation in the entire
+                  matrix&mdash;Provenance vs. Curation at
+                  r&nbsp;=&nbsp;&minus;0.56&mdash;captures the deepest tension
+                  in the instrument: rooms that feel genuinely accumulated are
+                  almost never designer-directed, and designer-directed rooms
+                  almost never feel genuinely accumulated. You can buy old
+                  things, but you can&rsquo;t curate your way to provenance.
+                  That one number validates the entire STORY-vs-STAGE axis.
+                </p>
+
+                {/* Verdict summary row */}
+                <div
+                  className="mt-5 flex items-center justify-center gap-4"
+                  style={{ fontFamily: MONO }}
+                >
+                  {[
+                    { label: "SPACE", r: "0.07", verdict: "divergent" as const, color: GROUP_COLORS.SPACE },
+                    { label: "STORY", r: "0.19", verdict: "partial" as const, color: GROUP_COLORS.STORY },
+                    { label: "STAGE", r: "0.77", verdict: "confirmed" as const, color: GROUP_COLORS.STAGE },
+                  ].map((g) => {
+                    const vc =
+                      g.verdict === "confirmed" ? GREEN : g.verdict === "partial" ? "#D4A843" : "#C97B84";
+                    const vbg =
+                      g.verdict === "confirmed"
+                        ? "rgba(46,204,113,0.08)"
+                        : g.verdict === "partial"
+                        ? "rgba(212,168,67,0.08)"
+                        : "rgba(201,123,132,0.08)";
+                    return (
+                      <div key={g.label} className="flex items-center gap-1.5 text-[9px]">
+                        <span
+                          className="inline-block h-1.5 w-1.5 rounded-full"
+                          style={{ backgroundColor: g.color }}
+                        />
+                        <span style={{ color: g.color }}>{g.label}</span>
+                        <span
+                          className="rounded-full px-1.5 py-0.5 text-[8px] font-bold tracking-widest"
+                          style={{ color: vc, backgroundColor: vbg }}
+                        >
+                          {g.verdict === "confirmed"
+                            ? "CONFIRMED"
+                            : g.verdict === "partial"
+                            ? "PARTIAL"
+                            : "DIVERGENT"}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                <p
+                  className="mt-4 text-[11px] leading-[1.65]"
+                  style={{ fontFamily: BODY, color: TEXT_DIM }}
+                >
+                  STAGE is the only group that behaves as theorized&mdash;a tight,
+                  coherent performance cluster. SPACE and STORY are looser
+                  federations whose members have cross-group loyalties. That&rsquo;s
+                  not a failure of the instrument&mdash;it&rsquo;s the finding.
+                  Aesthetic &ldquo;performance&rdquo; is the one dimension homes
+                  commit to fully; the physical and narrative axes are more fluid.
+                </p>
+              </div>
+
+              {/* Data source link */}
+              <p
+                className="mt-4 text-[10px] tracking-wide"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                Raw data behind these visualizations (SOM grids, PCA,
+                baseline stats):{" "}
+                <a
+                  href="/api/methodology-data"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline underline-offset-2 transition-colors hover:no-underline"
+                  style={{ color: GOLD_DIM }}
+                >
+                  Download JSON &rarr;
+                </a>
+              </p>
+            </div>
+
+            {/* ── 7B: U-Matrix ─────────────────────────────────────────── */}
+            <div
+              className="mt-6 rounded border p-6"
+              style={{ backgroundColor: CARD_DEEP, borderColor: BORDER, boxShadow: CARD_GLOW }}
+            >
+              <div className="flex items-baseline justify-between">
+                <p
+                  className="text-[10px] font-bold tracking-wider"
+                  style={{ fontFamily: MONO, color: GOLD_DIM }}
+                >
+                  7B &mdash; U-MATRIX: BOUNDARY MAP
+                </p>
+                <span
+                  className="rounded-full px-2 py-0.5 text-[8px] font-bold tracking-widest"
+                  style={{
+                    fontFamily: MONO,
+                    color: GREEN,
+                    backgroundColor: "rgba(46, 204, 113, 0.08)",
+                  }}
+                >
+                  LIVE
+                </span>
+              </div>
+
+              {mounted && (() => {
+                const um = somData.u_matrix;
+                const cm = somData.cluster_map;
+                let uMin = Infinity, uMax = -Infinity;
+                for (let c = 0; c < SOM_GRID; c++) {
+                  for (let r = 0; r < SOM_GRID; r++) {
+                    const v = um[c][r];
+                    if (v < uMin) uMin = v;
+                    if (v > uMax) uMax = v;
+                  }
+                }
+
+                // ── Contour tracer for cluster outlines ──
+                // Same edge-walking algorithm as 7A blobOutline, but tests
+                // cluster membership instead of a percentile threshold.
+                function edgeNeighbor7B(col: number, row: number, edge: number): [number, number] {
+                  const even = col % 2 === 0;
+                  const offsets: [number, number][] = even
+                    ? [[1, 0], [0, 1], [-1, 0], [-1, -1], [0, -1], [1, -1]]
+                    : [[1, 1], [0, 1], [-1, 1], [-1, 0], [0, -1], [1, 0]];
+                  const [dc, dr] = offsets[edge];
+                  return [col + dc, row + dr];
+                }
+
+                function vertexXY7B(col: number, row: number, v: number): [number, number] {
+                  const [cx, cy] = hexCenter(col, row);
+                  const a = (Math.PI / 180) * (60 * v);
+                  return [cx + HEX_R * Math.cos(a), cy + HEX_R * Math.sin(a)];
+                }
+
+                // Trace all contours for a given cluster ID.
+                // Returns array of SVG path d strings (one per connected boundary loop).
+                function clusterOutlines(clusterId: number): string[] {
+                  const inCluster = (c: number, r: number) =>
+                    c >= 0 && c < SOM_GRID && r >= 0 && r < SOM_GRID && cm[c][r] === clusterId;
+
+                  // Find ALL boundary edges for this cluster
+                  const allEdges: { c: number; r: number; e: number }[] = [];
+                  const used = new Set<string>();
+                  for (let c = 0; c < SOM_GRID; c++) {
+                    for (let r = 0; r < SOM_GRID; r++) {
+                      if (!inCluster(c, r)) continue;
+                      for (let e = 0; e < 6; e++) {
+                        const [nc, nr] = edgeNeighbor7B(c, r, e);
+                        if (!inCluster(nc, nr)) {
+                          allEdges.push({ c, r, e });
+                        }
+                      }
+                    }
+                  }
+
+                  const paths: string[] = [];
+
+                  while (allEdges.length > 0) {
+                    // Pick first unused edge as start
+                    const start = allEdges[0];
+                    const points: string[] = [];
+                    let c = start.c, r = start.r, e = start.e;
+                    let safety = SOM_GRID * SOM_GRID * 6;
+
+                    do {
+                      // Mark this edge as used
+                      const edgeKey = `${c},${r},${e}`;
+                      used.add(edgeKey);
+
+                      // Record start vertex of this boundary edge
+                      const [vx, vy] = vertexXY7B(c, r, e);
+                      points.push(`${vx.toFixed(1)},${vy.toFixed(1)}`);
+
+                      // Advance clockwise: try next edge (e+1)
+                      let ne = (e + 1) % 6;
+                      let [nc, nr] = edgeNeighbor7B(c, r, ne);
+
+                      while (inCluster(nc, nr)) {
+                        c = nc; r = nr;
+                        const backE = (ne + 3) % 6;
+                        ne = (backE + 1) % 6;
+                        [nc, nr] = edgeNeighbor7B(c, r, ne);
+                      }
+                      e = ne;
+                    } while ((c !== start.c || r !== start.r || e !== start.e) && --safety > 0);
+
+                    // Remove all used edges from allEdges
+                    for (let i = allEdges.length - 1; i >= 0; i--) {
+                      const ae = allEdges[i];
+                      if (used.has(`${ae.c},${ae.r},${ae.e}`)) {
+                        allEdges.splice(i, 1);
+                      }
+                    }
+
+                    if (points.length >= 3) {
+                      paths.push(`M${points.join("L")}Z`);
+                    }
+                  }
+
+                  return paths;
+                }
+
+                // Compute avg U-matrix at each cluster border for sharpness table
+                const borderU: Record<string, { sum: number; n: number }> = {};
+                for (let c = 0; c < SOM_GRID; c++) {
+                  for (let r = 0; r < SOM_GRID; r++) {
+                    const myCluster = cm[c][r];
+                    for (let e = 0; e < 6; e++) {
+                      const [nc, nr] = edgeNeighbor7B(c, r, e);
+                      if (nc < 0 || nc >= SOM_GRID || nr < 0 || nr >= SOM_GRID) continue;
+                      const neighborCluster = cm[nc][nr];
+                      if (neighborCluster === myCluster) continue;
+                      const lo = Math.min(myCluster, neighborCluster);
+                      const hi = Math.max(myCluster, neighborCluster);
+                      const key = `${lo}-${hi}`;
+                      if (!borderU[key]) borderU[key] = { sum: 0, n: 0 };
+                      borderU[key].sum += (um[c][r] + um[nc][nr]) / 2;
+                      borderU[key].n += 1;
+                    }
+                  }
+                }
+                const borderAvg: Record<string, number> = {};
+                for (const [key, { sum, n }] of Object.entries(borderU)) {
+                  borderAvg[key] = sum / n;
+                }
+                const borderVals = Object.values(borderAvg);
+                const bMin = Math.min(...borderVals);
+                const bMax = Math.max(...borderVals);
+
+                // Compute per-cluster avg border sharpness
+                // (average U-matrix value across all edges where this cluster touches another)
+                const clusterSharpness: Record<number, number> = {};
+                for (let cid = 0; cid < 6; cid++) {
+                  let sum = 0, n = 0;
+                  for (const [key, avg] of Object.entries(borderAvg)) {
+                    const [lo, hi] = key.split("-").map(Number);
+                    if (lo === cid || hi === cid) { sum += avg; n++; }
+                  }
+                  clusterSharpness[cid] = n > 0 ? (sum / n - bMin) / (bMax - bMin) : 0.5;
+                }
+
+                // Build contour paths for each cluster — style varies by sharpness
+                const clusterContours: React.ReactNode[] = [];
+                const clusterColors7B: Record<number, string> = {
+                  0: "#6B8FA3", 1: "#8CB4C9", 2: "#D4A574",
+                  3: "#C97B84", 4: "#7BA07B", 5: "#C9A96E",
+                };
+                for (let cid = 0; cid < 6; cid++) {
+                  const paths = clusterOutlines(cid);
+                  const s = clusterSharpness[cid]; // 0 = softest, 1 = sharpest
+
+                  // Sharp: thick crisp white line, subtle glow
+                  // Soft: thin blurred line, heavy blur, lower opacity
+                  const crispWidth = 1.5 + s * 4.5;     // 1.5 → 6
+                  const crispOpacity = 0.3 + s * 0.7;    // 0.3 → 1.0
+                  const glowWidth = 4 + s * 10;           // 4 → 14
+                  const glowOpacity = 0.1 + (1 - s) * 0.3; // soft = more glow blur, sharp = less
+                  const blurStd = 1.5 + (1 - s) * 4;      // soft = 5.5 blur, sharp = 1.5 blur
+
+                  // For soft clusters: add extra-wide diffuse blur to show fuzziness
+                  const extraBlurWidth = (1 - s) * 16;
+                  const extraBlurOpacity = (1 - s) * 0.15;
+
+                  for (let pi = 0; pi < paths.length; pi++) {
+                    // Extra diffuse blur for soft boundaries
+                    if (extraBlurWidth > 2) {
+                      clusterContours.push(
+                        <path
+                          key={`diffuse-${cid}-${pi}`}
+                          d={paths[pi]}
+                          fill="none"
+                          stroke={clusterColors7B[cid]}
+                          strokeWidth={extraBlurWidth}
+                          strokeOpacity={extraBlurOpacity}
+                          strokeLinejoin="round"
+                          filter="url(#blur7b-heavy)"
+                        />
+                      );
+                    }
+                    // Glow layer
+                    clusterContours.push(
+                      <path
+                        key={`glow-${cid}-${pi}`}
+                        d={paths[pi]}
+                        fill="none"
+                        stroke={clusterColors7B[cid]}
+                        strokeWidth={glowWidth}
+                        strokeOpacity={glowOpacity}
+                        strokeLinejoin="round"
+                        style={{ filter: `url(#blur7b-${cid})` }}
+                      />
+                    );
+                    // Crisp layer
+                    clusterContours.push(
+                      <path
+                        key={`contour-${cid}-${pi}`}
+                        d={paths[pi]}
+                        fill="none"
+                        stroke={s > 0.5 ? "white" : clusterColors7B[cid]}
+                        strokeWidth={crispWidth}
+                        strokeOpacity={crispOpacity}
+                        strokeLinejoin="round"
+                        strokeDasharray={s < 0.3 ? "4 3" : "none"}
+                      />
+                    );
+                  }
+                }
+
+                // Cluster centroid labels
+                const clusterCentroids: Record<number, { sx: number; sy: number; n: number }> = {};
+                for (let c = 0; c < SOM_GRID; c++) {
+                  for (let r = 0; r < SOM_GRID; r++) {
+                    const cid = cm[c][r];
+                    if (!clusterCentroids[cid]) clusterCentroids[cid] = { sx: 0, sy: 0, n: 0 };
+                    const [cx, cy] = hexCenter(c, r);
+                    clusterCentroids[cid].sx += cx;
+                    clusterCentroids[cid].sy += cy;
+                    clusterCentroids[cid].n += 1;
+                  }
+                }
+                const clusterLabels: React.ReactNode[] = [];
+                const fullNames: Record<number, string> = {
+                  0: "Lived-In Retreat", 1: "Clean Slate", 2: "Grand Heritage",
+                  3: "Designer Showcase", 4: "Comfortable Middle", 5: "Cold Stage",
+                };
+                for (const [idStr, { sx, sy, n }] of Object.entries(clusterCentroids)) {
+                  const id = Number(idStr);
+                  clusterLabels.push(
+                    <text
+                      key={`label-${id}`}
+                      x={sx / n}
+                      y={sy / n}
+                      textAnchor="middle"
+                      dominantBaseline="central"
+                      fill="white"
+                      fontSize={7}
+                      fontFamily={MONO}
+                      fontWeight="bold"
+                      style={{ textShadow: "0 0 6px rgba(0,0,0,1), 0 0 12px rgba(0,0,0,0.9), 0 1px 3px rgba(0,0,0,1)" }}
+                    >
+                      {fullNames[id]}
+                    </text>
+                  );
+                }
+
+                // Build the SVG manually to layer boundary lines on top
+                const hexes: React.ReactNode[] = [];
+                for (let col = 0; col < SOM_GRID; col++) {
+                  for (let row = 0; row < SOM_GRID; row++) {
+                    const [cx, cy] = hexCenter(col, row);
+                    const t = uMax > uMin ? (um[col][row] - uMin) / (uMax - uMin) : 0.5;
+                    const fill = colorRamp3(t, [20, 25, 40], [80, 60, 45], [230, 200, 140]);
+                    hexes.push(
+                      <path
+                        key={`${col}-${row}`}
+                        d={hexPath(cx, cy, HEX_R - 0.5)}
+                        fill={fill}
+                        stroke="rgba(27,24,21,0.6)"
+                        strokeWidth={0.5}
+                      >
+                        <title>{`Distance: ${um[col][row].toFixed(3)}\nCluster: ${somData.metadata.cluster_names[cm[col][row]]}`}</title>
+                      </path>
+                    );
+                  }
+                }
+
+                return (
+                  <div className="mt-4 mx-auto" style={{ maxWidth: 500 }}>
+                    <svg
+                      viewBox={`0 0 ${SOM_SVG_W} ${SOM_SVG_H}`}
+                      className="w-full"
+                      style={{ maxHeight: 420 }}
+                    >
+                      <defs>
+                        <filter id="blur7b-heavy">
+                          <feGaussianBlur stdDeviation="6" />
+                        </filter>
+                        {[0, 1, 2, 3, 4, 5].map((cid) => {
+                          const s = clusterSharpness[cid];
+                          const std = 1.5 + (1 - s) * 4;
+                          return (
+                            <filter key={`blur7b-${cid}`} id={`blur7b-${cid}`}>
+                              <feGaussianBlur stdDeviation={std} />
+                            </filter>
+                          );
+                        })}
+                      </defs>
+                      {hexes}
+                      {clusterContours}
+                      {clusterLabels}
+                    </svg>
+                    {/* Legend */}
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                          Low distance
+                        </span>
+                        <div
+                          className="h-2 rounded"
+                          style={{
+                            width: 80,
+                            background: "linear-gradient(to right, rgb(20,25,40), rgb(80,60,45), rgb(230,200,140))",
+                          }}
+                        />
+                        <span className="text-[9px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                          High distance
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-2 flex flex-wrap justify-center gap-x-3 gap-y-1">
+                      {somData.metadata.cluster_names.map((name: string, i: number) => (
+                        <div key={name} className="flex items-center gap-1">
+                          <div
+                            className="h-2 w-4 rounded-sm"
+                            style={{ backgroundColor: clusterColors7B[i], opacity: 0.9 }}
+                          />
+                          <span
+                            className="text-[8px]"
+                            style={{ fontFamily: MONO, color: TEXT_DIM }}
+                          >
+                            {name}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+
+                    {/* Border sharpness table */}
+                    <div className="mt-4 rounded p-3" style={{ backgroundColor: "rgba(27,24,21,0.4)", border: `1px solid ${BORDER}` }}>
+                      <p className="text-[9px] font-bold tracking-wider mb-2" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                        CLUSTER BOUNDARY SHARPNESS (avg U-matrix distance)
+                      </p>
+                      <div className="grid grid-cols-2 gap-x-4 gap-y-1">
+                        {Object.entries(borderAvg)
+                          .sort(([, a], [, b]) => b - a)
+                          .slice(0, 6)
+                          .map(([key, avg]) => {
+                            const [lo, hi] = key.split("-").map(Number);
+                            const names = somData.metadata.cluster_names;
+                            const shortA = names[lo].replace("The ", "");
+                            const shortB = names[hi].replace("The ", "");
+                            const t = bMax > bMin ? (avg - bMin) / (bMax - bMin) : 0.5;
+                            const barColor = t > 0.6 ? GREEN : t > 0.3 ? "#D4A843" : "#C97B84";
+                            return (
+                              <div key={key} className="flex items-center gap-2">
+                                <div
+                                  className="rounded-full"
+                                  style={{
+                                    width: 40 + t * 60,
+                                    height: 4,
+                                    backgroundColor: barColor,
+                                    opacity: 0.7,
+                                  }}
+                                />
+                                <span className="text-[8px] whitespace-nowrap" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                                  {shortA} / {shortB}{" "}
+                                  <span style={{ color: TEXT_DIM }}>({avg.toFixed(2)})</span>
+                                </span>
+                              </div>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+              {!mounted && (
+                <div
+                  className="mt-4 flex items-center justify-center rounded"
+                  style={{
+                    height: 320,
+                    backgroundColor: "rgba(58, 51, 42, 0.15)",
+                    border: `1px dashed ${BORDER}`,
+                  }}
+                >
+                  <p
+                    className="text-[11px] tracking-wider"
+                    style={{ fontFamily: MONO, color: TEXT_DIM }}
+                  >
+                    Loading U-matrix&hellip;
+                  </p>
+                </div>
+              )}
+
+              <div
+                className="mt-5 flex flex-col gap-3 text-[13px] leading-[1.7]"
+                style={{ fontFamily: BODY, color: TEXT_MID }}
+              >
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>Technical:</strong>{" "}
+                  The Unified Distance Matrix (U-matrix) measures the
+                  average distance between each hexagon&rsquo;s weight vector
+                  and its neighbors&rsquo;. Low values (dark) indicate smooth
+                  transitions&mdash;homes in this region are aesthetically
+                  similar. High values (bright) indicate steep gradients in
+                  the 9D space&mdash;these are the boundaries between
+                  aesthetic regions. The bright ridges are computed
+                  independently of the k-means clusters&mdash;this is the
+                  SOM&rsquo;s own topological structure, not a
+                  post-hoc overlay. If the cluster boundaries (white lines)
+                  fall on bright ridges, the typologies found real structure.
+                  If they cross dark valleys, the clustering cut something
+                  that was actually continuous.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>Plain English:</strong>{" "}
+                  Think of this as an elevation map. Dark cells are valleys
+                  where homes look alike. Bright cells are ridgelines where
+                  the aesthetic language changes sharply. The white lines are
+                  where our six typologies draw their borders. We&rsquo;re
+                  asking: did we cut along the mountain ridges, or did we
+                  draw arbitrary lines through flat terrain?
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>The sharpest border:</strong>{" "}
+                  Lived-In Retreat vs. Clean Slate dominates the map with an
+                  average boundary distance of 1.24&mdash;far above any other
+                  border. This is the deepest split in AD aesthetics: warm,
+                  tactile, accumulated life on one side; spare, contemporary
+                  minimalism on the other. If you forced the entire dataset
+                  into just two categories, this is where it would break.
+                  The ridge is bright and unbroken&mdash;there is no middle
+                  ground between these two worlds.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>The Cold Stage is real:</strong>{" "}
+                  The border between Cold Stage and its neighbors (Designer
+                  Showcase at 0.97, Clean Slate at 0.97) is the second
+                  sharpest zone on the map. Despite being the smallest
+                  typology (9% of homes), the SOM treats it as genuinely
+                  distinct&mdash;grand, cold, curated, theatrical spaces that
+                  occupy their own corner of the aesthetic landscape. This is
+                  the typology most over-represented in the Epstein orbit
+                  (1.35&times; base rate), and the U-matrix confirms it
+                  isn&rsquo;t a statistical artifact.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>The Comfortable Middle is a basin, not a box:</strong>{" "}
+                  Look at how the white lines around the sage-green region
+                  sit on dark terrain, not bright ridges. Three of its four
+                  borders are softer than the average <em>interior</em>{" "}
+                  cell&mdash;the Comfortable Middle grades smoothly into
+                  Clean Slate, Grand Heritage, and Designer Showcase with no
+                  natural boundary. The SOM is telling us this isn&rsquo;t a
+                  &ldquo;type&rdquo; so much as the center of the
+                  distribution. It&rsquo;s where you end up when no single
+                  aesthetic dimension dominates. The k-means algorithm drew a
+                  border because we asked for six boxes, but the topology
+                  says this is a gradient.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>Internal structure &mdash; the Lived-In Retreat wants to split:</strong>{" "}
+                  Over half of the interior cells inside the Lived-In Retreat
+                  have U-matrix values <em>higher than the average boundary
+                  cell</em>. There&rsquo;s a ridge running through
+                  it&mdash;possibly separating &ldquo;rustic lived-in&rdquo;
+                  (beach cottages, farmhouses, wide-plank floors) from
+                  &ldquo;intellectual lived-in&rdquo; (book-filled Parisian
+                  apartments, collected art, layered textiles). If we ever
+                  move to k&nbsp;=&nbsp;7, the first split would be here.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>The verdict:</strong>{" "}
+                  The U-matrix validates the extremes and honestly reports the
+                  middle. Lived-In vs. Clean Slate, Cold Stage as its own
+                  world, Grand Heritage and Comfortable Middle internally
+                  coherent&mdash;these are real. The Comfortable Middle&rsquo;s
+                  soft borders and the Lived-In Retreat&rsquo;s internal ridge
+                  are real too. The six typologies are genuine{" "}
+                  <em>directions</em> in the data, but the boundaries between
+                  them are gradients, not walls. That&rsquo;s consistent with
+                  a silhouette score of 0.17, and it&rsquo;s the right answer
+                  for something as inherently continuous as interior design
+                  aesthetics. The clusters describe where you&rsquo;re
+                  headed, not a box you&rsquo;re locked in.
+                </p>
+              </div>
+            </div>
+
+            {/* ── 7C: Cluster Map + Animated Temporal Drift ─────────── */}
+            <SomTemporalDrift mounted={mounted} />
+
+            {/* ── SOM Quality Metrics Note ──────────────────────────────── */}
+            <div
+              className="mt-6 rounded border p-5"
+              style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
+            >
+              <p
+                className="text-[10px] font-bold tracking-wider"
+                style={{ fontFamily: MONO, color: GOLD_DIM }}
+              >
+                SOM QUALITY METRICS
+              </p>
+              <div
+                className="mt-3 flex flex-col gap-2 text-[12px] leading-[1.7]"
+                style={{ fontFamily: BODY, color: TEXT_DIM }}
+              >
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>Quantization error: {somData.metadata.quantization_error.toFixed(4)}</strong>{" "}
+                  &mdash; average distance from each data point to its
+                  best-matching unit. Lower is better; this means each home
+                  is represented well by its nearest hexagon.
+                </p>
+                <p>
+                  <strong style={{ color: TEXT_LIGHT }}>Topographic error: {somData.metadata.topographic_error.toFixed(4)}</strong>{" "}
+                  &mdash; fraction of data points whose two closest hexagons
+                  are not adjacent. At 12.3%, the map preserves neighborhood
+                  structure well: homes that are similar in 9D space almost
+                  always land near each other on the 2D grid.
+                </p>
+                <p>
+                  20&times;20 hexagonal grid, 10,000 iterations, PCA
+                  initialization, Gaussian neighborhood. Trained on all {somData.metadata.n_features.toLocaleString()}{" "}
+                  Opus-scored features.
+                </p>
+              </div>
             </div>
           </div>
         </div>

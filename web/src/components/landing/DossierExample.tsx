@@ -9,7 +9,7 @@ import { Separator } from "@/components/ui/separator";
  */
 export function DossierExample() {
   return (
-    <section style={{ backgroundColor: "#FAF8F5" }}>
+    <section id="dossier-example" style={{ backgroundColor: "#FAF8F5" }}>
       <div
         className="mx-auto w-full pb-16 pt-14"
         style={{

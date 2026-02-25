@@ -172,8 +172,20 @@ Dev tool at `web/src/components/dev/GridOverlay.tsx`. Toggle with **Ctrl+G** (co
 
 ### Section Backgrounds
 
-- **Light sections** (`bg-background`): Hero, Coverage Map, Charts, Methodology
+- **Light sections** (`bg-background`): Hero, Coverage Map, Charts
 - **Dark sections** (`bg-[#1A1A1A]`): Key Findings — the anchor section. Dark background creates a strong visual break and signals "data lives here." Use for the most information-dense section.
+
+#### Methodology Section Backgrounds (intentional divergence)
+
+The two methodology sections use distinct dark backgrounds to signal different content atmospheres. This is a deliberate design decision, not drift:
+
+| Section | Background | Rationale |
+|---------|-----------|-----------|
+| Agent Methodology | `#1a1a28` (deep indigo) | Cool-toned "code/systems" context. Signals technical infrastructure, pipeline architecture, investigation logic. Reinforces the "hard tech" aesthetic from the reference materials. |
+| Aesthetic Methodology | `#1B1815` (warm charcoal) | Warm-toned "design/analysis" context. Signals subjective scoring, visual interpretation, statistical rigor. Pairs with the copper accent for a research-paper feel. |
+| Key Findings | `#1A1A1A` (neutral dark) | True neutral — anchors the findings without atmospheric bias. |
+
+CSS custom properties for Agent Methodology tokens are scoped to `#agent-methodology` in `globals.css` (prefixed `--meth-*`). This keeps the divergence contained and overridable.
 
 ## Component Patterns
 

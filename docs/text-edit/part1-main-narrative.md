@@ -1,3 +1,48 @@
+WHERE THEY LIVE
+Do Featured Homes in Architectural Digest Magazine Reveal an "Epstein Aesthetic"?
+
+
+INTRODUCTION
+To begin to explore that question, this paper followed a straightforward series of steps:
+
+1. Identiy a publicly-accessible digital source containing all Architectural Digest issues since 1988. 
+2. Extract structured data from XXXX issues (homeowner, designer, location, article metadata) using an autonomous workflow. 
+3. Score each of those XXXX features using a custom aesthetic scoring rubric to establish an AD baseline distribution. 
+4. Cross-reference all XXXX homeowner names against Epstein-related public records using a conservative, evidence-based verification pipeline.
+5. Compare the aesthetic score distribution of the XXX AD Epstein-connected homes against the AD baseline. 
+6. Test whether that confirmed subset exhibits a statistically distinguishable and interpretable design profile. 
+
+This paper documents the methodology, the verification standards, and the resulting aesthetic findings in detail. 
+
+But first, "Why?"
+
+
+
+ABSTRACT
+Architectural Digest (AD) magazine is a leading arbiter of taste in interior design today. As the self-described "international authority on design and architecture,"1 the 
+
+
+
+
+featured homes that the publication chooses to highlight become the aspirational goal for its upwardly  mobile, professional class of readers. In turn, 
+
+
+
+table of contents
+
+
+
+
+
+1. https://www.youtube.com/@Archdigest
+
+This investigation looks at the last 28 years of Architectural Digest (AD) stretching back to 1988. In that time, the magazine celebrated the homes of over 1600 individuals. Many of those featured are of great wealth and power. And perhaps unsurprisingly, many of those also happen to have had direct and repeated contact with Jeffrey Epstein as documented in the Department of Justice’s Epstein Files. This site names those connected homeowners and documents the nature of those connections.
+Architectural Digest is considered the preeminent arbiter of mainstream taste in interior design. If there is a high correlation between AD features and Epstein’s network, it warrants asking: “How much of what we consider ‘good design’ as highlighted in the featured pages of AD was commissioned, built, and lived in by those with connections to Epstein?” What does that reveal about the aesthetics of power and design? Is there a demonstrable “Epstein aesthetic” that can be seen consistently across these homes?
+This is not a claim of guilt. Appearing in a contact book or a legal document does not imply criminal conduct. What it does establish is proximity, that a meaningful number of individuals chosen to be highlighted in the glossy pages of America’s most influential design magazine also moved in circles that intersected, directly and repeatedly, with Jeffrey Epstein’s. The patterns that emerge from that overlap are the subject of this investigation. No data was manually entered. See “Methodology” for a full discussion of process.
+
+
+
+
 # Part 1: Main Narrative
 
 All body text from the main narrative flow of wheretheylive.world. Edit freely — text will be swapped back into the codebase.

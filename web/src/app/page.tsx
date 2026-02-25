@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import { getStats, getAestheticRadarData } from "@/lib/queries";
 import { Separator } from "@/components/ui/separator";
+import { HeroMosaic } from "@/components/landing/HeroMosaic";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { KeyFindingsIntro } from "@/components/landing/KeyFindingsIntro";
 import { KeyFinding } from "@/components/landing/KeyFinding";
@@ -17,6 +18,8 @@ import { Conclusion } from "@/components/landing/Conclusion";
 import { WhatsNext } from "@/components/landing/WhatsNext";
 import { AgentMethodologySection } from "@/components/landing/MethodologySection";
 import { AestheticMethodologySection } from "@/components/landing/AestheticMethodologySection";
+import { Appendix } from "@/components/landing/Appendix";
+import { Contact } from "@/components/landing/Contact";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic"; // Render on-demand, not at build time
@@ -29,8 +32,22 @@ export default async function Home() {
 
   return (
     <div className="flex flex-col">
-      {/* ── 1. Hero ── */}
-      <HeroSection stats={stats} />
+      {/* ── 1. Hero (with mosaic slot under subhead) ── */}
+      <HeroSection
+        stats={stats}
+        mosaic={
+          <Suspense
+            fallback={
+              <div
+                style={{ height: "clamp(320px, 50vh, 600px)", background: "#222" }}
+                aria-hidden="true"
+              />
+            }
+          >
+            <HeroMosaic />
+          </Suspense>
+        }
+      />
 
       {/* ── A: Key Findings Introduction ── */}
       <KeyFindingsIntro />
@@ -146,6 +163,12 @@ export default async function Home() {
 
       {/* ── Methodology: Aesthetic Metric ── */}
       <AestheticMethodologySection />
+
+      {/* ── Appendix ── */}
+      <Appendix />
+
+      {/* ── Contact ── */}
+      <Contact />
     </div>
   );
 }

@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
  */
 export function TestingAesthetic() {
   return (
-    <section className="bg-background pb-16 pt-14">
+    <section id="testing" className="bg-background pb-16 pt-14">
       <div
         className="mx-auto w-full"
         style={{

@@ -14,7 +14,7 @@ interface EpsteinAestheticProps {
  */
 export function EpsteinAesthetic({ radarData }: EpsteinAestheticProps) {
   return (
-    <section className="bg-background pb-16 pt-14">
+    <section id="epstein-aesthetic" className="bg-background pb-16 pt-14">
       <div
         className="mx-auto w-full"
         style={{

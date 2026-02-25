@@ -10,6 +10,7 @@ import type {
   FeatureReport,
   PaginatedResponse,
   AestheticRadarData,
+  MosaicTile,
 } from "./types";
 
 // ── Stats ──────────────────────────────────────────────────
@@ -24,16 +25,34 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .from("issues")
     .select("id, status, month, year");
 
-  // Fetch all features (override default 1000 row limit)
-  const { data: features, count: featuresCount } = await sb
+  // Fetch all features — paginate to bypass Supabase 1000-row default limit
+  const featureFields = "id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built, subject_category";
+  const { count: featuresCount } = await sb
     .from("features")
-    .select("id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built, subject_category", { count: "exact" })
-    .range(0, 4999);
+    .select("id", { count: "exact", head: true });
+  const allFeatures: Record<string, unknown>[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; offset < (featuresCount ?? 0); offset += PAGE) {
+    const { data } = await sb
+      .from("features")
+      .select(featureFields)
+      .range(offset, offset + PAGE - 1);
+    if (data) allFeatures.push(...data);
+  }
 
-  // Fetch dossiers verdict counts + confirmed timeline data
-  const { data: dossiers } = await sb
+  // Fetch all dossiers — paginate to bypass 1000-row limit
+  const dossierFields = "id, editor_verdict, subject_name, feature_id, connection_strength, combined_verdict";
+  const { count: dossiersCount } = await sb
     .from("dossiers")
-    .select("id, editor_verdict, subject_name, feature_id, connection_strength, combined_verdict");
+    .select("id", { count: "exact", head: true });
+  const allDossiers: Record<string, unknown>[] = [];
+  for (let offset = 0; offset < (dossiersCount ?? 0); offset += PAGE) {
+    const { data } = await sb
+      .from("dossiers")
+      .select(dossierFields)
+      .range(offset, offset + PAGE - 1);
+    if (data) allDossiers.push(...data);
+  }
 
   // Fetch cross-reference count
   const { count: xrefCount } = await sb
@@ -41,8 +60,6 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .select("id", { count: "exact", head: true });
 
   const allIssues = issues ?? [];
-  const allFeatures = features ?? [];
-  const allDossiers = dossiers ?? [];
 
   // Issue counts
   const statusCounts: Record<string, number> = {};
@@ -68,7 +85,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
   // Top styles
   const styleMap = new Map<string, number>();
   for (const f of allFeatures) {
-    const style = f.design_style;
+    const style = f.design_style as string | null;
     if (style) styleMap.set(style, (styleMap.get(style) ?? 0) + 1);
   }
   const topStyles = Array.from(styleMap.entries())
@@ -79,7 +96,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
   // Top locations
   const locMap = new Map<string, number>();
   for (const f of allFeatures) {
-    const parts = [f.location_city, f.location_state, f.location_country].filter(Boolean);
+    const parts = [f.location_city as string | null, f.location_state as string | null, f.location_country as string | null].filter(Boolean);
     const loc = parts.join(", ");
     if (loc) locMap.set(loc, (locMap.get(loc) ?? 0) + 1);
   }
@@ -139,14 +156,14 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
         ? allIssues.find((i) => i.id === feature.issue_id)
         : null;
       return {
-        personName: d.subject_name ?? "Unknown",
+        personName: (d.subject_name as string) ?? "Unknown",
         year: issue?.year ?? 0,
         month: issue?.month ?? null,
-        connectionStrength: d.connection_strength ?? null,
-        locationCity: feature?.location_city ?? null,
-        locationState: feature?.location_state ?? null,
-        locationCountry: feature?.location_country ?? null,
-        category: feature?.subject_category ?? null,
+        connectionStrength: (d.connection_strength as string) ?? null,
+        locationCity: (feature?.location_city as string) ?? null,
+        locationState: (feature?.location_state as string) ?? null,
+        locationCountry: (feature?.location_country as string) ?? null,
+        category: (feature?.subject_category as string) ?? null,
       };
     })
     .filter((d) => d.year > 0)
@@ -167,9 +184,8 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
   let epsteinTotal = 0;
 
   for (const f of allFeatures) {
-    const cat = f.subject_category && CATEGORIES.includes(f.subject_category)
-      ? f.subject_category
-      : "Other";
+    const sc = f.subject_category as string | null;
+    const cat = sc && CATEGORIES.includes(sc) ? sc : "Other";
     if (confirmedFeatureIds.has(f.id)) {
       epsteinCatCounts.set(cat, (epsteinCatCounts.get(cat) ?? 0) + 1);
       epsteinTotal++;
@@ -203,6 +219,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     features: {
       total: featuresCount ?? allFeatures.length,
       withHomeowner: allFeatures.filter((f) => f.homeowner_name).length,
+      uniqueHomeowners: new Set(allFeatures.map((f) => f.homeowner_name).filter(Boolean)).size,
       byYear,
       topStyles,
       topLocations,
@@ -718,3 +735,102 @@ export async function getFeatureReport(featureId: number): Promise<FeatureReport
     dossier: dossier as Dossier | null,
   };
 }
+
+// ── Hero Mosaic ──────────────────────────────────────────────
+
+const MOSAIC_TILE_COUNT = 192;
+
+/**
+ * Full Fisher-Yates shuffle, then one pass to separate any adjacent confirmed tiles.
+ * Avoids interval-based placement which creates diagonal patterns in a grid.
+ */
+function distributedShuffle(tiles: MosaicTile[]): MosaicTile[] {
+  const arr = [...tiles];
+
+  // Fisher-Yates shuffle
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+
+  // De-cluster pass: if two confirmed tiles are adjacent, swap the second
+  // with the next unconfirmed tile at least 5 positions away
+  for (let i = 1; i < arr.length; i++) {
+    if (arr[i].confirmed && arr[i - 1].confirmed) {
+      for (let swap = i + 5; swap < arr.length; swap++) {
+        if (!arr[swap].confirmed) {
+          [arr[i], arr[swap]] = [arr[swap], arr[i]];
+          break;
+        }
+      }
+    }
+  }
+
+  return arr;
+}
+
+/**
+ * Build Azure Blob thumbnail URL for a feature's page image.
+ * Pattern: architecturaldigest{YYYYMMDD}thumbnails/Pages/0x600/{page}.jpg
+ */
+function buildAzureUrl(year: number, month: number | null, page: number): string {
+  const mm = String(month ?? 1).padStart(2, "0");
+  const dd = "01";
+  return `https://architecturaldigest.blob.core.windows.net/architecturaldigest${year}${mm}${dd}thumbnails/Pages/0x600/${page}.jpg`;
+}
+
+export const getHeroMosaicData = unstable_cache(
+  async (): Promise<MosaicTile[]> => {
+    const sb = getSupabase();
+
+    // Fetch features that have page_number + joined issue date
+    const { data: features } = await sb
+      .from("features")
+      .select("id, page_number, issue_id, issues!inner(year, month)")
+      .not("page_number", "is", null)
+      .range(0, 4999);
+
+    // Fetch confirmed dossiers with connection_strength
+    const { data: confirmedDossiers } = await sb
+      .from("dossiers")
+      .select("feature_id, connection_strength")
+      .eq("editor_verdict", "CONFIRMED");
+
+    const confirmedMap = new Map<number, string | null>();
+    for (const d of confirmedDossiers ?? []) {
+      if (d.feature_id) {
+        confirmedMap.set(
+          d.feature_id as number,
+          d.connection_strength as string | null
+        );
+      }
+    }
+
+    // Build tile objects
+    const allTiles: MosaicTile[] = [];
+    for (const f of features ?? []) {
+      const issue = (f as Record<string, unknown>).issues as {
+        year: number;
+        month: number | null;
+      };
+      if (!issue?.year || !f.page_number) continue;
+
+      const url = buildAzureUrl(issue.year, issue.month, f.page_number);
+      const isConfirmed = confirmedMap.has(f.id);
+      allTiles.push({
+        id: f.id,
+        url,
+        confirmed: isConfirmed,
+        strength: isConfirmed
+          ? (confirmedMap.get(f.id) as MosaicTile["strength"])
+          : null,
+      });
+    }
+
+    // Distribute and sample
+    const shuffled = distributedShuffle(allTiles);
+    return shuffled.slice(0, MOSAIC_TILE_COUNT);
+  },
+  ["hero-mosaic-v2"],
+  { revalidate: 3600 }
+);

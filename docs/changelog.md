@@ -6,6 +6,37 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-24 (Session 52)
+
+### Added — Introduction Section & Hero Mosaic
+
+- **`web/src/components/landing/IntroSection.tsx`** — New client component: 9-paragraph academic introduction with Tufte-style margin sidenotes (12 notes with source links), two inline diagram placeholders, and `usePreventSidenoteOverlap` hook for collision-free layout. Supports `note` (single), `notes` (multiple independent), and `noteOffset` props. Sidenote images supported via `image`/`imageAlt` props
+- **`web/src/components/landing/HeroMosaic.tsx`** + **`HeroMosaicClient.tsx`** — Scrolling image mosaic hero: 192 tiles from Azure Blob thumbnails, CSS-only infinite scroll animation, confirmed Epstein connections pulse with copper glow and strength tags. `distributedShuffle()` prevents clustering
+- **Sidenote images** — `/sidenotes/palmette-lantern.jpg`, `simmel-trickle-down.jpg`, `trickle-round-dupes.jpg`, `veblen-conspicuous.jpg` added as visual references alongside academic citations
+- **Venn diagram (SVG)** — Textured Venn showing AD/Epstein overlap: halftone dot pattern (AD circle) + diagonal line hatching (Epstein circle), dynamic confirmed count in overlap zone, "The Narrowest Sliver" title. Pattern IDs namespaced to avoid SVG conflicts
+- **NASA-style Table of Contents** — Dot-leader grid with section numbers, sub-items, and anchor links. 3-column grid aligned to abstract column edges
+- **Appendix** (`Appendix.tsx`) and **Contact** (`Contact.tsx`) landing page sections
+- **Aesthetic Scores Explorer** page (`/aestheticscores`) with API routes
+
+### Changed — Homepage Layout & Typography
+
+- **Introduction header** — Changed from small label (`text-[11px]`) to large Futura heading (`text-[28px] font-black`) matching "Who Are They?" style. Now reads "i. Introduction" with 2px black rule below
+- **Abstract** — Redesigned with drop cap "T", Lora serif body text in 3-column grid, three-paragraph structure covering methodology overview, scoring instrument, and core finding
+- **6-column stats grid removed** — "28 years / 470 issues / 3,763 homes" stat block dropped from below abstract. Stats now conveyed through prose and Venn diagram
+- **Hero section** — Added mosaic slot prop, epigraph (Thoreau), Contents section. Removed inline introduction paragraphs (moved to IntroSection)
+- **Italicized proper terms** throughout Introduction: *Architectural Digest*, *conspicuous consumption*, *cultural intermediary*, *meaning transfer*
+- **Section spacing** — Abstract→Contents and Contents→Introduction gaps increased (`mt-16` → `mt-28`)
+- **Methodology sections** — Extensive content expansion (6,100+ lines changed in AestheticMethodologySection, 1,100+ in MethodologySection)
+- **globals.css** — Added `#introduction` CSS variable overrides for light-background sidenotes, mosaic scroll/pulse keyframes, sidenote image styles
+
+### Fixed
+
+- **Sidenote copper styling** — CSS variable cascade issue with Tailwind v4 layers resolved via inline styles for border-left, arrow color, link color
+- **Sidenote link clickability** — Added `zIndex: 10` to margin blocks
+- **Broken AD About link** — `architecturaldigest.com/about` 404 → replaced with Wikipedia
+
+---
+
 ## 2026-02-22 (Session 51)
 
 ### Changed — Investigation Methodology: Case Studies & Pipeline Consistency

@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
  */
 export function WhatsNext() {
   return (
-    <section className="bg-background pb-16 pt-14">
+    <section id="whats-next" className="bg-background pb-16 pt-14">
       <div
         className="mx-auto w-full"
         style={{
@@ -85,21 +85,6 @@ export function WhatsNext() {
           </div>
         </div>
 
-        {/* Contact */}
-        <Separator className="mt-12 mb-8" />
-
-        <div className="text-center">
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
-            Questions, corrections, or leads?{" "}
-            <a
-              href="mailto:john.h.locke@gmail.com"
-              className="underline underline-offset-4 transition-colors hover:opacity-70"
-              style={{ color: "#B87333" }}
-            >
-              john.h.locke@gmail.com
-            </a>
-          </p>
-        </div>
       </div>
     </section>
   );

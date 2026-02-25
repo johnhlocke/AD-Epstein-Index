@@ -182,6 +182,12 @@ This file should be automatically updated when necessary to answer three key que
 | `intermodel_scores` Supabase table | Database | Done |
 | Case study pipeline traces (state-machine tag chains) | Phase 3 | Done |
 | Methodology text: human review distinction, rejection taxonomy, policy rules | Phase 3 | Done |
+| Introduction section with Tufte sidenotes (12 notes, source links, diagrams) | Phase 3 | Done |
+| Scrolling hero mosaic (192 tiles, CSS animation, copper glow on confirmed) | Phase 3 | Done |
+| NASA-style Table of Contents with dot leaders | Phase 3 | Done |
+| Abstract redesign (drop cap, 3-column Lora serif, methodology overview) | Phase 3 | Done |
+| Textured SVG Venn diagram (halftone + hatching, dynamic data) | Phase 3 | Done |
+| Stats grid removed (conveyed through prose instead) | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -285,7 +291,7 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 **Tech stack:** Next.js 16 (App Router), TypeScript, Tailwind CSS v4, Shadcn UI, Recharts
 
 **Pages & Routes:**
-- Landing page with streamlined sections: Hero, Key Finding, Searchable Index, Confirmed Timeline, Knowledge Graph, Dossier Example, Aesthetic Pivot, Epstein Aesthetic (radar), Aesthetic Analysis, Testing Aesthetic, Conclusion, What's Next, Agent Methodology (cool purple-blue), Aesthetic Methodology (warm dark-cream)
+- Landing page with streamlined sections: Hero (scrolling mosaic + Thoreau epigraph), Abstract (3-column drop-cap), NASA-style Contents, Introduction (9 paragraphs + 12 Tufte sidenotes + textured Venn diagram), Key Finding, Searchable Index, Confirmed Timeline, Knowledge Graph, Dossier Example, Aesthetic Pivot, Epstein Aesthetic (radar), Aesthetic Analysis, Testing Aesthetic, Conclusion, What's Next, Agent Methodology (cool purple-blue), Aesthetic Methodology (warm dark-cream)
 - Dossier detail pages (`/dossier/[id]`) with evidence sections, verdict badges, article images
 - API routes: `/api/stats`, `/api/features` (paginated + filterable + confirmed-only), `/api/dossiers`, `/api/dossiers/[id]`
 

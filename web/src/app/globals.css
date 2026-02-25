@@ -243,3 +243,274 @@ html {
   letter-spacing: 0.18em;
   color: rgba(184, 115, 51, 0.85);
 }
+
+/* ── Agent Methodology: scoped design tokens ──
+ * CSS custom properties scoped to #agent-methodology.
+ * Replaces JS constants (BG, TEXT_LIGHT, etc.) with cascadable,
+ * media-query-responsive values. — Sable
+ */
+#agent-methodology {
+  --meth-bg: #1a1a28;
+  --meth-card-bg: #1a0e2e;
+  --meth-border: #2a2a3a;
+  --meth-text-light: #E0E0E5;
+  --meth-text-mid: #A0A0B0;
+  --meth-text-dim: rgba(160, 160, 176, 0.6);
+  --meth-green: rgba(45, 106, 79, 0.95);
+  --meth-green-bg: rgba(45, 106, 79, 0.1);
+  --meth-gold: rgba(184, 134, 11, 0.9);
+  --meth-gold-dim: rgba(184, 134, 11, 0.25);
+  --meth-red: rgba(155, 34, 38, 0.85);
+  --meth-red-dim: rgba(155, 34, 38, 0.2);
+  --meth-copper: rgba(184, 115, 51, 0.85);
+  --meth-copper-dim: rgba(184, 115, 51, 0.25);
+  --meth-slate: rgba(74, 124, 143, 0.85);
+  --meth-slate-dim: rgba(74, 124, 143, 0.2);
+  --meth-note-link: rgba(184, 115, 51, 0.6);
+}
+
+/* ── Introduction section — light-bg sidenote overrides ──
+ * Same .s-note-* classes, different color context.
+ */
+#introduction {
+  --meth-copper: rgba(184, 115, 51, 0.9);
+  --meth-copper-dim: rgba(184, 115, 51, 0.2);
+  --meth-text-dim: rgba(60, 60, 70, 0.55);
+  --meth-note-link: rgba(184, 115, 51, 0.7);
+}
+
+/* ── Sidenote row — Tufte-style margin notes ──
+ * Prose flows naturally; sidenote is absolutely positioned in the
+ * right margin. Paragraphs stack based on their own height — a tall
+ * sidenote never inflates the gap between paragraphs. — Sable
+ */
+.s-note-row {
+  position: relative;
+}
+
+/* Margin column — absolutely positioned beside prose */
+.s-note-margin {
+  position: absolute;
+  top: 0;
+  left: calc(var(--content-narrow) + var(--grid-gutter));
+  width: calc(100% - var(--content-narrow) - var(--grid-gutter));
+  padding-left: 1rem;
+  border-left: 2px solid var(--meth-copper);
+}
+
+/* Drop cap — magazine-style initial letter */
+.drop-cap {
+  float: left;
+  font-family: futura-pt, sans-serif;
+  font-weight: 900;
+  font-size: 4.2em;
+  line-height: 0.8;
+  margin-right: 0.08em;
+  margin-top: 0.05em;
+  color: #1A1A1A;
+}
+
+/* Sidenote text elements — reusable within any margin note */
+.s-note-title {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #1A1A1A;
+}
+.s-note-body {
+  margin-top: 0.375rem;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 10px;
+  line-height: 1.6;
+  color: #666;
+}
+.s-note-link {
+  margin-top: 0.375rem;
+  display: inline-block;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  color: var(--meth-note-link);
+}
+
+/* Sidenote reference number — in the margin title */
+.s-note-num {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 8px;
+  font-weight: 700;
+  margin-right: 0.35em;
+  color: #1A1A1A;
+}
+
+/* Sidenote reference number — inline superscript next to arrow */
+.s-note-num-inline {
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 9px;
+  font-weight: 600;
+  margin-left: 1px;
+  color: rgba(184, 115, 51, 0.7);
+}
+
+/* Inline arrow that links body text to its sidenote */
+.s-note-arrow {
+  color: var(--meth-copper);
+  font-size: 11px;
+}
+
+/* Absolute-positioned margin note — for use inside floated-figure sections
+ * where CSS Grid can't be used (floats break grid row isolation).
+ * Standardizes the positioning pattern even when absolute is required.
+ */
+.s-margin-abs {
+  position: absolute;
+  z-index: 10;
+  padding-left: 1rem;
+  border-left: 2px solid var(--meth-copper);
+  left: calc(var(--content-narrow) + var(--grid-gutter));
+  width: calc(100% - var(--content-narrow) - var(--grid-gutter));
+}
+
+/* ── Methodology section body text ── */
+.s-prose {
+  font-family: var(--font-inter), Inter, sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--meth-text-mid);
+}
+.s-prose-light {
+  font-family: var(--font-inter), Inter, sans-serif;
+  font-size: 15px;
+  line-height: 1.8;
+  color: var(--meth-text-light);
+}
+
+/* ── Hero Mosaic ─────────────────────────────────────────────
+ * Full-width scrolling image wall of AD feature pages.
+ * Confirmed Epstein connections pulse with copper glow.
+ */
+/* mosaic column count set via repeat() in .mosaic-grid below */
+
+@keyframes mosaic-scroll {
+  0%   { transform: translateY(0); }
+  100% { transform: translateY(-50%); }
+}
+
+@keyframes epstein-pulse {
+  0%, 49% { outline-color: rgba(220,38,38,1.0); }
+  50%, 100% { outline-color: transparent; }
+}
+
+@keyframes tag-flash {
+  0%, 49% { opacity: 1.0; }
+  50%, 100% { opacity: 0; }
+}
+
+.mosaic-wrap {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* Top + bottom gradient fade into page background */
+.mosaic-wrap::before,
+.mosaic-wrap::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 40px;
+  z-index: 2;
+  pointer-events: none;
+}
+.mosaic-wrap::before {
+  top: 0;
+  background: linear-gradient(to bottom, var(--background), transparent);
+}
+.mosaic-wrap::after {
+  bottom: 0;
+  background: linear-gradient(to top, var(--background), transparent);
+}
+
+.mosaic-scroller {
+  display: flex;
+  flex-direction: column;
+  animation: mosaic-scroll 60s linear infinite;
+  will-change: transform;
+}
+
+.mosaic-grid {
+  display: grid;
+  grid-template-columns: repeat(24, 1fr);
+  gap: 2px;
+}
+@media (max-width: 767px) {
+  .mosaic-grid {
+    grid-template-columns: repeat(12, 1fr);
+  }
+}
+
+.mosaic-tile {
+  position: relative;
+  aspect-ratio: 3 / 4;
+  background: #222;
+  overflow: hidden;
+}
+
+.mosaic-tile img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.mosaic-tile-confirmed {
+  animation: epstein-pulse 1.2s steps(1) infinite;
+  outline: 4.5px solid rgba(220,38,38,1.0);
+  outline-offset: -1px;
+  z-index: 1;
+}
+/* Red tint overlay */
+.mosaic-tile-confirmed::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: rgba(220,38,38,0.2);
+  z-index: 1;
+  pointer-events: none;
+}
+
+.mosaic-tag {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  font-family: var(--font-jetbrains-mono), monospace;
+  font-size: 8px;
+  font-weight: 700;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 2px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  pointer-events: none;
+  z-index: 2;
+  /* tags stay always visible */
+}
+.mosaic-tag-high    { background: rgba(220,38,38,0.9); color: #fff; }
+.mosaic-tag-medium  { background: rgba(220,38,38,0.75); color: #fff; }
+.mosaic-tag-low     { background: rgba(220,38,38,0.6); color: #fff; }
+.mosaic-tag-coincidence { background: rgba(160,160,160,0.6); color: #fff; }
+
+/* Accessibility: pause animation for reduced-motion preference */
+@media (prefers-reduced-motion: reduce) {
+  .mosaic-scroller {
+    animation-play-state: paused;
+  }
+  .mosaic-tile-confirmed {
+    animation: none;
+    outline-color: rgba(220,38,38,0.9);
+  }
+  .mosaic-tag {
+    animation: none;
+  }
+}

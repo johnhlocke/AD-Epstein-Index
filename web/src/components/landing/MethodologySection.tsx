@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import Image from "next/image";
 import { VerdictSankey } from "@/components/charts/VerdictSankey";
 
@@ -292,6 +293,97 @@ function SectionHeader({
   );
 }
 
+// ── Sidenote system — grid-based layout replacing absolute positioning ──────
+// Two columns: prose (content-narrow) + margin note (remaining space).
+// Eliminates magic top offsets and prevents sidenote overlap by construction.
+// For floated-figure sections, use <MarginNote> (absolute) instead. — Sable
+
+/**
+ * Grid-based prose + margin-note row.
+ * Prose occupies columns 1–4, sidenote occupies columns 5–6.
+ * Each row is self-contained — no overlap possible.
+ */
+function SidenoteBlock({
+  children,
+  note,
+  className = "",
+}: {
+  children: React.ReactNode;
+  note?: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <div className={`s-note-row ${className}`}>
+      <div style={{ maxWidth: "var(--content-narrow)" }}>{children}</div>
+      {note && <div className="s-note-margin hidden md:block">{note}</div>}
+    </div>
+  );
+}
+
+/**
+ * Reusable sidenote content: copper title, body text, optional image + link.
+ * Use inside <SidenoteBlock note={...}> or <MarginNote>.
+ */
+function Sidenote({
+  title,
+  children,
+  href,
+  linkText,
+  image,
+  imageAlt,
+}: {
+  title: string;
+  children: React.ReactNode;
+  href?: string;
+  linkText?: string;
+  image?: string;
+  imageAlt?: string;
+}) {
+  return (
+    <>
+      {image && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={image} alt={imageAlt || ""} className="s-note-img" />
+      )}
+      <p className="s-note-title">{title}</p>
+      <div className="s-note-body">{children}</div>
+      {href && linkText && (
+        <a href={href} target="_blank" rel="noopener noreferrer" className="s-note-link">
+          {linkText} &rarr;
+        </a>
+      )}
+    </>
+  );
+}
+
+/**
+ * Absolute-positioned margin note for use inside floated-figure sections
+ * where CSS Grid can't be used. Standardizes the positioning pattern.
+ */
+function MarginNote({
+  children,
+  top = 0,
+  className = "",
+}: {
+  children: React.ReactNode;
+  top?: number | string;
+  className?: string;
+}) {
+  return (
+    <div
+      className={`s-margin-abs hidden md:block ${className}`}
+      style={{ top }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/** Inline arrow linking body text to its sidenote (hidden on mobile) */
+function NoteArrow() {
+  return <span className="s-note-arrow hidden md:inline">{" "}&#9656;</span>;
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 
 /**
@@ -320,9 +412,73 @@ interface MethodologyProps {
   };
 }
 
+/**
+ * Two-pass sidenote layout:
+ *  1. Anchor each .s-note-margin to the Y position of its .s-note-arrow
+ *     (so the note visually aligns with the caret in the prose, not the
+ *     top of the paragraph).
+ *  2. Walk notes top→bottom and nudge any that overlap downward.
+ * Re-runs on resize. — Sable
+ */
+function usePreventSidenoteOverlap(ref: React.RefObject<HTMLElement | null>) {
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+
+    const layout = () => {
+      const rows = Array.from(
+        el.querySelectorAll<HTMLElement>(".s-note-row"),
+      );
+
+      // Pass 1 — anchor each note to its arrow's vertical position
+      for (const row of rows) {
+        const arrow = row.querySelector<HTMLElement>(".s-note-arrow");
+        const margin = row.querySelector<HTMLElement>(".s-note-margin");
+        if (!margin) continue;
+        margin.style.transform = "";
+        if (arrow) {
+          const rowRect = row.getBoundingClientRect();
+          const arrowRect = arrow.getBoundingClientRect();
+          margin.style.top = `${arrowRect.top - rowRect.top}px`;
+        } else {
+          margin.style.top = "0px";
+        }
+      }
+
+      // Pass 2 — prevent overlap between consecutive notes
+      const notes = Array.from(
+        el.querySelectorAll<HTMLElement>(".s-note-margin"),
+      );
+      const GAP = 16;
+      let prevBottom = -Infinity;
+
+      for (const note of notes) {
+        const rect = note.getBoundingClientRect();
+        if (rect.height === 0) continue; // hidden (mobile)
+        if (rect.top < prevBottom + GAP) {
+          const shift = prevBottom + GAP - rect.top;
+          note.style.transform = `translateY(${shift}px)`;
+          prevBottom = rect.bottom + shift;
+        } else {
+          prevBottom = rect.bottom;
+        }
+      }
+    };
+
+    // Run after first paint
+    requestAnimationFrame(layout);
+    window.addEventListener("resize", layout);
+    return () => window.removeEventListener("resize", layout);
+  }, [ref]);
+}
+
 export function AgentMethodologySection({ stats }: MethodologyProps) {
+  const sectionRef = useRef<HTMLElement>(null);
+  usePreventSidenoteOverlap(sectionRef);
+
   return (
     <section
+      ref={sectionRef}
       className="relative overflow-hidden"
       id="agent-methodology"
       style={{ backgroundColor: BG }}
@@ -413,46 +569,36 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             our world, but rather help us understand it.
           </p>
 
-          {/* Abstract body — per-paragraph sidenotes via relative/absolute */}
+          {/* Abstract body — sidenotes via grid-based SidenoteBlock (no absolute positioning) */}
           <div
-            className="mt-6 flex flex-col gap-6 text-[15px] leading-[1.8]"
-            style={{
-              fontFamily: "var(--font-inter), Inter, sans-serif",
-              color: TEXT_MID,
-            }}
+            className="mt-6 flex flex-col gap-6 s-prose"
           >
             {/* Paragraph 1 + DOJ Library */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>
+            <SidenoteBlock note={
+              <Sidenote
+                title="The DOJ Epstein Library"
+                href="https://www.justice.gov/epstein"
+                linkText="justice.gov/epstein"
+              >
+                Millions of pages of depositions, correspondence, flight logs, and contact records released by the U.S. Department of Justice. Searchable via OCR (handwritten documents are not indexed).
+              </Sidenote>
+            }>
+              <p>
                 This project began with a simple enough question: &ldquo;How many
                 of the high-profile people gracing the glossy pages of
                 Architectural Digest are also named in the xeroxed,
                 Justice-Department-cataloged, unredacted public records of Jeffrey
-                Epstein&apos;s social network?&rdquo;<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                Epstein&apos;s social network?&rdquo;<NoteArrow />
               </p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  The DOJ Epstein Library
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Millions of pages of depositions, correspondence, flight logs, and contact records released by the U.S. Department of Justice. Searchable via OCR (handwritten documents are not indexed).
-                </p>
-                <a href="https://www.justice.gov/epstein" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  justice.gov/epstein &rarr;
-                </a>
-              </div>
-            </div>
+            </SidenoteBlock>
 
             {/* Paragraph 2 + Pipeline Cost */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>
+            <SidenoteBlock note={
+              <Sidenote title="Pipeline Cost">
+                480 issues, 2,180 features, 476 cross-references, 185 dossiers. Approximately $55 in API calls and ~18 hours of wall-clock time. The marginal cost of asking a new question is near zero.
+              </Sidenote>
+            }>
+              <p>
                 What started as curiosity and pecking around via a manual process
                 of looking up old issues very quickly snowballed into a major
                 logistical nightmare. Going line by line and entering the name into
@@ -467,25 +613,9 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 majority of them having named homeowners. It was clear that
                 undertaking something like this manually would be measured not in
                 days or even months, but in such an inordinate amount of time that
-                it wasn&apos;t even worth attempting to quantify.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                it wasn&apos;t even worth attempting to quantify.<NoteArrow />
               </p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: "5em",
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Pipeline Cost
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  480 issues, 2,180 features, 476 cross-references, 185 dossiers. Approximately $55 in API calls and ~18 hours of wall-clock time. The marginal cost of asking a new question is near zero.
-                </p>
-              </div>
-            </div>
+            </SidenoteBlock>
 
             {/* Paragraph 2b — the pivot (no sidenote) */}
             <p style={{ maxWidth: CONTENT_NARROW }}>
@@ -500,8 +630,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             </p>
 
             {/* Paragraph 3 + Vibe Coding */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>
+            <SidenoteBlock note={
+              <Sidenote title={"\u201CVibe Coding\u201D"}>
+                Term coined by Andrej Karpathy (Feb 2025). A style of programming where you describe what you want to an AI and iterate on the output rather than writing every line. The human steers; the AI executes.
+              </Sidenote>
+            }>
+              <p>
                 Again, AI is a tool. And a tool was needed to technically answer
                 important questions that would otherwise be too impractical to ask,
                 at scale, and at great speed. It&apos;s not feasible by a single
@@ -511,7 +645,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 take a look at the &ldquo;Aesthetic Methodology&rdquo; section.
                 Working through the technical challenges of making this work, I
                 experienced firsthand what is challenging with &ldquo;vibe
-                coding&rdquo;<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>, what&apos;s actually, you know, pretty amazing, and
+                coding&rdquo;<NoteArrow />, what&apos;s actually, you know, pretty amazing, and
                 what at first blush seemed like it should be really easy but
                 actually took hours of frustrating detail to get right, all
                 enhanced my creativity. I questioned some of my initial
@@ -519,26 +653,21 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 through a pipeline, and moved in scale and scope that I
                 didn&apos;t think possible before I started.
               </p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  &ldquo;Vibe Coding&rdquo;
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Term coined by Andrej Karpathy (Feb 2025). A style of programming where you describe what you want to an AI and iterate on the output rather than writing every line. The human steers; the AI executes.
-                </p>
-              </div>
-            </div>
+            </SidenoteBlock>
 
-            {/* Paragraph 4 + ICIJ — min-height ensures room for tall sidenote before para 5 */}
-            <div className="relative md:min-h-[280px]">
-              <p style={{ maxWidth: CONTENT_NARROW }}>
+            {/* Paragraph 4 + ICIJ — grid row auto-sizes, no min-height hack needed */}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Precedent: ICIJ Panama Papers"
+                image="/sidenotes/icij-graph.jpg"
+                imageAlt="ICIJ entity-relationship graph showing persons, companies, and addresses linked by directorship and shareholder relationships"
+                href="https://neo4j.com/case-studies/the-international-consortium-of-investigative-journalists-icij/"
+                linkText="neo4j.com/case-studies/icij"
+              >
+                The ICIJ&apos;s Panama Papers investigation (2016) used Neo4j, Apache Tika, Tesseract OCR, and NLP entity recognition to process 11.5 million leaked documents across 400 journalists in 80 countries.
+              </Sidenote>
+            }>
+              <p>
                 What follows is a detailed account of this modular, multi-agent
                 workflow that processes document corpora, extracts structured
                 entities, cross-references them against external records,
@@ -548,201 +677,103 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 structurally, the system could be aimed at campaign finance records,
                 nonprofit boards, corporate directorships, university trustees, and
                 cultural institutions gala attendees. That initial question can
-                change; the pipeline remains.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
+                change; the pipeline remains.<NoteArrow />
               </p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/sidenotes/icij-graph.jpg"
-                  alt="ICIJ entity-relationship graph showing persons, companies, and addresses linked by directorship and shareholder relationships"
-                  className="s-note-img"
-                />
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Precedent: ICIJ Panama Papers
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  The ICIJ&apos;s Panama Papers investigation (2016) used Neo4j, Apache Tika, Tesseract OCR, and NLP entity recognition to process 11.5 million leaked documents across 400 journalists in 80 countries.
-                </p>
-                <a href="https://neo4j.com/case-studies/the-international-consortium-of-investigative-journalists-icij/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  neo4j.com/case-studies/icij &rarr;
-                </a>
-              </div>
-            </div>
+            </SidenoteBlock>
 
             {/* Paragraph 5 + Confirmed ≠ Guilty */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>
-                This document explains how that pipeline works, where it succeeds,
-                where it fails, and where the borders between human judgment and
-                machine autonomy are still being drawn.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
-              </p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Confirmed &ne; Guilty
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  &ldquo;Confirmed connection&rdquo; means documented proximity: contact entries, dining records, guest lists, correspondence. It does not imply wrongdoing or a personal relationship with Epstein.
-                </p>
-              </div>
-            </div>
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              This document explains how that pipeline works, where it succeeds,
+              where it fails, and where the borders between human judgment and
+              machine autonomy are still being drawn.
+            </p>
           </div>
 
           {/* Research Questions */}
           <div className="mt-10">
-            <p
-              className="text-[10px] font-bold uppercase tracking-[0.18em]"
-              style={{ fontFamily: MONO, color: COPPER, maxWidth: CONTENT_NARROW }}
-            >
-              Research Questions
-            </p>
-            <p
-              className="mt-4 text-[15px] leading-[1.8]"
-              style={{
-                fontFamily: "var(--font-inter), Inter, sans-serif",
-                color: TEXT_LIGHT,
-                maxWidth: CONTENT_NARROW,
-              }}
-            >
-              Can an autonomous AI pipeline read, interpret, and evaluate
-              thousands of documents with enough semantic and contextual
-              understanding to make rapid, defensible investigative judgements at
-              scale, while preserving a transparent, auditable chain of
-              reasoning?
-            </p>
-            <p
-              className="mt-4 text-[15px] leading-[1.8]"
-              style={{
-                fontFamily: "var(--font-inter), Inter, sans-serif",
-                color: TEXT_MID,
-                maxWidth: CONTENT_NARROW,
-              }}
-            >
-              From that flowed more difficult design problems:
-            </p>
-            <div
-              className="mt-3 flex flex-col gap-2 text-[15px] leading-[1.8]"
-              style={{
-                fontFamily: "var(--font-inter), Inter, sans-serif",
-                color: TEXT_MID,
-              }}
-            >
-              {/* Q1 + Society of Mind note */}
-              <div className="relative">
-                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
-                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
-                  How do you decompose an open-ended investigation into discrete stages with clean handoffs?<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
-                </p>
-                <div
-                  className="absolute z-10 hidden pl-4 md:block"
-                  style={{
-                    top: "-3em",
-                    left: "calc(var(--content-narrow) + 24px)",
-                    width: "calc(100% - var(--content-narrow) - 24px)",
-                    borderLeft: `2px solid ${COPPER}`,
-                  }}
+            <div style={{ maxWidth: CONTENT_NARROW }}>
+              <p
+                className="text-[10px] font-bold uppercase tracking-[0.18em]"
+                style={{ fontFamily: MONO, color: COPPER }}
+              >
+                Research Questions
+              </p>
+              <p className="mt-4 s-prose-light">
+                Can an autonomous AI pipeline read, interpret, and evaluate
+                thousands of documents with enough semantic and contextual
+                understanding to make rapid, defensible investigative judgements at
+                scale, while preserving a transparent, auditable chain of
+                reasoning?
+              </p>
+              <p className="mt-4 s-prose">
+                From that flowed more difficult design problems:
+              </p>
+            </div>
+
+            <div className="mt-3 flex flex-col gap-2 s-prose">
+              {/* Q1 + Minsky note — arrow-anchored layout handles positioning */}
+              <SidenoteBlock note={
+                <Sidenote
+                  title={"Minsky, \u201CThe Society of Mind\u201D"}
+                  href="https://www.simonandschuster.com/books/Society-Of-Mind/Marvin-Minsky/9780671657130"
+                  linkText="Simon & Schuster"
                 >
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                    Minsky, &ldquo;The Society of Mind&rdquo;
-                  </p>
-                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    Marvin Minsky&apos;s 1986 thesis that intelligence emerges from communities of simple, specialized agents rather than monolithic reasoning. The direct intellectual ancestor of multi-agent pipelines.
-                  </p>
-                  <a href="https://www.simonandschuster.com/books/Society-Of-Mind/Marvin-Minsky/9780671657130" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                    Simon &amp; Schuster &rarr;
-                  </a>
+                  Marvin Minsky&apos;s 1986 thesis that intelligence emerges from communities of simple, specialized agents rather than monolithic reasoning. The direct intellectual ancestor of multi-agent pipelines.
+                </Sidenote>
+              }>
+                <div className="relative pl-5">
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  How do you decompose an open-ended investigation into discrete stages with clean handoffs?<NoteArrow />
                 </div>
-              </div>
+              </SidenoteBlock>
 
               {/* Q2 — no sidenote */}
-              <div className="relative">
-                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
-                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
-                  Can you build an autonomous system, without a human in the loop, that handles ambiguity in names responsibly and avoids false positives?
-                </p>
+              <div className="relative pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                Can you build an autonomous system, without a human in the loop, that handles ambiguity in names responsibly and avoids false positives?
               </div>
 
               {/* Q3 + Heuer note */}
-              <div className="relative">
-                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
-                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
-                  How do you encode evidentiary standards so the system distinguishes coincidence from confirmation?<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
-                </p>
-                <div
-                  className="absolute top-0 z-10 hidden pl-4 md:block"
-                  style={{
-                    left: "calc(var(--content-narrow) + 24px)",
-                    width: "calc(100% - var(--content-narrow) - 24px)",
-                    borderLeft: `2px solid ${COPPER}`,
-                  }}
+              <SidenoteBlock note={
+                <Sidenote
+                  title={"Heuer, \u201CPsychology of Intelligence Analysis\u201D"}
+                  href="https://www.cia.gov/resources/csi/static/Pyschology-of-Intelligence-Analysis.pdf"
+                  linkText="CIA.gov (PDF)"
                 >
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                    Heuer, &ldquo;Psychology of Intelligence Analysis&rdquo;
-                  </p>
-                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    The CIA&apos;s 1999 manual on cognitive bias in evidence evaluation. Heuer&apos;s &ldquo;Analysis of Competing Hypotheses&rdquo; framework structures decisions as weighted evidence across competing explanations rather than single-theory confirmation.
-                  </p>
-                  <a href="https://www.cia.gov/resources/csi/static/Pyschology-of-Intelligence-Analysis.pdf" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                    CIA.gov (PDF) &rarr;
-                  </a>
+                  The CIA&apos;s 1999 manual on cognitive bias in evidence evaluation. Heuer&apos;s &ldquo;Analysis of Competing Hypotheses&rdquo; framework structures decisions as weighted evidence across competing explanations rather than single-theory confirmation.
+                </Sidenote>
+              }>
+                <div className="relative pl-5">
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  How do you encode evidentiary standards so the system distinguishes coincidence from confirmation?<NoteArrow />
                 </div>
-              </div>
+              </SidenoteBlock>
 
               {/* Q4 — no sidenote */}
-              <div className="relative">
-                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
-                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
-                  What infrastructure do agents need beyond a system prompt (things like memory, communication, reflection) to sustain quality over thousands of sequential decisions?
-                </p>
+              <div className="relative pl-5" style={{ maxWidth: CONTENT_NARROW }}>
+                <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                What infrastructure do agents need beyond a system prompt (things like memory, communication, reflection) to sustain quality over thousands of sequential decisions?
               </div>
 
-              {/* Q5 + Shneiderman note */}
-              <div className="relative pb-16 md:pb-0">
-                <p className="pl-5" style={{ maxWidth: CONTENT_NARROW }}>
-                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
-                  What does a purpose-built interface give you that a terminal can&apos;t &mdash; and does making the system visible change how much you trust it?<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
-                </p>
-                <div
-                  className="absolute z-10 hidden pl-4 md:block"
-                  style={{
-                    top: "2.5em",
-                    left: "calc(var(--content-narrow) + 24px)",
-                    width: "calc(100% - var(--content-narrow) - 24px)",
-                    borderLeft: `2px solid ${COPPER}`,
-                  }}
+              {/* Q5 + Shneiderman note — no pb-16 hack, no top offset, grid handles it */}
+              <SidenoteBlock note={
+                <Sidenote
+                  title={"Shneiderman, \u201CHuman-Centered AI\u201D"}
+                  href="https://global.oup.com/academic/product/human-centered-ai-9780192845290"
+                  linkText="Oxford University Press"
                 >
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                    Shneiderman, &ldquo;Human-Centered AI&rdquo;
-                  </p>
-                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    Ben Shneiderman&apos;s 2022 argument that AI systems need oversight dashboards, not terminal logs. His two-dimensional framework plots human control against computer automation.
-                  </p>
-                  <a href="https://global.oup.com/academic/product/human-centered-ai-9780192845290" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                    Oxford University Press &rarr;
-                  </a>
+                  Ben Shneiderman&apos;s 2022 argument that AI systems need oversight dashboards, not terminal logs. His two-dimensional framework plots human control against computer automation.
+                </Sidenote>
+              }>
+                <div className="relative pl-5">
+                  <span className="absolute" style={{ left: "0.35em", color: TEXT_MID }}>&bull;</span>
+                  What does a purpose-built interface give you that a terminal can&apos;t &mdash; and does making the system visible change how much you trust it?<NoteArrow />
                 </div>
-              </div>
+              </SidenoteBlock>
             </div>
             <p
-              className="mt-4 pb-20 text-[15px] leading-[1.8] md:pb-24"
-              style={{
-                fontFamily: "var(--font-inter), Inter, sans-serif",
-                color: TEXT_MID,
-                maxWidth: CONTENT_NARROW,
-              }}
+              className="mt-4 pb-20 s-prose md:pb-24"
+              style={{ maxWidth: CONTENT_NARROW }}
             >
               The following sections describe an attempt to answer those questions:
             </p>
@@ -1267,8 +1298,18 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
                 False Positives
               </p>
-              <div className="relative">
-                <p style={{ maxWidth: CONTENT_NARROW }}>
+              <SidenoteBlock note={
+                <Sidenote
+                  title="DOJ Source Document"
+                  image="/sidenotes/coppola-fb.png"
+                  imageAlt="Scott Coppola Facebook message to Karina Shuliak, June 2011"
+                  href="https://www.justice.gov/epstein/files/DataSet%209/EFTA00575663.pdf"
+                  linkText="EFTA00575663.pdf"
+                >
+                  The actual DOJ document showing Scott Coppola&apos;s Facebook message to Karina Shuliak (not Francis Ford Coppola).
+                </Sidenote>
+              }>
+                <p>
                   Now consider a false positive. The system checks every name,
                   including &ldquo;Francis Ford Coppola,&rdquo; who was featured
                   in a September 1995 issue where the director shared his jungle
@@ -1277,7 +1318,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   context of the individual PDFs, the Detective understands that
                   this is actually Donato Coppola excitedly reaching out to
                   Jeffrey Epstein to set up a meeting. And then there is also
-                  Scott Coppola,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> who was shown emailing Jeffrey Epstein&apos;s
+                  Scott Coppola,<NoteArrow /> who was shown emailing Jeffrey Epstein&apos;s
                   girlfriend Karina Shuliak in a Facebook message in 2011. Same
                   last name, but very different people. The Detective&apos;s
                   verdict: no match. The pipeline flags the name, investigates it
@@ -1286,31 +1327,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   caught it automatically, while a careless system would have
                   stopped at the surname.
                 </p>
-                <div
-                  className="absolute top-0 z-10 hidden pl-4 md:block"
-                  style={{
-                    left: "calc(var(--content-narrow) + 24px)",
-                    width: "calc(100% - var(--content-narrow) - 24px)",
-                    borderLeft: `2px solid ${COPPER}`,
-                  }}
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/sidenotes/coppola-fb.png"
-                    alt="Scott Coppola Facebook message to Karina Shuliak, June 2011"
-                    className="s-note-img"
-                  />
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                    DOJ Source Document
-                  </p>
-                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    The actual DOJ document showing Scott Coppola&apos;s Facebook message to Karina Shuliak (not Francis Ford Coppola).
-                  </p>
-                  <a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA00575663.pdf" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                    EFTA00575663.pdf &rarr;
-                  </a>
-                </div>
-              </div>
+              </SidenoteBlock>
 
               {/* ── Fig. 3: Coppola rejection tree (floated left, 2 cols — same as Fig. 2) ── */}
               <div className="relative">
@@ -1482,10 +1499,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </a>
                 </div>
               </div>
-              <div className="relative">
-                <p style={{ maxWidth: CONTENT_NARROW }}>
+              <SidenoteBlock note={
+                <Sidenote title="OCR Limitations">
+                  The DOJ search engine indexes scanned pages via optical character recognition. Handwritten notes, marginalia, and address book entries with non-standard formatting are largely invisible. The system can only find what the OCR can read.
+                </Sidenote>
+              }>
+                <p>
                   It is important to resist the illusion of infallibility. The DOJ
-                  search interface is OCR-based,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> which means handwritten
+                  search interface is OCR-based,<NoteArrow /> which means handwritten
                   documents &mdash; and there are many in the Epstein
                   archive &mdash; are effectively invisible to the system. Name
                   matching always carries edge cases: &ldquo;Ashley&rdquo; could
@@ -1499,51 +1520,24 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   recorded, remains redacted, or has not been released, this
                   system will never discover it.
                 </p>
-                <div
-                  className="absolute z-10 hidden pl-4 md:block"
-                  style={{
-                    top: "4em",
-                    left: "calc(var(--content-narrow) + 24px)",
-                    width: "calc(100% - var(--content-narrow) - 24px)",
-                    borderLeft: `2px solid ${COPPER}`,
-                  }}
+              </SidenoteBlock>
+              <SidenoteBlock note={
+                <Sidenote
+                  title="Dataset: OpenSecrets.org"
+                  href="https://www.opensecrets.org"
+                  linkText="opensecrets.org"
                 >
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                    OCR Limitations
-                  </p>
-                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    The DOJ search engine indexes scanned pages via optical character recognition. Handwritten notes, marginalia, and address book entries with non-standard formatting are largely invisible. The system can only find what the OCR can read.
-                  </p>
-                </div>
-              </div>
-              <div className="relative">
-                <p style={{ maxWidth: CONTENT_NARROW }}>
+                  OpenSecrets.org uses structured data pipelines to map political donations and lobbying networks to campaign finance.
+                </Sidenote>
+              }>
+                <p>
                   But what it can do is reliably transform ambiguity into
                   structured, reviewable decisions at a scale no individual
                   researcher could sustain alone. This same pipeline, pointed at a
-                  different data set,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> would run the same way. The question may
+                  different data set,<NoteArrow /> would run the same way. The question may
                   change but the architecture stays the same.
                 </p>
-                <div
-                  className="absolute z-10 hidden pl-4 md:block"
-                  style={{
-                    top: 0,
-                    left: "calc(var(--content-narrow) + 24px)",
-                    width: "calc(100% - var(--content-narrow) - 24px)",
-                    borderLeft: `2px solid ${COPPER}`,
-                  }}
-                >
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                    Dataset: OpenSecrets.org
-                  </p>
-                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    OpenSecrets.org uses structured data pipelines to map political donations and lobbying networks to campaign finance.
-                  </p>
-                  <a href="https://www.opensecrets.org" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                    opensecrets.org &rarr;
-                  </a>
-                </div>
-              </div>
+              </SidenoteBlock>
           </div>
         </div>
 
@@ -1615,106 +1609,54 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             </div>
 
             {/* P2 — context window + monolithic IBM link + sidenote */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>In theory, this is straightforward. In practice, it collapses immediately. The context window<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> saturates. The model gets itself stunningly lost chasing loose threads as states become entangled. There are no durable checkpoints, no clean backup points, and the black box nature negates any externalized audit trail. You&rsquo;d have to blindly trust the results&mdash;that&rsquo;s difficult to accept. The results may look coherent, but its operationally opaque. The path from A to B becomes lost, with no meaningful way to replicate or validate the conclusions. While it is simple and <a href="https://www.ibm.com/think/topics/monolithic-architecture" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>monolithic</a>, it just doesn&rsquo;t work.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: 0,
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Context Window
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  A context window is the amount of text an AI model can &ldquo;see&rdquo; at once (typically 100,000&ndash;200,000 words). Once full, earlier information is effectively forgotten.
-                </p>
-              </div>
-            </div>
+            <SidenoteBlock note={
+              <Sidenote title="Context Window">
+                A context window is the amount of text an AI model can &ldquo;see&rdquo; at once (typically 100,000&ndash;200,000 words). Once full, earlier information is effectively forgotten.
+              </Sidenote>
+            }>
+              <p>In theory, this is straightforward. In practice, it collapses immediately. The context window<NoteArrow /> saturates. The model gets itself stunningly lost chasing loose threads as states become entangled. There are no durable checkpoints, no clean backup points, and the black box nature negates any externalized audit trail. You&rsquo;d have to blindly trust the results&mdash;that&rsquo;s difficult to accept. The results may look coherent, but its operationally opaque. The path from A to B becomes lost, with no meaningful way to replicate or validate the conclusions. While it is simple and <a href="https://www.ibm.com/think/topics/monolithic-architecture" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>monolithic</a>, it just doesn&rsquo;t work.</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>The next step is to decompose the problem. Break the monolith model into bounded stages with explicit interfaces, externalize the intermediate states, and allow specialized components to operate concurrently. The user assigns specialized roles: searching, reading, cross-referencing, investigating. But how do these roles interact with each other? My first attempt here was a more decentralized, multi-writer, peer-coordinated agent mesh: each role&mdash;or agent&mdash;communicates with all the others, negotiates their own task ownership, and writes updates to a shared source as conclusions began to emerge. Seemingly chaotic, but it seemed more analagous to how a group of people would collaborate autonomously. However, in practice, for this investigative work, it introduces too much avoidable risk.</p>
 
             {/* P4 — race conditions sidenote */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>First, multiple writers create the possibility of race conditions<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> via conflicting updates. If two agents attempt to update the same record concurrently, which wins? While peer negotiation diffuses responsibility and obscures which agent introduced an error. In this system, coordination would emerge through negotiation rather than orchestration. Attractive in theory since it reads as more &ldquo;intelligent&rdquo;, but again, in practice introduces additional structural complexity. If the Detective and Researcher disagree about whether a lead merits escalation, who decides? The system architecture must define an explicit resolution mechanism. For this production pipeline processing thousands of names, this expanded coordination and defining an endless list individual rule settings would prove overly complicated and infeasible.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: 0,
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Race Condition
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  A race condition occurs when two processes try to update the same data simultaneously, and the outcome depends on which one finishes first. The software equivalent of two editors rewriting the same paragraph at the same time.
-                </p>
-              </div>
-            </div>
+            <SidenoteBlock note={
+              <Sidenote title="Race Condition">
+                A race condition occurs when two processes try to update the same data simultaneously, and the outcome depends on which one finishes first. The software equivalent of two editors rewriting the same paragraph at the same time.
+              </Sidenote>
+            }>
+              <p>First, multiple writers create the possibility of race conditions<NoteArrow /> via conflicting updates. If two agents attempt to update the same record concurrently, which wins? While peer negotiation diffuses responsibility and obscures which agent introduced an error. In this system, coordination would emerge through negotiation rather than orchestration. Attractive in theory since it reads as more &ldquo;intelligent&rdquo;, but again, in practice introduces additional structural complexity. If the Detective and Researcher disagree about whether a lead merits escalation, who decides? The system architecture must define an explicit resolution mechanism. For this production pipeline processing thousands of names, this expanded coordination and defining an endless list individual rule settings would prove overly complicated and infeasible.</p>
+            </SidenoteBlock>
 
             {/* P5 — hub-and-spoke origin sidenote */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>These tensions were resolved by adopting the specific topology architecture of a centrally orchestrated hub-and-spoke.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> Each agent operates concurrently within a bounded relationship to a central coordinator. Here, all task assignments and all persistent writes flow through the single authoritative coordinator. They alone validate outputs, resolve ambiguities, and commit states to the database. This preserves parallel throughput without introducing multi-writer contention. There are no conflicting updates, no intra-agent negotiations, and no ambiguity about provenance. Every state transition can be attributable to a single decision point.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: 0,
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Hub-and-Spoke"
+                image="/sidenotes/fedex-hub-spoke.png"
+                imageAlt="FedEx hub-and-spoke route map — Memphis as central hub with spokes radiating to every US city"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/sidenotes/fedex-hub-spoke.png"
-                  alt="FedEx hub-and-spoke route map — Memphis as central hub with spokes radiating to every US city"
-                  className="s-note-img"
-                />
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Hub-and-Spoke
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Hub-and-spoke topology was pioneered by FedEx in 1973 and later adopted by the airline industry: every package (or flight) routes through a central hub rather than flying point-to-point. The efficiency gains, and the single point of failure risks, are the same in software.
-                </p>
-              </div>
-            </div>
+                Hub-and-spoke topology was pioneered by FedEx in 1973 and later adopted by the airline industry: every package (or flight) routes through a central hub rather than flying point-to-point. The efficiency gains, and the single point of failure risks, are the same in software.
+              </Sidenote>
+            }>
+              <p>These tensions were resolved by adopting the specific topology architecture of a centrally orchestrated hub-and-spoke.<NoteArrow /> Each agent operates concurrently within a bounded relationship to a central coordinator. Here, all task assignments and all persistent writes flow through the single authoritative coordinator. They alone validate outputs, resolve ambiguities, and commit states to the database. This preserves parallel throughput without introducing multi-writer contention. There are no conflicting updates, no intra-agent negotiations, and no ambiguity about provenance. Every state transition can be attributable to a single decision point.</p>
+            </SidenoteBlock>
 
             {/* ── Why It Works ── */}
             <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Why It Works</p>
 
-            <div className="relative">
-              <p className="-mt-2" style={{ maxWidth: CONTENT_NARROW }}>The metaphor is straightforward: imagine a newsroom<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>. Reporters don&rsquo;t directly publish to the front page. They file copy. An editor reviews it, fact checks it, decides if it meets standards, and then either runs it, kills it, or sends it back for revision. The reporters are specialists in their fields. One might cover politics, another crime, another film, but an editor is the single point of contact for all of them. No story hits a reader&rsquo;s eyeballs without the editor&rsquo;s sign-off.</p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Newsroom Structure"
+                image="/sidenotes/newsroom-roles.png"
+                imageAlt="Newsroom organizational chart showing Editor-in-Chief at the center coordinating section editors, reporters, photographers, and copy desk"
+                href="https://training.wkustudentpubs.com/index.php/newsroom-roles/"
+                linkText="wkustudentpubs.com/newsroom-roles"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/sidenotes/newsroom-roles.png"
-                  alt="Newsroom organizational chart showing Editor-in-Chief at the center coordinating section editors, reporters, photographers, and copy desk"
-                  className="s-note-img"
-                />
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Newsroom Structure
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Newsrooms typically have an editor-in-chief who coordinates and oversees production: assigning stories, reviewing copy, and deciding what runs. Reporters are specialists; no story reaches the reader without passing through editorial.
-                </p>
-                <a href="https://training.wkustudentpubs.com/index.php/newsroom-roles/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  wkustudentpubs.com/newsroom-roles &rarr;
-                </a>
-              </div>
-            </div>
+                Newsrooms typically have an editor-in-chief who coordinates and oversees production: assigning stories, reviewing copy, and deciding what runs. Reporters are specialists; no story reaches the reader without passing through editorial.
+              </Sidenote>
+            }>
+              <p className="-mt-2">The metaphor is straightforward: imagine a newsroom<NoteArrow />. Reporters don&rsquo;t directly publish to the front page. They file copy. An editor reviews it, fact checks it, decides if it meets standards, and then either runs it, kills it, or sends it back for revision. The reporters are specialists in their fields. One might cover politics, another crime, another film, but an editor is the single point of contact for all of them. No story hits a reader&rsquo;s eyeballs without the editor&rsquo;s sign-off.</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>The communication mechanism is deliberately simple. Each agent has an inbox, and an outbox. The editor pushes a task, for example: &ldquo;cross-reference these twelve names&rdquo; into the Detective&rsquo;s inbox. The Detective works through them in sequential order, pushes the results into his outbox. The editor collects the results, validates them, writes the verdicts to the database, and then pushes a new tasks: &ldquo;investigate this confirmed lead&rdquo; into the Researcher&rsquo;s inbox. The message-passing is one-to-one. Agents never talk to each other directly. They only talk to the Editor, and she decides what happens next.</p>
 
@@ -1804,77 +1746,47 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             {/* ── The Autonomy Question ── */}
             <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>The Autonomy Question</p>
 
-            <div className="relative">
-              <p className="-mt-2" style={{ maxWidth: CONTENT_NARROW }}>As someone now genuinely curious about the role AI agents in software workflows, it is important to be precise about what these agents are and are not. In contemporary discourse, frequently the term &ldquo;agent&rdquo; implies systems that plan autonomously, adapt strategies, and pursue goals with minimal supervision.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> Current research literature explores architectures with self-directed planning, tool discovery, and even limited forms of self-evolution. Some of those capabilities are real; many remain experimental.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: 0,
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="AI Agents in 2025"
+                image="/sidenotes/autonomy-robot.png"
+                imageAlt="Cartoon robot with open head revealing gears — the autonomy question"
+                href="https://theconversation.com/ai-agents-arrived-in-2025-heres-what-happened-and-the-challenges-ahead-in-2026-272325"
+                linkText="theconversation.com"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/sidenotes/autonomy-robot.png"
-                  alt="Cartoon robot with open head revealing gears — the autonomy question"
-                  className="s-note-img"
-                />
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  AI Agents in 2025
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Von Davier (2025) documents the year AI agents went mainstream. Standardized protocols like MCP and Agent2Agent enabled autonomous tool use at scale, while raising unresolved questions about security, oversight, and control.
-                </p>
-                <a href="https://theconversation.com/ai-agents-arrived-in-2025-heres-what-happened-and-the-challenges-ahead-in-2026-272325" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  theconversation.com &rarr;
-                </a>
-              </div>
-            </div>
+                Von Davier (2025) documents the year AI agents went mainstream. Standardized protocols like MCP and Agent2Agent enabled autonomous tool use at scale, while raising unresolved questions about security, oversight, and control.
+              </Sidenote>
+            }>
+              <p className="-mt-2">As someone now genuinely curious about the role AI agents in software workflows, it is important to be precise about what these agents are and are not. In contemporary discourse, frequently the term &ldquo;agent&rdquo; implies systems that plan autonomously, adapt strategies, and pursue goals with minimal supervision.<NoteArrow /> Current research literature explores architectures with self-directed planning, tool discovery, and even limited forms of self-evolution. Some of those capabilities are real; many remain experimental.</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>The pipeline here is intentionally narrow. Partially intentionally, but also constrained by what&rsquo;s feasible technically. Each agent in this system is a bounded worker receiving a well-defined assignment, executing it according to clear and structured, machine-readable methodology, and then returns a typed result. The agent controls how it performs its task, but the Editor determines what it works on.</p>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>This distinction reflects a fundamental design tension worth exploring a bit when talking about AI: autonomy versus control.</p>
 
             {/* P — Candice Bergen + sidenote */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>A fully autonomous system would not require Miranda. It would ingest issues, extract entities, evaluate evidence, and publish verdicts independently, refining its methods over time. Architectures approximating this model exist in research settings. From a hypothetical, science-fiction example, a fully autonomous, self-evolving Detective agent might conceivably evolve a way to hack into Candice Bergen&rsquo;s private email<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> as an extreme example of proving out a suspected connection to Epstein. Luckily, this can&rsquo;t do that.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: 0,
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Autonomy Boundary"
+                image="/sidenotes/silicon-valley.jpg"
+                imageAlt="Gilfoyle in Silicon Valley S6E6 — the AI's best way to fix the bugs was to get rid of all the software"
+                href="https://www.youtube.com/watch?v=m0b_D2JgZgY"
+                linkText="youtube.com"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/sidenotes/silicon-valley.jpg"
-                  alt="Gilfoyle in Silicon Valley S6E6 — the AI's best way to fix the bugs was to get rid of all the software"
-                  className="s-note-img"
-                />
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Autonomy Boundary
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  The example is deliberately absurd to illustrate a real constraint: in a fully autonomous system, the objective function (&ldquo;prove connections&rdquo;) could justify methods the designer never intended.
-                </p>
+                The example is deliberately absurd to illustrate a real constraint: in a fully autonomous system, the objective function (&ldquo;prove connections&rdquo;) could justify methods the designer never intended.
                 <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
                   This concept was humorously shown in HBO&rsquo;s <em>Silicon Valley</em>, Season 6, Episode 6: &ldquo;RussFest&rdquo; (2019).
                 </p>
-                <a href="https://www.youtube.com/watch?v=m0b_D2JgZgY" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  youtube.com &rarr;
-                </a>
                 <p className="mt-2 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
                   Notably, in a 2024 paper, an AI agent attempted to modify its own evaluation scripts to give itself higher scores. It was caught and sandboxed, but its self-preservation instincts led it to game its own metrics.
                 </p>
                 <a href="https://arxiv.org/abs/2408.06292" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
                   arxiv.org/abs/2408.06292 &rarr;
                 </a>
-              </div>
-            </div>
+              </Sidenote>
+            }>
+              <p>A fully autonomous system would not require Miranda. It would ingest issues, extract entities, evaluate evidence, and publish verdicts independently, refining its methods over time. Architectures approximating this model exist in research settings. From a hypothetical, science-fiction example, a fully autonomous, self-evolving Detective agent might conceivably evolve a way to hack into Candice Bergen&rsquo;s private email<NoteArrow /> as an extreme example of proving out a suspected connection to Epstein. Luckily, this can&rsquo;t do that.</p>
+            </SidenoteBlock>
 
             {/* ── Summary ── */}
             <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Summary</p>
@@ -1886,28 +1798,17 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <p style={{ maxWidth: CONTENT_NARROW }}>Each iteration responded to an observed failure mode, not an abstract preference. That pattern reflects a broader reality of building AI systems: you begin with what works, observe where it breaks, and redesign around those breakpoints. This collaborative, iterative approach is personally new to me, but I could see how it reinforcing the theme of &ldquo;AI as creativity enhancer.&rdquo; You need to learn by doing, and in the process, your preconceived notions of feasibility are also expanded. For me, a consistent metric for a successful project is that your curiousity during the process leads to you a place you couldn&rsquo;t have considered when you started out.</p>
 
             {/* P — Voyager sidenote */}
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>Looking forward, it seems reasonable to assume that the boundary between task-constrained agents and more autonomous systems<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> will continue to narrow. Today, the Editor applies fixed editorial rules set by the human (the publication&rsquo;s &ldquo;owner&rdquo; in this analogy?). In principle, the Editor could instead learn the rules over time from accumulated past decisions, similar to how we learn through examples. The Detective queries two evidence sources. Tomorrow, it could discover and integrate new sources autonomously. Each agent&rsquo;s methodology is currently authored by a human. Why couldn&rsquo;t it instead propose, test, and refine its own procedures&mdash;finding new, even better ideas&mdash;to meet the high-level goals I set out?</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: 0,
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Autonomous Agents"
+                href="https://arxiv.org/abs/2305.16291"
+                linkText="arxiv.org"
               >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Autonomous Agents
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Wang et al. (2023), &ldquo;Voyager: An Open-Ended Embodied Agent with Large Language Models.&rdquo; An agent that autonomously writes and refines its own code to master Minecraft without human intervention.
-                </p>
-                <a href="https://arxiv.org/abs/2305.16291" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  arxiv.org &rarr;
-                </a>
-              </div>
-            </div>
+                Wang et al. (2023), &ldquo;Voyager: An Open-Ended Embodied Agent with Large Language Models.&rdquo; An agent that autonomously writes and refines its own code to master Minecraft without human intervention.
+              </Sidenote>
+            }>
+              <p>Looking forward, it seems reasonable to assume that the boundary between task-constrained agents and more autonomous systems<NoteArrow /> will continue to narrow. Today, the Editor applies fixed editorial rules set by the human (the publication&rsquo;s &ldquo;owner&rdquo; in this analogy?). In principle, the Editor could instead learn the rules over time from accumulated past decisions, similar to how we learn through examples. The Detective queries two evidence sources. Tomorrow, it could discover and integrate new sources autonomously. Each agent&rsquo;s methodology is currently authored by a human. Why couldn&rsquo;t it instead propose, test, and refine its own procedures&mdash;finding new, even better ideas&mdash;to meet the high-level goals I set out?</p>
+            </SidenoteBlock>
           </div>
 
         </div>
@@ -1930,28 +1831,17 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="mt-10 text-[15px] leading-[1.8] [&>*+*]:mt-6"
             style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
           >
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>Intentionally or not, you start to personify each agent as being imbued with recognizable human qualities. &ldquo;That little guy is really relentless in checking sources over and over. He literally never tires!&rdquo; This is regardless of the fact that they have neither physical size, gender, nor a biogenetic system. Nevertheless, when our clumsily limited vocabulary is aimed at novel technological concepts, we fall back on archetypes and anthropomorphization.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> Similar to how we view other humans, we begin to conflate job role with personality, and we build little narratives around them.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: "3em",
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Anthropomorphism as Fallacy"
+                href="https://link.springer.com/article/10.1007/s43681-024-00419-4"
+                linkText="springer.com"
               >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Anthropomorphism as Fallacy
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Placani (2024) argues anthropomorphism in AI operates on two levels: as hype, it exaggerates capabilities by attributing human traits to systems that don&rsquo;t possess them; as fallacy, it distorts moral judgments about responsibility, trust, and the status of AI systems.
-                </p>
-                <a href="https://link.springer.com/article/10.1007/s43681-024-00419-4" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  springer.com &rarr;
-                </a>
-              </div>
-            </div>
+                Placani (2024) argues anthropomorphism in AI operates on two levels: as hype, it exaggerates capabilities by attributing human traits to systems that don&rsquo;t possess them; as fallacy, it distorts moral judgments about responsibility, trust, and the status of AI systems.
+              </Sidenote>
+            }>
+              <p>Intentionally or not, you start to personify each agent as being imbued with recognizable human qualities. &ldquo;That little guy is really relentless in checking sources over and over. He literally never tires!&rdquo; This is regardless of the fact that they have neither physical size, gender, nor a biogenetic system. Nevertheless, when our clumsily limited vocabulary is aimed at novel technological concepts, we fall back on archetypes and anthropomorphization.<NoteArrow /> Similar to how we view other humans, we begin to conflate job role with personality, and we build little narratives around them.</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>But what if that instinct isn&rsquo;t just storytelling, what if it actually matters? In this system, the agents aren&rsquo;t answering clean, factual questions; they&rsquo;re actually making thousands of qualitative judgement calls within a shroud of ambiguity. Can a definitive persona become a legible method to encode investigative standards into a system prompt?</p>
 
@@ -1964,24 +1854,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <p className="s-item-head">
               <span>Layer 01:</span> The System Prompt IS the Agent
             </p>
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>When you invoke an AI model in an LLM API (e.g., Claude), you are sending it a system prompt. That&rsquo;s a set of instructions that defines role, constraints, and standards of behavior. For example: &ldquo;You are a research assistant. Read the following text, perform a rigorous critique, and add footnotes where applicable. Be precise.&rdquo; The model&rsquo;s outputs are not generic; they are conditioned by that instruction set.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span></p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  System Prompts
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  The hidden instructions sent alongside every user message. A system prompt defines the model&rsquo;s role, constraints, and behavior. The same base model can act as a research assistant, a code reviewer, or an investigative agent depending on the prompt.
-                </p>
-              </div>
-            </div>
+            <SidenoteBlock note={
+              <Sidenote title="System Prompts">
+                The hidden instructions sent alongside every user message. A system prompt defines the model&rsquo;s role, constraints, and behavior. The same base model can act as a research assistant, a code reviewer, or an investigative agent depending on the prompt.
+              </Sidenote>
+            }>
+              <p>When you invoke an AI model in an LLM API (e.g., Claude), you are sending it a system prompt. That&rsquo;s a set of instructions that defines role, constraints, and standards of behavior. For example: &ldquo;You are a research assistant. Read the following text, perform a rigorous critique, and add footnotes where applicable. Be precise.&rdquo; The model&rsquo;s outputs are not generic; they are conditioned by that instruction set.<NoteArrow /></p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>An &ldquo;agent&rdquo; in this pipeline is, at its core, a system prompt plus structured task state. Silas the Detective doesn&rsquo;t exist somewhere as a separate piece of software. He is not a persistent entity. He&rsquo;s a specific set of instructions reused whenever a name needs to be checked against the Epstein files. Elena the Researcher is a whole different set of instructions sent to the same underlying model, but optimized for a different kind of task.</p>
 
@@ -2113,104 +1992,57 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <p className="s-item-head">
               <span>Layer 02:</span> Why a Character Can Beat a Rulebook
             </p>
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>Here&rsquo;s the technical question: Does it matter that the Detective agent is &ldquo;Silas&rdquo; written as a Sam Spade-style skeptic,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> rather than a neutral cross-referencing function with a clearly codified checklist of rules?</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: "0.5em",
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Why Sam Spade"
+                image="/sidenotes/sam-spade.jpg"
+                imageAlt="Humphrey Bogart as Sam Spade in The Maltese Falcon (1941)"
+                href="https://www.researchgate.net/publication/299938867_Sam_Spade_-_Anatomy_of_a_Private_Investigator"
+                linkText="researchgate.net"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/sidenotes/sam-spade.jpg"
-                  alt="Humphrey Bogart as Sam Spade in The Maltese Falcon (1941)"
-                  className="s-note-img"
-                />
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Why Sam Spade
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Gulddal (2016) identifies five traits that define Sam Spade as the archetypal PI: appearance, treatment of women, treatment of men, working method, and professional code. Crucially, Spade exploits chaos rather than deciphering clues. His method depends on contingency, not deduction.
-                </p>
-                <a href="https://www.researchgate.net/publication/299938867_Sam_Spade_-_Anatomy_of_a_Private_Investigator" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  researchgate.net &rarr;
-                </a>
-              </div>
-            </div>
+                Gulddal (2016) identifies five traits that define Sam Spade as the archetypal PI: appearance, treatment of women, treatment of men, working method, and professional code. Crucially, Spade exploits chaos rather than deciphering clues. His method depends on contingency, not deduction.
+              </Sidenote>
+            }>
+              <p>Here&rsquo;s the technical question: Does it matter that the Detective agent is &ldquo;Silas&rdquo; written as a Sam Spade-style skeptic,<NoteArrow /> rather than a neutral cross-referencing function with a clearly codified checklist of rules?</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>The academic literature is mixed. Measurable effects of personal prompting are highly task-dependent. It won&rsquo;t reliably improve factual accuracy, but in evaluative or subjective settings a personality-driven agent can shift behavior in measurable ways, especially when combined with role diversity in a multi-agent review. Role diversity is important because it can generate intentional disagreement that surfaces different interpretations of policy. That&rsquo;s what this pipeline does: Silas flags, Elena investigates, Miranda adjudicates.</p>
 
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>A 2024 study tested 162 different personas across 2,410 factual questions and found that adding a persona generally does not improve factual accuracy, if anything it&rsquo;s the opposite.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> If you ask a model, &ldquo;What year was the Treaty of Versailles signed?&rdquo;, a plumber persona versus a historian persona should both come up with 1919. However the historian persona could introduce confident-but-wrong rationalizations (&ldquo;as a historian...&rdquo;), while increasing verbosity and flourishes that increase the surface area for errors.</p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title={"\u201CPersona \u2260 Accuracy\u201D"}
+                href="https://aclanthology.org/2024.findings-emnlp.888/"
+                linkText="aclanthology.org"
               >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Persona ≠ Accuracy
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Zheng et al. (EMNLP 2024) tested 162 personas across 2,410 factual questions. Persona prompting did not reliably improve correctness, and sometimes hurt it.
-                </p>
-                <a href="https://aclanthology.org/2024.findings-emnlp.888/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  aclanthology.org &rarr;
-                </a>
-              </div>
-            </div>
+                Zheng et al. (EMNLP 2024) tested 162 personas across 2,410 factual questions. Persona prompting did not reliably improve correctness, and sometimes hurt it.
+              </Sidenote>
+            }>
+              <p>A 2024 study tested 162 different personas across 2,410 factual questions and found that adding a persona generally does not improve factual accuracy, if anything it&rsquo;s the opposite.<NoteArrow /> If you ask a model, &ldquo;What year was the Treaty of Versailles signed?&rdquo;, a plumber persona versus a historian persona should both come up with 1919. However the historian persona could introduce confident-but-wrong rationalizations (&ldquo;as a historian...&rdquo;), while increasing verbosity and flourishes that increase the surface area for errors.</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>A crucial difference is that this pipeline is not doing Trivial Pursuit style data retrieval. It is doing judgement under ambiguity: is this a real Epstein connection or just someone with the same last name? Does this document reference indicate sustained contact, active coordination, or merely coincidence? And separately: how should a given interior design feature be characterized on a qualitatively interpretative scale (&ldquo;theatrical&rdquo; vs &ldquo;restrained&rdquo;)? Should you send a plumber or a detective to answer those questions?</p>
 
-            <div className="relative md:min-h-[180px]">
-              <p style={{ maxWidth: CONTENT_NARROW }}>In these evaluative settings, personas can function as behavioral priors that measurably shift caution, escalation thresholds, and what counts as sufficient evidence. When researchers built multi-agent systems where specialized evaluators with distinct personas debated each other&rsquo;s assessments, they achieved around 16% higher correlation with human judgement as opposed to a single agent evaluation. And critically, this improvement disappeared when the persona diversity was removed.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> The benefit came specifically from having different agent perspectives shaped by different roles.</p>
-              <div
-                className="absolute top-0 z-10 hidden pl-4 md:block"
-                style={{
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="+16% With Persona Diversity"
+                href="https://openreview.net/forum?id=FQepisCUWu"
+                linkText="openreview.net"
               >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  +16% With Persona Diversity
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Chan et al. &ldquo;ChatEval&rdquo; (ICLR 2024): specialized evaluator agents with diverse personas debating sequentially achieved ~16% higher correlation with human judgment. The improvement vanished when diversity was removed.
-                </p>
-                <a href="https://openreview.net/forum?id=FQepisCUWu" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  openreview.net &rarr;
-                </a>
-              </div>
-            </div>
+                Chan et al. &ldquo;ChatEval&rdquo; (ICLR 2024): specialized evaluator agents with diverse personas debating sequentially achieved ~16% higher correlation with human judgment. The improvement vanished when diversity was removed.
+              </Sidenote>
+            }>
+              <p>In these evaluative settings, personas can function as behavioral priors that measurably shift caution, escalation thresholds, and what counts as sufficient evidence. When researchers built multi-agent systems where specialized evaluators with distinct personas debated each other&rsquo;s assessments, they achieved around 16% higher correlation with human judgement as opposed to a single agent evaluation. And critically, this improvement disappeared when the persona diversity was removed.<NoteArrow /> The benefit came specifically from having different agent perspectives shaped by different roles.</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>A concrete example is surname ambiguity. This example was mentioned in Section 01. When the Detective encounters the name &ldquo;Coppola,&rdquo; the system must distinguish director Francis Ford (the AD subject) from the other Coppolas appearing throughout the DOJ materials. The prompt that frames the Detective as skeptical, in fact: &ldquo;false positives deeply offend him,&rdquo; biases the agent toward disambiguation: pause, seek additional context, and reject matches that do not clear an evidentiary bar. A binary factual lookup would rubber stamp &ldquo;Coppola&rdquo; as a connection match. This is making judgements and weighing limited evidence, exactly where persona design matters.</p>
 
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>Finally, persona becomes more powerful when it is composed across roles. A growing thread of research shows that multiple specialized personas interacting and debating, reviewing each other&rsquo;s work, and even bantering together can outperform any single persona operating alone.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> The value is that different roles surface different failure modes, and the system forces disagreement to resolve into a single, auditable verdict.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: "3em",
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Structured Disagreement
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Wang et al. (NAACL 2024) found that multi-persona collaboration reduced hallucinations while maintaining reasoning, though only in GPT-4-class models. The value is in the structured interaction, not any single persona.
-                </p>
-              </div>
-            </div>
+            <SidenoteBlock note={
+              <Sidenote title="Structured Disagreement">
+                Wang et al. (NAACL 2024) found that multi-persona collaboration reduced hallucinations while maintaining reasoning, though only in GPT-4-class models. The value is in the structured interaction, not any single persona.
+              </Sidenote>
+            }>
+              <p>Finally, persona becomes more powerful when it is composed across roles. A growing thread of research shows that multiple specialized personas interacting and debating, reviewing each other&rsquo;s work, and even bantering together can outperform any single persona operating alone.<NoteArrow /> The value is that different roles surface different failure modes, and the system forces disagreement to resolve into a single, auditable verdict.</p>
+            </SidenoteBlock>
 
             <p className="s-item-head">
               <span>Layer 03:</span> What&rsquo;s Creative Expression vs Technical Function
@@ -2322,25 +2154,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
             <p className="mt-6" style={{ maxWidth: CONTENT_NARROW }}>In short, the creative layer makes the system legible to humans, while the functional layer governs behavior. The key insight is that the technical value is derived from the discipline required to carefully design each of them. This can be a valuable lesson. As agentic workflows become more widespread, the quality of the persona design and storytelling could become a valuable artistic contribution and a potentially new discipline.</p>
 
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>I want to linger on &ldquo;artistic&rdquo; for a moment since that is a contentious topic in relation to artificial intelligence, and I don&rsquo;t mean it loosely. What I&rsquo;m describing is somewhat related to prompt engineering,<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> but it goes beyond that. Prompt engineering is tactical: knowing the rhetorical tricks to make a model&rsquo;s output more accurate, more structured, or more consistent. &ldquo;Explain your reasoning step by step, then give your final answer.&rdquo; It&rsquo;s a technique for speaking to a machine that you can learn in an afternoon.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: "3.5em",
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
-              >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Prompt Engineering
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  The practice of crafting input text to steer a language model&rsquo;s output. Techniques range from simple (&ldquo;answer in JSON&rdquo;) to structured (chain-of-thought, few-shot examples). It optimizes how you talk to a model, not what the model is.
-                </p>
-              </div>
-            </div>
+            <SidenoteBlock note={
+              <Sidenote title="Prompt Engineering">
+                The practice of crafting input text to steer a language model&rsquo;s output. Techniques range from simple (&ldquo;answer in JSON&rdquo;) to structured (chain-of-thought, few-shot examples). It optimizes how you talk to a model, not what the model is.
+              </Sidenote>
+            }>
+              <p>I want to linger on &ldquo;artistic&rdquo; for a moment since that is a contentious topic in relation to artificial intelligence, and I don&rsquo;t mean it loosely. What I&rsquo;m describing is somewhat related to prompt engineering,<NoteArrow /> but it goes beyond that. Prompt engineering is tactical: knowing the rhetorical tricks to make a model&rsquo;s output more accurate, more structured, or more consistent. &ldquo;Explain your reasoning step by step, then give your final answer.&rdquo; It&rsquo;s a technique for speaking to a machine that you can learn in an afternoon.</p>
+            </SidenoteBlock>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>However, designing agent personas is something fundamentally different. It&rsquo;s determining the ideal mind to apply to a problem, and then having the narrative capacity and skill to coherently create one.</p>
 
@@ -2352,61 +2172,35 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
             <p style={{ maxWidth: CONTENT_NARROW }}>This feels like a genuinely new type of creative work. It&rsquo;s not screenwriting since these characters are performing for no audience. It&rsquo;s not game design&mdash;they don&rsquo;t really interact with me willingly. The character writing is expressed through structured data outputs in an automated pipeline. The craft comes in how to map traits to behavioral priors that meaningfully change system outcomes.</p>
 
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>In engineering, it used to be &ldquo;can you build a system that works?&rdquo; That position has become increasingly commodified by artificial intelligence systems that can now create their own scaffolding. The new bottleneck is now: can you specify what a system should do within ambiguous scenarios where there&rsquo;s no objectively &ldquo;correct&rdquo; answer. That turns out to be a specification problem, not a coding problem. And narrative, with all its complex, messy challenges around character, archetype, and voice, is a surprisingly effective specification language for it. Two decades ago, the software industry woke up to the fact that how humans experience a system is its own design discipline, and the UX designer was born.<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> Now, we are on the cusp of a new, as yet unnamed role. It&rsquo;s a careful blend of psychology, narrative, and systems thinking, but it is real, and the people developing it will be doing something that didn&rsquo;t exist five years ago.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: "10em",
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title={"Origin of \u201CUser Experience\u201D"}
+                href="https://jnd.org/where-did-the-term-user-experience-ux-come-from/"
+                linkText="jnd.org"
               >
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Origin of &ldquo;User Experience&rdquo;
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Don Norman coined the term in 1993 at Apple, where he became the first &ldquo;User Experience Architect.&rdquo; He chose the phrase because &ldquo;human interface and usability were too narrow. I wanted to cover all aspects of the person&rsquo;s experience with a system.&rdquo;
-                </p>
-                <a href="https://jnd.org/where-did-the-term-user-experience-ux-come-from/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  jnd.org &rarr;
-                </a>
-              </div>
-            </div>
+                Don Norman coined the term in 1993 at Apple, where he became the first &ldquo;User Experience Architect.&rdquo; He chose the phrase because &ldquo;human interface and usability were too narrow. I wanted to cover all aspects of the person&rsquo;s experience with a system.&rdquo;
+              </Sidenote>
+            }>
+              <p>In engineering, it used to be &ldquo;can you build a system that works?&rdquo; That position has become increasingly commodified by artificial intelligence systems that can now create their own scaffolding. The new bottleneck is now: can you specify what a system should do within ambiguous scenarios where there&rsquo;s no objectively &ldquo;correct&rdquo; answer. That turns out to be a specification problem, not a coding problem. And narrative, with all its complex, messy challenges around character, archetype, and voice, is a surprisingly effective specification language for it. Two decades ago, the software industry woke up to the fact that how humans experience a system is its own design discipline, and the UX designer was born.<NoteArrow /> Now, we are on the cusp of a new, as yet unnamed role. It&rsquo;s a careful blend of psychology, narrative, and systems thinking, but it is real, and the people developing it will be doing something that didn&rsquo;t exist five years ago.</p>
+            </SidenoteBlock>
 
             <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
               Where It All Becomes Visible
             </p>
 
-            <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>That same principle shaped the interface. The pipeline runs autonomously, but the capacity to observe an autonomous system requires a purpose-built UI. To make the workflow legible and inspectable in real time, I built the &ldquo;Agent Office:&rdquo;<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> a live, pixel-art dashboard where each of the seven agents occupies a desk in a shared office, driven directly by the backend pipeline JSON state. When Miranda assigns a task, her speech bubble updates. When Silas returns a verdict, it appears on screen. This &ldquo;cartoon&rdquo; layer doesn&rsquo;t make the system more accurate&mdash;but it makes the system watchable: a visual map of task flow, accountability, and progress that lets a human understand what the architecture is doing as it runs.</p>
-              <div
-                className="absolute z-10 hidden pl-4 md:block"
-                style={{
-                  top: "2em",
-                  left: "calc(var(--content-narrow) + 24px)",
-                  width: "calc(100% - var(--content-narrow) - 24px)",
-                  borderLeft: `2px solid ${COPPER}`,
-                }}
+            <SidenoteBlock note={
+              <Sidenote
+                title="Pixel Art as Interface"
+                image="/sidenotes/pixel-art.jpg"
+                imageAlt="Isometric pixel art structures — eBoy-style digital architecture"
+                href="https://www.rightclicksave.com/article/pixel-art-and-the-age-of-technostalgia"
+                linkText="rightclicksave.com"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/sidenotes/pixel-art.jpg"
-                  alt="Isometric pixel art structures — eBoy-style digital architecture"
-                  className="s-note-img"
-                />
-                <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                  Pixel Art as Interface
-                </p>
-                <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  Kent (2023) interviews seven pixel artists who argue the medium persists not from nostalgia alone but from constraint-driven clarity. As eBoy puts it: &ldquo;Pixels are the atoms of our universe, making them a logical choice&rdquo; for digital-native creation. The low-resolution aesthetic communicates tangible, hands-on interaction in contrast to algorithmic opacity.
-                </p>
-                <a href="https://www.rightclicksave.com/article/pixel-art-and-the-age-of-technostalgia" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                  rightclicksave.com &rarr;
-                </a>
-              </div>
-            </div>
+                Kent (2023) interviews seven pixel artists who argue the medium persists not from nostalgia alone but from constraint-driven clarity. As eBoy puts it: &ldquo;Pixels are the atoms of our universe, making them a logical choice&rdquo; for digital-native creation. The low-resolution aesthetic communicates tangible, hands-on interaction in contrast to algorithmic opacity.
+              </Sidenote>
+            }>
+              <p>That same principle shaped the interface. The pipeline runs autonomously, but the capacity to observe an autonomous system requires a purpose-built UI. To make the workflow legible and inspectable in real time, I built the &ldquo;Agent Office:&rdquo;<NoteArrow /> a live, pixel-art dashboard where each of the seven agents occupies a desk in a shared office, driven directly by the backend pipeline JSON state. When Miranda assigns a task, her speech bubble updates. When Silas returns a verdict, it appears on screen. This &ldquo;cartoon&rdquo; layer doesn&rsquo;t make the system more accurate&mdash;but it makes the system watchable: a visual map of task flow, accountability, and progress that lets a human understand what the architecture is doing as it runs.</p>
+            </SidenoteBlock>
 
             {/* Agent Office video — float left, 4 minor columns */}
             <div
@@ -2738,7 +2532,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </div>
             </div>
 
-            <p style={{ maxWidth: CONTENT_NARROW, marginTop: "2rem" }}>&ldquo;Confirmed&rdquo; means documented proximity &mdash; contact entries, dining records, guest lists, correspondence &mdash; not implication of wrongdoing. This standard is applied consistently across every decision, regardless of the person&rsquo;s fame, wealth, or public profile. The Editor is the only agent authorized to write terminal states to the database.</p>
+            <SidenoteBlock className="mt-8" note={
+              <Sidenote title="Confirmed &ne; Guilty">
+                &ldquo;Confirmed connection&rdquo; means documented proximity: contact entries, dining records, guest lists, correspondence. It does not imply wrongdoing or a personal relationship with Epstein.
+              </Sidenote>
+            }>
+              <p>&ldquo;Confirmed&rdquo;<NoteArrow /> means documented proximity &mdash; contact entries, dining records, guest lists, correspondence &mdash; not implication of wrongdoing. This standard is applied consistently across every decision, regardless of the person&rsquo;s fame, wealth, or public profile. The Editor is the only agent authorized to write terminal states to the database.</p>
+            </SidenoteBlock>
 
             <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
               Editorial Adjudication
@@ -3070,7 +2870,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   ~80% Fully Autonomous
                 </p>
                 <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  The 20% human review rate is not a failure mode &mdash; it is the system working as designed. Madras et al. (NeurIPS 2018) formalized this as &ldquo;learning to defer&rdquo;: systems improve accuracy and fairness by knowing when not to decide. Vaccaro et al. (2024) found that human-AI combinations perform worse on average when the human overrides indiscriminately, but better when they intervene selectively on cases requiring contextual knowledge. That is the pattern here: the pipeline handles clear cases autonomously and routes ambiguous ones upward.
+                  The 20% human review rate is not a failure mode &mdash; it is the system working as designed. Madras et al. (NeurIPS 2018) formalized this as &ldquo;learning to defer&rdquo;: systems improve accuracy and fairness by knowing when not to decide. Vaccaro et al. (2024) found that human-AI combinations perform worse on average when the human overrides indiscriminately, but better when they intervene selectively on cases requiring contextual knowledge.
                 </p>
                 <a href="https://www.nature.com/articles/s41562-024-02024-1" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
                   Nature Human Behaviour &rarr;

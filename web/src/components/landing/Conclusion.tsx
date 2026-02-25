@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
  */
 export function Conclusion() {
   return (
-    <section className="bg-background pb-20 pt-12">
+    <section id="conclusion" className="bg-background pb-20 pt-12">
       <div
         className="mx-auto w-full"
         style={{

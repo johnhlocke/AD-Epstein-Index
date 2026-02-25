@@ -9,6 +9,8 @@ const navItems = [
   { href: "/explorer", label: "Explorer" },
   { href: "/#agent-methodology", label: "Agent Methodology" },
   { href: "/#aesthetic-methodology", label: "Aesthetic Methodology" },
+  { href: "/#appendix", label: "Appendix" },
+  { href: "/#contact", label: "Contact" },
 ];
 
 export function Header() {

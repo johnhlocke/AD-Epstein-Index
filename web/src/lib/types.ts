@@ -118,6 +118,7 @@ export interface StatsResponse {
   features: {
     total: number;
     withHomeowner: number;
+    uniqueHomeowners: number;
     byYear: { year: number; count: number }[];
     topStyles: { style: string; count: number }[];
     topLocations: { location: string; count: number }[];
@@ -184,6 +185,14 @@ export interface FeatureReport {
   issue: Issue | null;
   images: FeatureImage[];
   dossier: Dossier | null;
+}
+
+/** Hero mosaic tile data */
+export interface MosaicTile {
+  id: number;
+  url: string;
+  confirmed: boolean;
+  strength: "HIGH" | "MEDIUM" | "LOW" | "COINCIDENCE" | null;
 }
 
 /** Paginated response wrapper */
