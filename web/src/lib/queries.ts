@@ -199,10 +199,10 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .map((cat) => ({
       category: cat,
       baselinePct: baselineTotal > 0
-        ? Math.round(((baselineCatCounts.get(cat) ?? 0) / baselineTotal) * 100)
+        ? parseFloat(((baselineCatCounts.get(cat) ?? 0) / baselineTotal * 100).toFixed(1))
         : 0,
       epsteinPct: epsteinTotal > 0
-        ? Math.round(((epsteinCatCounts.get(cat) ?? 0) / epsteinTotal) * 100)
+        ? parseFloat(((epsteinCatCounts.get(cat) ?? 0) / epsteinTotal * 100).toFixed(1))
         : 0,
     }))
     .filter((c) => c.baselinePct > 0 || c.epsteinPct > 0);
@@ -734,6 +734,108 @@ export async function getFeatureReport(featureId: number): Promise<FeatureReport
     images: (images ?? []) as FeatureImage[],
     dossier: dossier as Dossier | null,
   };
+}
+
+// ── Category Breakdown Data (Fig. 2 source) ────────────────
+
+export interface CategoryConfirmedRow {
+  name: string;
+  category: string;
+  connectionStrength: string | null;
+}
+
+export interface CategorySummaryRow {
+  category: string;
+  epsteinCount: number;
+  epsteinPct: number;
+  baselineCount: number;
+  baselinePct: number;
+  multiplier: number;
+}
+
+export async function getCategoryBreakdownData(): Promise<{
+  confirmedNames: CategoryConfirmedRow[];
+  categorySummary: CategorySummaryRow[];
+}> {
+  const sb = getSupabase();
+
+  // Fetch confirmed dossiers
+  const { data: dossiers } = await sb
+    .from("dossiers")
+    .select("feature_id, subject_name, connection_strength")
+    .eq("editor_verdict", "CONFIRMED");
+
+  const confirmedDossiers = dossiers ?? [];
+  const confirmedFeatureIds = new Set(
+    confirmedDossiers.map((d) => d.feature_id).filter(Boolean)
+  );
+
+  // Fetch all features with subject_category — paginate past 1000-row limit
+  const { count: featuresCount } = await sb
+    .from("features")
+    .select("id", { count: "exact", head: true });
+  const allFeatures: { id: number; subject_category: string | null }[] = [];
+  const PAGE = 1000;
+  for (let offset = 0; offset < (featuresCount ?? 0); offset += PAGE) {
+    const { data } = await sb
+      .from("features")
+      .select("id, subject_category")
+      .range(offset, offset + PAGE - 1);
+    if (data) allFeatures.push(...(data as { id: number; subject_category: string | null }[]));
+  }
+
+  // Build feature → category map
+  const featureCategoryMap = new Map<number, string>();
+  for (const f of allFeatures) {
+    featureCategoryMap.set(f.id, f.subject_category ?? "Other");
+  }
+
+  // Build confirmed names list
+  const confirmedNames: CategoryConfirmedRow[] = confirmedDossiers
+    .filter((d) => d.feature_id)
+    .map((d) => ({
+      name: (d.subject_name as string) ?? "Unknown",
+      category: featureCategoryMap.get(d.feature_id as number) ?? "Other",
+      connectionStrength: (d.connection_strength as string) ?? null,
+    }))
+    .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+
+  // Build category summary
+  const CATEGORIES = ["Business", "Celebrity", "Design", "Art", "Media", "Politician", "Private", "Royalty", "Socialite", "Other"];
+  const epsteinCounts = new Map<string, number>();
+  const baselineCounts = new Map<string, number>();
+  let epsteinTotal = 0;
+  let baselineTotal = 0;
+
+  for (const f of allFeatures) {
+    const cat = f.subject_category && CATEGORIES.includes(f.subject_category) ? f.subject_category : "Other";
+    if (confirmedFeatureIds.has(f.id)) {
+      epsteinCounts.set(cat, (epsteinCounts.get(cat) ?? 0) + 1);
+      epsteinTotal++;
+    } else {
+      baselineCounts.set(cat, (baselineCounts.get(cat) ?? 0) + 1);
+      baselineTotal++;
+    }
+  }
+
+  const categorySummary: CategorySummaryRow[] = CATEGORIES
+    .map((cat) => {
+      const ec = epsteinCounts.get(cat) ?? 0;
+      const bc = baselineCounts.get(cat) ?? 0;
+      const ePct = epsteinTotal > 0 ? parseFloat(((ec / epsteinTotal) * 100).toFixed(1)) : 0;
+      const bPct = baselineTotal > 0 ? parseFloat(((bc / baselineTotal) * 100).toFixed(1)) : 0;
+      return {
+        category: cat,
+        epsteinCount: ec,
+        epsteinPct: ePct,
+        baselineCount: bc,
+        baselinePct: bPct,
+        multiplier: bPct > 0 ? parseFloat((ePct / bPct).toFixed(2)) : 0,
+      };
+    })
+    .filter((c) => c.epsteinCount > 0 || c.baselineCount > 0);
+
+  return { confirmedNames, categorySummary };
 }
 
 // ── Hero Mosaic ──────────────────────────────────────────────

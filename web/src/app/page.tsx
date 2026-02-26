@@ -1,9 +1,7 @@
 import { Suspense } from "react";
 import { getStats, getAestheticRadarData } from "@/lib/queries";
-import { Separator } from "@/components/ui/separator";
 import { HeroMosaic } from "@/components/landing/HeroMosaic";
 import { HeroSection } from "@/components/landing/HeroSection";
-import { KeyFindingsIntro } from "@/components/landing/KeyFindingsIntro";
 import { KeyFinding } from "@/components/landing/KeyFinding";
 import { SearchableIndex } from "@/components/landing/SearchableIndex";
 import { ConfirmedTimeline } from "@/components/charts/ConfirmedTimeline";
@@ -20,6 +18,7 @@ import { AgentMethodologySection } from "@/components/landing/MethodologySection
 import { AestheticMethodologySection } from "@/components/landing/AestheticMethodologySection";
 import { Appendix } from "@/components/landing/Appendix";
 import { Contact } from "@/components/landing/Contact";
+import { ChapterBanner } from "@/components/landing/ChapterBanner";
 import { Skeleton } from "@/components/ui/skeleton";
 
 export const dynamic = "force-dynamic"; // Render on-demand, not at build time
@@ -49,13 +48,36 @@ export default async function Home() {
         }
       />
 
-      {/* ── A: Key Findings Introduction ── */}
-      <KeyFindingsIntro />
+      {/* ── Chapter 1: Finding 01 ── */}
+      <ChapterBanner
+        id="finding-01"
+        num="1"
+        title="Finding 01: The Names"
+        summary={`In this section, ${stats.features.total.toLocaleString()} AD homeowners are cross-referenced against the DOJ Epstein files, yielding ${stats.dossiers.confirmed.toLocaleString()} confirmed connections across socialites, financiers, and media figures.`}
+      />
 
-      {/* ── B: Who Are They? (Key Finding 01) ── */}
-      <KeyFinding />
+      {/* ── 1.1 Who Are They? ── */}
+      <KeyFinding stats={stats} />
 
       {/* ── Searchable Index ── */}
+      <div
+        className="n-body n-body-narrow pb-6"
+        style={{
+          maxWidth: "var(--grid-max-width)",
+          paddingLeft: "var(--grid-margin)",
+          paddingRight: "var(--grid-margin)",
+          marginLeft: "auto",
+          marginRight: "auto",
+        }}
+      >
+        <p>
+          The searchable index below contains every feature in the database.
+          Each confirmed connection links to a dossier with the specific DOJ
+          evidence&mdash;the flight log entry, the dinner guest list, the
+          address book page&mdash;that established the link. The timeline
+          that follows maps the temporal and geographic distribution.
+        </p>
+      </div>
       <Suspense
         fallback={
           <div
@@ -74,7 +96,7 @@ export default async function Home() {
 
       {/* ── C: When and Where Are They (Key Finding 01 cont.) ── */}
       {(stats.confirmedTimeline?.length ?? 0) > 0 && (
-        <section className="bg-background pb-20 pt-14" id="timeline">
+        <section className="narrative bg-background pb-20 pt-14" id="timeline">
           <div
             className="mx-auto w-full"
             style={{
@@ -83,21 +105,22 @@ export default async function Home() {
               paddingRight: "var(--grid-margin)",
             }}
           >
-            {/* Section Header */}
-            <p
-              className="text-[11px] font-bold uppercase tracking-[0.15em]"
-              style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
-            >
-              Key Finding 01 (Cont.)
-            </p>
-            <h2
-              className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"
-              style={{ fontFamily: "futura-pt, sans-serif" }}
-            >
-              What, When and Where Are They
-            </h2>
+            <p className="n-label">Key Finding 01 (Cont.)</p>
+            <h2 className="n-title">1.2 What, When and Where Are They</h2>
+            <hr className="n-rule mb-6" />
 
-            <Separator className="mt-5 mb-6" />
+            <div className="n-body n-body-narrow mb-8">
+              <p>
+                The connections cluster in the late 1990s and early 2000s, the
+                period when Epstein&rsquo;s social infrastructure was at its most
+                expansive. Geographically, they concentrate in Manhattan, Palm
+                Beach, the Hamptons, and London&mdash;the same circuit described
+                in Epstein&rsquo;s own correspondence. Several interior designers
+                appear across multiple connected homes, suggesting shared
+                professional networks that independently intersected with
+                Epstein&rsquo;s circle.
+              </p>
+            </div>
 
             <ConfirmedTimeline data={stats.confirmedTimeline} categoryBreakdown={stats.categoryBreakdown} />
           </div>
@@ -140,7 +163,15 @@ export default async function Home() {
       {/* ── Bridge: The Aesthetic Pivot ── */}
       <AestheticPivotBridge />
 
-      {/* ── D2: Determining the AD Baseline Aesthetic (Key Finding 02) ── */}
+      {/* ── Chapter 2: Finding 02 ── */}
+      <ChapterBanner
+        id="finding-02"
+        num="2"
+        title="Finding 02: The Aesthetic"
+        summary="In this section, every home is scored on nine aesthetic axes to determine whether Epstein-connected homes share a measurable design signature."
+      />
+
+      {/* ── 2.1 Determining the AD Baseline Aesthetic ── */}
       <BaselineAesthetic />
 
       {/* ── E: Is There an Epstein Aesthetic? (Key Finding 02 cont.) ── */}
@@ -152,7 +183,15 @@ export default async function Home() {
       {/* ── G: Testing the Epstein Aesthetic (Key Finding 02 cont.) ── */}
       <TestingAesthetic />
 
-      {/* ── H: Conclusion ── */}
+      {/* ── Chapter 3: Conclusion ── */}
+      <ChapterBanner
+        id="finding-03"
+        num="3"
+        title="Conclusion"
+        summary="In this section, we examine what the overlap between elite taste and a criminal social network means for the cultural pipeline that shapes mainstream design."
+      />
+
+      {/* ── 3. Conclusion ── */}
       <Conclusion />
 
       {/* ── What's Next + Contact ── */}
