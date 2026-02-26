@@ -1,5 +1,3 @@
-import { Separator } from "@/components/ui/separator";
-
 /**
  * H: Conclusion — centered italic closing statement.
  *
@@ -8,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
  */
 export function Conclusion() {
   return (
-    <section id="conclusion" className="bg-background pb-20 pt-12">
+    <section id="conclusion" className="narrative bg-background pb-20 pt-12">
       <div
         className="mx-auto w-full"
         style={{
@@ -17,10 +15,8 @@ export function Conclusion() {
           paddingRight: "var(--grid-margin)",
         }}
       >
-        <Separator />
-
-        <div className="mx-auto mt-10 max-w-[800px] text-center">
-          <p className="font-serif text-[17px] italic leading-[1.8] text-[#1A1A1A]">
+        <div className="n-body mx-auto max-w-[800px] text-center">
+          <p className="text-[17px] italic leading-[1.8]">
             This project does not claim that taste is criminal, or that owning a
             gilded antique makes someone complicit. What it demonstrates is that
             the social world Jeffrey Epstein moved through &mdash; the one

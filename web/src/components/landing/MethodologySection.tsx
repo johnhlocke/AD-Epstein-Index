@@ -617,6 +617,32 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </p>
             </SidenoteBlock>
 
+            {/* Paragraph 2a-ii — investigative journalism parallel + AI in the Newsroom */}
+            <SidenoteBlock note={
+              <div style={{ marginTop: "0" }}>
+              <Sidenote
+                title="AI in the Newsroom"
+                href="https://arxiv.org/abs/2503.16011"
+                linkText="arxiv.org/abs/2503.16011"
+              >
+                Cifliku &amp; Heuer (2025). A study of eight investigative journalists cataloging where automation would help most: monitoring sources, filtering noise, documenting the investigation trail, and connecting entities across document sets.
+              </Sidenote>
+              </div>
+            }>
+              <p>
+                It is exactly this experience of spreadsheet chaos and my own
+                fallible memory inevitably leading to a failure in sustaining
+                rigor across processing thousands of names, that mirrors what a
+                group of investigative journalists described as what they{" "}
+                <em>actually</em> needed from automation in a 2025
+                paper.<NoteArrow /> One journalist described wanting
+                &ldquo;an AI assistant capable of understanding initial hints and
+                automating research&rdquo; that could &ldquo;save months of
+                work.&rdquo; They were describing a system that didn&apos;t
+                exist yet. This pipeline is a first small attempt at building it.
+              </p>
+            </SidenoteBlock>
+
             {/* Paragraph 2b — the pivot (no sidenote) */}
             <p style={{ maxWidth: CONTENT_NARROW }}>
               That realization led to a pivot: less &ldquo;must use AI,&rdquo;
@@ -786,47 +812,47 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         <div className="mt-10 grid grid-cols-1 gap-x-6 gap-y-8 md:grid-cols-3">
           {[
             {
-              num: "1",
+              num: "4.1",
               title: "The Pipeline",
-              body: "The system operates as a five-stage sequential pipeline: data acquisition, feature extraction, cross-referencing, investigation, and editorial review. Each stage has a defined input, output, and a specialized agent. The pipeline processed 1,396 magazines and 4,081 features.",
+              body: "The system operates as a six-stage sequential pipeline: data acquisition, feature extraction, cross-referencing, investigation, editorial review, and report design. Each stage has a defined input, output, and a specialized agent.",
             },
             {
-              num: "2",
+              num: "4.2",
               title: "Multi-Agent Architecture",
               body: "Seven specialized agents coordinated through a central Editor. This hub-and-spoke architecture prevents contradictory updates, ensures a single auditable decision trail, and makes it possible to swap out any agent without affecting the others.",
             },
             {
-              num: "3",
+              num: "4.3",
               title: "Personality as Architecture",
               body: "Why do these agents have names, archetypes, and voices? Does it matter? The short answer: it depends on the task, and the academic literature is genuinely split. For judgment calls, carefully designed personas measurably shift behavior in useful ways.",
             },
             {
-              num: "4",
+              num: "4.4",
               title: "Investigation Methodology",
               body: "Can an AI differentiate between what is genuine and what is digital noise? The investigation stage is the most sensitive part of the system \u2014 each dossier records what was consulted and why the conclusion followed.",
             },
             {
-              num: "5",
+              num: "4.5",
               title: "Intelligence Infrastructure",
               body: "Behind the agents sits shared infrastructure: a knowledge graph mapping all connections, episodic memory allowing agents to recall prior decisions, and reflection loops where the Editor reviews patterns in past outcomes.",
             },
             {
-              num: "6",
+              num: "4.6",
               title: "UI Interface and Transparency",
               body: "In many ways an AI system is a black box. Two front-ends were built: an internal dashboard monitoring pipeline state and cost, and a public-facing site where every feature and every verdict can be browsed.",
             },
             {
-              num: "7",
+              num: "4.7",
               title: "Key Challenges and Limitations",
               body: "No system built on language models is immune to failure. Surname collisions, OCR limitations in handwritten documents, and calibrating autonomy remain open problems. Approximately 20% of confirmed cases are routed for manual review.",
             },
             {
-              num: "8",
+              num: "4.8",
               title: "Data Sources",
               body: "Three primary sources: the Cond\u00e9 Nast digital archive (JWT-encoded metadata + Azure page images), Epstein\u2019s Little Black Book (local regex matching), and the DOJ Epstein document library (browser-automated OCR search).",
             },
             {
-              num: "9",
+              num: "4.9",
               title: "Conclusions and Future Work",
               body: "The pipeline is a working proof of concept: seven agents processed 37 years of a single magazine autonomously. The methodology is reproducible and the code is documented. It is a force multiplier for human judgment, not a replacement for it.",
             },
@@ -859,7 +885,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 {sec.body}
               </p>
               <a
-                href={`#section-${sec.num}`}
+                href={`#section-${sec.num.replace(".", "-")}`}
                 className="mt-auto inline-block pt-3 text-[9px] uppercase tracking-[0.12em] no-underline transition-opacity hover:opacity-70"
                 style={{ fontFamily: MONO, color: "rgba(120, 140, 155, 0.8)" }}
               >
@@ -900,14 +926,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
-        <SectionTransition num="01" name="the_pipeline" />
+        <SectionTransition num="4.1" name="the_pipeline" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 1: THE PIPELINE
+            SECTION 4.1: THE PIPELINE
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-1" className="mt-8 scroll-mt-24">
-          {/* Section 1 header — inline so intro text sits beside pipeline flow */}
-          <p className="s-label">SECTION 1</p>
+        <div id="section-4-1" className="mt-8 scroll-mt-24">
+          {/* Section 4.1 header — inline so intro text sits beside pipeline flow */}
+          <p className="s-label">SECTION 4.1</p>
           <h3 className="s-title">THE PIPELINE</h3>
           <p className="s-subtitle">How a magazine URL becomes a confirmed or rejected connection with a full evidentiary trail</p>
 
@@ -937,7 +963,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   websites, some digital features on the main site, eBay back
                   issues, but none of them had what became a gold-standard source
                   of machine readable metadata. Each issue page embeds a
-                  JWT-encoded article catalog, a structured JSON object containing
+                  JWT-encoded<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> article catalog, a structured JSON object containing
                   the title, teaser, designer credit, and page range for every
                   feature. As a brief aside, some of those articles cataloged as
                   &ldquo;features&rdquo; actually weren&apos;t a true feature,
@@ -968,6 +994,23 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   <a href="https://archive.architecturaldigest.com/" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
                     archive.architecturaldigest.com &rarr;
                   </a>
+                </div>
+                {/* JWT sidenote — separate block below AD Archive */}
+                <div
+                  className="absolute z-10 hidden pl-4 md:block"
+                  style={{
+                    top: "270px",
+                    left: "calc(var(--content-narrow) + 24px)",
+                    width: "calc(100% - var(--content-narrow) - 24px)",
+                    borderLeft: `2px solid ${COPPER}`,
+                  }}
+                >
+                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
+                    JWT (JSON Web Token)
+                  </p>
+                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                    A compact, URL-safe format for transmitting structured data as a Base64-encoded JSON object. In the AD Archive, each issue page stores its full article catalog &mdash; titles, teasers, designer credits, page ranges &mdash; as a JWT embedded in the public page source. The pipeline decodes it directly: no scraping, no authentication, no OCR. The raw page images are also publicly accessible via the publisher&apos;s CDN.
+                  </p>
                 </div>
               </div>
 
@@ -1060,10 +1103,19 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 the corresponding article page images from the publisher&apos;s
                 content delivery network. No PDF cracking, no OCR. The
                 structured metadata is already there, embedded in the page
-                itself. A Reader agent was originally designed to
-                &ldquo;read&rdquo; or extract data from scanned PDFs, but this
-                process proved cumbersome and ultimately unnecessary after
-                discovering the embedded metadata source.
+                itself.
+              </p>
+              <p style={{ maxWidth: CONTENT_NARROW }}>
+                A Reader agent was originally designed to &ldquo;read&rdquo; or
+                crack open and OCR scanned PDF pages. This role was to clean up
+                the noise and extract structured data from the messy,
+                inconsistent uploads that accumulate on sites like archive.org.
+                Early prototype testing indicated that this would work and
+                justified the effort and time, but this process proved
+                cumbersome and ultimately unnecessary after discovering the
+                Cond&eacute; Nast archive&apos;s clean JWT metadata. It still
+                lives in the codebase, fully functional, waiting for the
+                Courier agent to pass them a PDF.
               </p>
               <p style={{ maxWidth: CONTENT_NARROW }}>
                 In Stage 2, those page images go into an extraction model.
@@ -1428,19 +1480,31 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>
                 Architecture
               </p>
-              <p style={{ maxWidth: CONTENT_NARROW }}>
-                Separating each of the agents concerns means that an error in
-                extraction doesn&apos;t corrupt the cross-reference, a false
-                positive in the Detective stage doesn&apos;t bypass the
-                Editor&apos;s review, and every stage produces an intermediate
-                output that can be independently audited. If someone questions a
-                particular finding, you can trace the exact path: here&apos;s
-                the page the name was extracted from, here&apos;s the Black Book
-                entry, here are the DOJ documents, here&apos;s the
-                Researcher&apos;s analysis, here&apos;s the Editor&apos;s
-                reasoning. The pipeline doesn&apos;t just produce a black-box
-                conclusion, it produces detailed evidence for those conclusions.
-              </p>
+              <SidenoteBlock note={
+                <Sidenote
+                  title="Full Index"
+                  href="https://www.wheretheylive.world/fullindex"
+                  linkText="wheretheylive.world/fullindex"
+                >
+                  Every name in the database &mdash; confirmed connections, rejected false positives, and pending reviews &mdash; is searchable. Each entry links to its full dossier with the complete evidence chain and editorial reasoning.
+                </Sidenote>
+              }>
+                <p>
+                  Separating each of the agents concerns means that an error in
+                  extraction doesn&apos;t corrupt the cross-reference, a false
+                  positive in the Detective stage doesn&apos;t bypass the
+                  Editor&apos;s review, and every stage produces an intermediate
+                  output that can be independently audited. If someone questions a
+                  particular finding, you can trace the exact path: here&apos;s
+                  the page the name was extracted from, here&apos;s the Black Book
+                  entry, here are the DOJ documents, here&apos;s the
+                  Researcher&apos;s analysis, here&apos;s the Editor&apos;s
+                  reasoning. Anyone reading this can review the dossier evidence
+                  and decision logic for every name.<NoteArrow /> The pipeline
+                  doesn&apos;t just pull a conclusion out of a black box, it
+                  produces detailed evidence for those conclusions.
+                </p>
+              </SidenoteBlock>
               {/* ── Fig. 4: Three-column pipeline (floated left, 2 cols) ── */}
               <div
                 className="float-left mb-4 mr-6 hidden md:block"
@@ -1460,45 +1524,51 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   <span style={{ color: TEXT_MID }}>Fig. 4</span> — Three-column pipeline: agents, editor, and human-in-the-loop oversight.
                 </p>
               </div>
-              <div className="relative">
-                <p style={{ maxWidth: CONTENT_NARROW }}>
-                  This is what the literature calls the ReAct pattern:<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span>
-                  {" "}interleaving reasoning (&ldquo;this Black Book match is
-                  surname-only &mdash; probably a coincidence&rdquo;) with actions
-                  (search the DOJ library, query the knowledge graph), observing
-                  the results, and reasoning again. This loop underlies most
-                  modern LLM agent systems, and every agent in this pipeline
-                  implements a version of it. The Detective doesn&apos;t just
-                  pattern-match a name against a database. It reasons about the
-                  quality of the match, decides what additional evidence to seek,
-                  evaluates what it finds, and produces a verdict with its
-                  reasoning attached.
-                </p>
-                <div
-                  className="absolute top-0 z-10 hidden pl-4 md:block"
-                  style={{
-                    left: "calc(var(--content-narrow) + 24px)",
-                    width: "calc(100% - var(--content-narrow) - 24px)",
-                    borderLeft: `2px solid ${COPPER}`,
-                  }}
+              <SidenoteBlock note={
+                <Sidenote
+                  title="Chain-of-Thought Prompting"
+                  href="https://arxiv.org/abs/2201.11903"
+                  linkText="arxiv.org/abs/2201.11903"
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src="/sidenotes/react-pattern.png"
-                    alt="ReAct pattern diagram — Reason Only, Act Only, and combined Reasoning Traces + Actions loop"
-                    className="s-note-img"
-                  />
-                  <p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: COPPER }}>
-                    ReAct Pattern
-                  </p>
-                  <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    Yao et al. (2022). &ldquo;ReAct: Synergizing Reasoning and Acting in Language Models.&rdquo; Agents interleave chain-of-thought reasoning with tool calls, observe results, then reason again.
-                  </p>
-                  <a href="https://arxiv.org/abs/2210.03629" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
-                    arxiv.org/abs/2210.03629 &rarr;
-                  </a>
-                </div>
-              </div>
+                  Wei et al. (2022). The finding that large language models solve complex problems more reliably when prompted to show intermediate reasoning steps &mdash; not just final answers. Every agent in this pipeline produces a visible chain of reasoning because the architecture requires it.
+                </Sidenote>
+              }>
+                <p>
+                  This pipeline was designed such that every agent has to show
+                  their work. This isn&apos;t just a debugging convenience,
+                  it&apos;s the evidentiary record itself. This principle comes
+                  from a foundational finding in LLM research<NoteArrow /> that
+                  language models solve complex problems more reliably when they
+                  are forced to produce and recap each intermediate reasoning
+                  step. The Detective agent &ldquo;thinks&rdquo; out loud:
+                  &ldquo;this Black Book match is surname-only, there&apos;s no
+                  first-name, probably just a coincidence,&rdquo; before making a
+                  decision.
+                </p>
+              </SidenoteBlock>
+              <SidenoteBlock note={
+                <Sidenote
+                  title="ReAct Pattern"
+                  image="/sidenotes/react-pattern.png"
+                  imageAlt="ReAct pattern diagram — Reason Only, Act Only, and combined Reasoning Traces + Actions loop"
+                  href="https://arxiv.org/abs/2210.03629"
+                  linkText="arxiv.org/abs/2210.03629"
+                >
+                  Yao et al. (2022). &ldquo;ReAct: Synergizing Reasoning and Acting in Language Models.&rdquo; Agents interleave chain-of-thought reasoning with tool calls, observe results, then reason again.
+                </Sidenote>
+              }>
+                <p>
+                  That visible reasoning chain is what the literature calls the
+                  ReAct pattern:<NoteArrow /> weaving together reasoning with
+                  actions. The Detective reasons about the quality of a match,
+                  then acts to search the DOJ library, observes the result,
+                  reasons <em>again</em>, and then produces a verdict.
+                  Chain-of-thought gets the agent to reason out loud. ReAct goes
+                  further, ensuring that observation shapes the next thought. This
+                  loop underlies most modern LLM agent systems, and every agent in
+                  this pipeline implements some version of this.
+                </p>
+              </SidenoteBlock>
               <SidenoteBlock note={
                 <Sidenote title="OCR Limitations">
                   The DOJ search engine indexes scanned pages via optical character recognition. Handwritten notes, marginalia, and address book entries with non-standard formatting are largely invisible. The system can only find what the OCR can read.
@@ -1541,15 +1611,15 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
-        <SectionTransition num="02" name="multi_agent_system" />
+        <SectionTransition num="4.2" name="multi_agent_system" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 2: MULTI-AGENT SYSTEM
+            SECTION 4.2: MULTI-AGENT SYSTEM
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-2" className="mt-8 scroll-mt-24">
-          {/* ── S2 Header ── */}
+        <div id="section-4-2" className="mt-8 scroll-mt-24">
+          {/* ── S4.2 Header ── */}
           <div>
-            <p className="s-label">SECTION 2</p>
+            <p className="s-label">SECTION 4.2</p>
             <h3 className="s-title">MULTI-AGENT SYSTEM</h3>
             <p className="s-subtitle">From One Prompt to Seven Agents</p>
           </div>
@@ -1617,7 +1687,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <p>In theory, this is straightforward. In practice, it collapses immediately. The context window<NoteArrow /> saturates. The model gets itself stunningly lost chasing loose threads as states become entangled. There are no durable checkpoints, no clean backup points, and the black box nature negates any externalized audit trail. You&rsquo;d have to blindly trust the results&mdash;that&rsquo;s difficult to accept. The results may look coherent, but its operationally opaque. The path from A to B becomes lost, with no meaningful way to replicate or validate the conclusions. While it is simple and <a href="https://www.ibm.com/think/topics/monolithic-architecture" target="_blank" rel="noopener noreferrer" style={{ color: COPPER }}>monolithic</a>, it just doesn&rsquo;t work.</p>
             </SidenoteBlock>
 
-            <p style={{ maxWidth: CONTENT_NARROW }}>The next step is to decompose the problem. Break the monolith model into bounded stages with explicit interfaces, externalize the intermediate states, and allow specialized components to operate concurrently. The user assigns specialized roles: searching, reading, cross-referencing, investigating. But how do these roles interact with each other? My first attempt here was a more decentralized, multi-writer, peer-coordinated agent mesh: each role&mdash;or agent&mdash;communicates with all the others, negotiates their own task ownership, and writes updates to a shared source as conclusions began to emerge. Seemingly chaotic, but it seemed more analagous to how a group of people would collaborate autonomously. However, in practice, for this investigative work, it introduces too much avoidable risk.</p>
+            <p style={{ maxWidth: CONTENT_NARROW }}>The next step is to decompose the problem. Break the monolith model into bounded stages with explicit interfaces, externalize the intermediate states, and allow specialized components to operate concurrently. The user assigns specialized roles: searching, reading, cross-referencing, investigating. But how do these roles interact with each other? My first attempt here was a more decentralized, multi-writer, peer-coordinated agent mesh: each role&mdash;or agent&mdash;communicates with all the others, negotiates their own task ownership, and writes updates to a shared source as conclusions began to emerge. Seemingly chaotic, but it seemed more analogous to how a group of people would collaborate autonomously. However, in practice, for this investigative work, it introduces too much avoidable risk.</p>
 
             {/* P4 — race conditions sidenote */}
             <SidenoteBlock note={
@@ -1739,7 +1809,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </p>
             </div>
 
-            <p style={{ maxWidth: CONTENT_NARROW }}>This solves the issue of contradictory updates by design: if only the Editor writes to the database, there is no possibility of two agents comitting conflicting verdicts on the same record. Ths means the audit trail is never ambiguous about decision making.</p>
+            <p style={{ maxWidth: CONTENT_NARROW }}>This solves the issue of contradictory updates by design: if only the Editor writes to the database, there is no possibility of two agents committing conflicting verdicts on the same record. This means the audit trail is never ambiguous about decision making.</p>
 
             <p style={{ maxWidth: CONTENT_NARROW }}>The system is also modular. For instance, maybe the Detective&rsquo;s methodology needs to change, say, adding a new evidence source beyond the Black Book and DOJ. You&rsquo;d swap out the Detective&rsquo;s code without touching the Researcher, the Editor, or anyone else. The inbox/outbox interface stays the same. The rest of the system doesn&rsquo;t know or care that the Detective now checks three sources instead of two.</p>
 
@@ -1795,7 +1865,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
             <p style={{ maxWidth: CONTENT_NARROW }}>The second version decomposed the work into separate agents but allowed each to write to the database independently. The first time two agents updated the same record concurrently, state corrupted. The third version introduced the Editor as the single writer (the &ldquo;hub&rdquo;) and the system stabilized.</p>
 
-            <p style={{ maxWidth: CONTENT_NARROW }}>Each iteration responded to an observed failure mode, not an abstract preference. That pattern reflects a broader reality of building AI systems: you begin with what works, observe where it breaks, and redesign around those breakpoints. This collaborative, iterative approach is personally new to me, but I could see how it reinforcing the theme of &ldquo;AI as creativity enhancer.&rdquo; You need to learn by doing, and in the process, your preconceived notions of feasibility are also expanded. For me, a consistent metric for a successful project is that your curiousity during the process leads to you a place you couldn&rsquo;t have considered when you started out.</p>
+            <p style={{ maxWidth: CONTENT_NARROW }}>Each iteration responded to an observed failure mode, not an abstract preference. That pattern reflects a broader reality of building AI systems: you begin with what works, observe where it breaks, and redesign around those breakpoints. This collaborative, iterative approach is personally new to me, but I could see how it reinforcing the theme of &ldquo;AI as creativity enhancer.&rdquo; You need to learn by doing, and in the process, your preconceived notions of feasibility are also expanded. For me, a consistent metric for a successful project is that your curiosity during the process leads you to a place you couldn&rsquo;t have considered when you started out.</p>
 
             {/* P — Voyager sidenote */}
             <SidenoteBlock note={
@@ -1813,15 +1883,15 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
         </div>
 
-        <SectionTransition num="03" name="personality_as_architecture" />
+        <SectionTransition num="4.3" name="personality_as_architecture" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 3: PERSONALITY AS ARCHITECTURE
+            SECTION 4.3: PERSONALITY AS ARCHITECTURE
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-3" className="mt-8 scroll-mt-24">
-          {/* ── S3 Header (full width) ── */}
+        <div id="section-4-3" className="mt-8 scroll-mt-24">
+          {/* ── S4.3 Header (full width) ── */}
           <div>
-            <p className="s-label">SECTION 3</p>
+            <p className="s-label">SECTION 4.3</p>
             <h3 className="s-title">PERSONALITY AS ARCHITECTURE</h3>
             <p className="s-subtitle">Why do these autonomous AI agents have names, archetypes, and voices?</p>
           </div>
@@ -2289,14 +2359,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
-        <SectionTransition num="04" name="investigation_methodology" />
+        <SectionTransition num="4.4" name="investigation_methodology" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4: INVESTIGATION METHODOLOGY
+            SECTION 4.4: INVESTIGATION METHODOLOGY
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-4" className="mt-8 scroll-mt-24">
+        <div id="section-4-4" className="mt-8 scroll-mt-24">
           <div>
-            <p className="s-label">SECTION 4</p>
+            <p className="s-label">SECTION 4.4</p>
             <h3 className="s-title">INVESTIGATION METHODOLOGY</h3>
             <p className="s-subtitle">How a name match becomes a confirmed connection &mdash; or gets rejected.</p>
           </div>
@@ -2934,14 +3004,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
-        <SectionTransition num="05" name="intelligence_infrastructure" />
+        <SectionTransition num="4.5" name="intelligence_infrastructure" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 5: INTELLIGENCE INFRASTRUCTURE
+            SECTION 4.5: INTELLIGENCE INFRASTRUCTURE
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-5" className="mt-8 scroll-mt-24">
+        <div id="section-4-5" className="mt-8 scroll-mt-24">
           <SectionHeader
-            num="5"
+            num="4.5"
             title="INTELLIGENCE INFRASTRUCTURE"
             subtitle="The agents don't just execute tasks. They remember, reflect, communicate, and improve."
             intro={[
@@ -3763,14 +3833,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </p>
         </div>
 
-        <SectionTransition num="06" name="ui_design" />
+        <SectionTransition num="4.6" name="ui_design" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 6: UI DESIGN
+            SECTION 4.6: UI DESIGN
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-6" className="mt-8 scroll-mt-24">
+        <div id="section-4-6" className="mt-8 scroll-mt-24">
           <SectionHeader
-            num="6"
+            num="4.6"
             title="UI DESIGN"
             subtitle="Why an agentic system needs a visual interface — and how it was designed and built."
             intro={[
@@ -3781,76 +3851,81 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             summary="The UI exists because different audiences need different views into the same data. The developer needs observability, the researcher needs exploration, and the public reader needs narrative. A terminal can't serve all three."
           />
 
-          {/* ── Agent Office UI — annotated screenshot in purple box ── */}
-          <div
-            className="mt-10 rounded-lg"
-            style={{
-              backgroundColor: "#1e1040",
-              border: `1px solid ${BORDER}`,
-              padding: "40px 32px",
-            }}
-          >
+          {/* ── Agent Office UI — annotated diagram with callouts ── */}
+          <div className="mt-10">
             <p
-              className="text-[11px] font-bold tracking-wider"
+              className="mb-4 text-[11px] font-bold tracking-wider"
               style={{ fontFamily: MONO, color: GOLD_DIM }}
             >
               {"// THE AGENT OFFICE"}
             </p>
 
-            {/* 6-column grid: col01=annotations, cols02–05=image, col06=annotations */}
-            <div className="mt-6 grid gap-4 md:grid-cols-6 md:gap-[24px]">
-              {/* Left annotations (minor column 01) */}
-              <div className="order-2 flex flex-col justify-between gap-6 md:order-1 md:col-span-1">
-                <div>
-                  <p
-                    className="text-[10px] font-bold tracking-widest"
-                    style={{ fontFamily: MONO, color: GOLD }}
-                  >
-                    01
-                  </p>
-                  <p
-                    className="mt-1 text-[10px] leading-[1.6]"
-                    style={{ fontFamily: MONO, color: TEXT_MID }}
-                  >
-                    [Agent Network — hierarchical org chart showing all seven
-                    agents and their real-time status]
-                  </p>
+            {/* Desktop: side callout labels + image with marker dots + SVG leader lines */}
+            <div className="hidden md:grid md:grid-cols-6 md:gap-[24px]">
+              {/* Left callout column — absolutely positioned to align with image features */}
+              <div className="relative col-span-1">
+                {/* 01 Agent Network — aligns with upper-left panel */}
+                <div className="absolute w-full" style={{ top: "10%", transform: "translateY(-50%)" }}>
+                  <div className="flex items-start gap-1.5">
+                    <div
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>1</span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
+                        Agent Network
+                      </p>
+                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                        Hierarchical org chart showing all seven agents with real-time status.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p
-                    className="text-[10px] font-bold tracking-widest"
-                    style={{ fontFamily: MONO, color: GOLD }}
-                  >
-                    02
-                  </p>
-                  <p
-                    className="mt-1 text-[10px] leading-[1.6]"
-                    style={{ fontFamily: MONO, color: TEXT_MID }}
-                  >
-                    [Editor Inbox — Miranda&apos;s real-time commentary on
-                    pipeline state, errors, and editorial decisions]
-                  </p>
+                {/* 02 Newsroom Chatter — aligns with mid-left panel */}
+                <div className="absolute w-full" style={{ top: "37%", transform: "translateY(-50%)" }}>
+                  <div className="flex items-start gap-1.5">
+                    <div
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>2</span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
+                        Newsroom Chatter
+                      </p>
+                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                        Shared bulletin board where agents post warnings, discoveries, and cross-agent signals.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p
-                    className="text-[10px] font-bold tracking-widest"
-                    style={{ fontFamily: MONO, color: GOLD }}
-                  >
-                    03
-                  </p>
-                  <p
-                    className="mt-1 text-[10px] leading-[1.6]"
-                    style={{ fontFamily: MONO, color: TEXT_MID }}
-                  >
-                    [Newsroom Chatter — the bulletin board. Agents post
-                    warnings, discoveries, and status updates visible to all]
-                  </p>
+                {/* 03 Editor Inbox — aligns with lower-left panel */}
+                <div className="absolute w-full" style={{ top: "60%", transform: "translateY(-50%)" }}>
+                  <div className="flex items-start gap-1.5">
+                    <div
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>3</span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
+                        Editor Inbox
+                      </p>
+                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                        Miranda&apos;s real-time commentary on pipeline state, errors, and editorial decisions.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
 
-              {/* Central image (minor columns 02–05) */}
+              {/* Center image with overlaid marker dots and SVG leader lines */}
               <div
-                className="order-1 overflow-hidden rounded border md:order-2 md:col-span-4"
+                className="relative col-span-4 overflow-hidden rounded border"
                 style={{ borderColor: BORDER }}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -3859,74 +3934,193 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   alt="Agent Office — real-time pixel-art dashboard showing seven AI agents at work, with live pipeline statistics, knowledge graph, activity log, and current investigation leads."
                   className="w-full"
                 />
+                {/* SVG overlay — leader lines from markers to image edges */}
+                <svg
+                  className="pointer-events-none absolute inset-0 h-full w-full"
+                  viewBox="0 0 100 100"
+                  preserveAspectRatio="none"
+                >
+                  {/* Left leader lines (marker → left edge) */}
+                  <line x1="0" y1="10" x2="11" y2="10" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
+                  <line x1="0" y1="37" x2="11" y2="37" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
+                  <line x1="0" y1="60" x2="11" y2="60" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
+                  {/* Right leader lines (marker → right edge) */}
+                  <line x1="84" y1="10" x2="100" y2="10" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
+                  <line x1="84" y1="48" x2="100" y2="48" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
+                  <line x1="84" y1="70" x2="100" y2="70" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
+                </svg>
+                {/* Numbered marker dots at each feature location */}
+                {[
+                  { num: 1, x: 12, y: 10 },
+                  { num: 2, x: 12, y: 37 },
+                  { num: 3, x: 12, y: 60 },
+                  { num: 4, x: 83, y: 10 },
+                  { num: 5, x: 83, y: 48 },
+                  { num: 6, x: 83, y: 70 },
+                ].map((m) => (
+                  <div
+                    key={m.num}
+                    className="absolute flex h-[18px] w-[18px] items-center justify-center rounded-full"
+                    style={{
+                      left: `${m.x}%`,
+                      top: `${m.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      backgroundColor: GOLD,
+                      boxShadow: `0 0 0 2px ${BG}, 0 0 0 3px ${GOLD_DIM}`,
+                    }}
+                  >
+                    <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>
+                      {m.num}
+                    </span>
+                  </div>
+                ))}
               </div>
 
-              {/* Right annotations (minor column 06 ) */}
-              <div className="order-3 flex flex-col justify-between gap-6 md:col-span-1">
-                <div>
-                  <p
-                    className="text-[10px] font-bold tracking-widest"
-                    style={{ fontFamily: MONO, color: GOLD }}
-                  >
-                    04
-                  </p>
-                  <p
-                    className="mt-1 text-[10px] leading-[1.6]"
-                    style={{ fontFamily: MONO, color: TEXT_MID }}
-                  >
-                    [Knowledge Graph — live Neo4j visualization of suspected
-                    connections and community clusters]
-                  </p>
+              {/* Right callout column — absolutely positioned to align with image features */}
+              <div className="relative col-span-1">
+                {/* 04 Knowledge Graph — aligns with upper-right panel */}
+                <div className="absolute w-full" style={{ top: "10%", transform: "translateY(-50%)" }}>
+                  <div className="flex items-start gap-1.5">
+                    <div
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>4</span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
+                        Knowledge Graph
+                      </p>
+                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                        Live Neo4j visualization of suspected connections and community clusters.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p
-                    className="text-[10px] font-bold tracking-widest"
-                    style={{ fontFamily: MONO, color: GOLD }}
-                  >
-                    05
-                  </p>
-                  <p
-                    className="mt-1 text-[10px] leading-[1.6]"
-                    style={{ fontFamily: MONO, color: TEXT_MID }}
-                  >
-                    [Activity Log — per-agent filterable log of every action,
-                    streaming in real time]
-                  </p>
+                {/* 05 Activity Log — aligns with mid-right panel */}
+                <div className="absolute w-full" style={{ top: "48%", transform: "translateY(-50%)" }}>
+                  <div className="flex items-start gap-1.5">
+                    <div
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>5</span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
+                        Activity Log
+                      </p>
+                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                        Per-agent filterable log of every action, streaming in real time.
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <div>
-                  <p
-                    className="text-[10px] font-bold tracking-widest"
-                    style={{ fontFamily: MONO, color: GOLD }}
-                  >
-                    06
-                  </p>
-                  <p
-                    className="mt-1 text-[10px] leading-[1.6]"
-                    style={{ fontFamily: MONO, color: TEXT_MID }}
-                  >
-                    [Current Leads — active investigation queue with verdict
-                    status badges and confidence scores]
-                  </p>
+                {/* 06 Current Leads — aligns with lower-right panel */}
+                <div className="absolute w-full" style={{ top: "70%", transform: "translateY(-50%)" }}>
+                  <div className="flex items-start gap-1.5">
+                    <div
+                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>6</span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
+                        Current Leads
+                      </p>
+                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                        Active investigation queue with verdict status and confidence scores.
+                      </p>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Mobile: image with markers + numbered callout grid below */}
+            <div className="md:hidden">
+              <div className="relative overflow-hidden rounded border" style={{ borderColor: BORDER }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/agent-office-ui.png"
+                  alt="Agent Office — real-time pixel-art dashboard showing seven AI agents at work."
+                  className="w-full"
+                />
+                {/* Mobile marker dots */}
+                {[
+                  { num: 1, x: 12, y: 10 },
+                  { num: 2, x: 12, y: 37 },
+                  { num: 3, x: 12, y: 60 },
+                  { num: 4, x: 83, y: 10 },
+                  { num: 5, x: 83, y: 48 },
+                  { num: 6, x: 83, y: 70 },
+                ].map((m) => (
+                  <div
+                    key={m.num}
+                    className="absolute flex h-[14px] w-[14px] items-center justify-center rounded-full"
+                    style={{
+                      left: `${m.x}%`,
+                      top: `${m.y}%`,
+                      transform: "translate(-50%, -50%)",
+                      backgroundColor: GOLD,
+                      boxShadow: `0 0 0 1.5px ${BG}`,
+                    }}
+                  >
+                    <span className="text-[7px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>
+                      {m.num}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3">
+                {[
+                  { num: 1, label: "Agent Network", desc: "Real-time agent org chart." },
+                  { num: 4, label: "Knowledge Graph", desc: "Neo4j connection map." },
+                  { num: 2, label: "Newsroom Chatter", desc: "Cross-agent bulletin board." },
+                  { num: 5, label: "Activity Log", desc: "Per-agent action stream." },
+                  { num: 3, label: "Editor Inbox", desc: "Miranda\u2019s editorial feed." },
+                  { num: 6, label: "Current Leads", desc: "Investigation queue." },
+                ].map((c) => (
+                  <div key={c.num} className="flex items-start gap-1.5">
+                    <div
+                      className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full"
+                      style={{ backgroundColor: GOLD }}
+                    >
+                      <span className="text-[7px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>
+                        {c.num}
+                      </span>
+                    </div>
+                    <div>
+                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
+                        {c.label}
+                      </p>
+                      <p className="mt-0.5 text-[8px] leading-[1.4]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                        {c.desc}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <p
+              className="mt-3 text-[8px] tracking-wider"
+              style={{ fontFamily: MONO, color: TEXT_DIM }}
+            >
+              <span style={{ color: TEXT_MID }}>Fig. 22</span> &mdash; Agent Office: real-time pixel-art dashboard. Numbered markers identify the six primary interface panels.
+            </p>
           </div>
-          <p
-            className="mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
-          >
-            <span style={{ color: TEXT_MID }}>Fig. 22</span> &mdash; Agent Office UI: annotated screenshot of the real-time dashboard showing agent network, editor inbox, bulletin board, knowledge graph, activity log, and investigation queue.
-          </p>
         </div>
 
-        <SectionTransition num="07" name="limitations" />
+        <SectionTransition num="4.7" name="limitations" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 7: LIMITATIONS AND DISCLAIMERS
+            SECTION 4.7: LIMITATIONS AND DISCLAIMERS
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-7" className="mt-8 scroll-mt-24">
+        <div id="section-4-7" className="mt-8 scroll-mt-24">
           <SectionHeader
-            num="7"
+            num="4.7"
             title="LIMITATIONS"
             subtitle="What this project can and cannot tell you."
             intro={[
@@ -3988,14 +4182,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
-        <SectionTransition num="08" name="data_sources" />
+        <SectionTransition num="4.8" name="data_sources" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 8: DATA SOURCES
+            SECTION 4.8: DATA SOURCES
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-8" className="mt-8 scroll-mt-24">
+        <div id="section-4-8" className="mt-8 scroll-mt-24">
           <SectionHeader
-            num="8"
+            num="4.8"
             title="DATA SOURCES"
             subtitle="Primary sources, infrastructure, and the full codebase."
             intro={[
@@ -4065,14 +4259,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
-        <SectionTransition num="09" name="conclusions" />
+        <SectionTransition num="4.9" name="conclusions" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 9: CONCLUSIONS
+            SECTION 4.9: CONCLUSIONS
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-9" className="mt-8 scroll-mt-24">
+        <div id="section-4-9" className="mt-8 scroll-mt-24">
           <SectionHeader
-            num="9"
+            num="4.9"
             title="CONCLUSIONS"
             subtitle="What the data reveals about wealth, taste, and proximity to power."
             intro={[

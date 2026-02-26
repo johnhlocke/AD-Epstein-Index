@@ -267,18 +267,75 @@ html {
   --meth-slate: rgba(74, 124, 143, 0.85);
   --meth-slate-dim: rgba(74, 124, 143, 0.2);
   --meth-note-link: rgba(184, 115, 51, 0.6);
+  /* Sidenote overrides for dark bg */
+  --note-title-color: rgba(184, 115, 51, 0.85);
+  --note-body-color: rgba(160, 160, 176, 0.6);
 }
 
-/* ── Introduction section — light-bg sidenote overrides ──
- * Same .s-note-* classes, different color context.
+/* ── Narrative sections (i, 1, 2, 3) — light-bg editorial typography ──
+ * Single source of truth for the findings/conclusion sections.
+ * Distinct from methodology .s-label/.s-title/.s-body (dark-bg, monospace).
+ *
+ * Usage:  <section class="narrative"> wraps each narrative section.
+ *   .n-label       — copper section label ("Key Finding 01")
+ *   .n-title       — Futura Black section title ("1. Who Are They?")
+ *   .n-rule        — 2px black rule below title
+ *   .n-body        — Lora serif prose column(s)
+ *   .n-body p      — individual paragraphs
+ *   .n-caption      — chart/image captions
+ * Sidenotes reuse .s-note-* with light-bg color overrides below.
  */
-#introduction {
+.narrative {
   --meth-copper: rgba(184, 115, 51, 0.9);
   --meth-copper-dim: rgba(184, 115, 51, 0.2);
   --meth-text-dim: rgba(60, 60, 70, 0.55);
   --meth-note-link: rgba(184, 115, 51, 0.7);
 }
-
+.n-label {
+  font-family: futura-pt, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.15em;
+  color: #B87333;
+}
+.n-title {
+  margin-top: 0.5rem;
+  font-family: futura-pt, sans-serif;
+  font-size: 28px;
+  font-weight: 900;
+  line-height: 0.95;
+  letter-spacing: 0.01em;
+  color: #1A1A1A;
+}
+.n-rule {
+  margin-top: 0.75rem;
+  border: 0;
+  border-top: 2px solid #1A1A1A;
+}
+.n-body {
+  margin-top: 1.25rem;
+  font-family: 'Lora', serif;
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 1.65;
+  color: #333;
+}
+/* Constrain prose to 4-of-6 columns when used outside a float/grid context */
+.n-body-narrow {
+  max-width: var(--content-narrow);
+}
+.n-body p + p {
+  margin-top: 1rem;
+}
+.n-caption {
+  margin-top: 0.5rem;
+  font-family: 'Lora', serif;
+  font-size: 12px;
+  font-style: italic;
+  line-height: 1.5;
+  color: #737373;
+}
 /* ── Sidenote row — Tufte-style margin notes ──
  * Prose flows naturally; sidenote is absolutely positioned in the
  * right margin. Paragraphs stack based on their own height — a tall
@@ -310,21 +367,23 @@ html {
   color: #1A1A1A;
 }
 
-/* Sidenote text elements — reusable within any margin note */
+/* Sidenote text elements — reusable within any margin note.
+ * Colors use CSS vars so methodology (dark) and narrative (light) diverge.
+ * Defaults = light-bg values; #agent-methodology overrides below. */
 .s-note-title {
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 9px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.15em;
-  color: #1A1A1A;
+  color: var(--note-title-color, #1A1A1A);
 }
 .s-note-body {
   margin-top: 0.375rem;
   font-family: var(--font-jetbrains-mono), monospace;
   font-size: 10px;
   line-height: 1.6;
-  color: #666;
+  color: var(--note-body-color, #666);
 }
 .s-note-link {
   margin-top: 0.375rem;

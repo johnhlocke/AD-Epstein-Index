@@ -1,5 +1,3 @@
-import { Separator } from "@/components/ui/separator";
-
 /**
  * Dossier Example — shows what a confirmed connection looks like.
  *
@@ -9,7 +7,7 @@ import { Separator } from "@/components/ui/separator";
  */
 export function DossierExample() {
   return (
-    <section id="dossier-example" style={{ backgroundColor: "#FAF8F5" }}>
+    <section id="dossier-example" className="narrative" style={{ backgroundColor: "#FAF8F5" }}>
       <div
         className="mx-auto w-full pb-16 pt-14"
         style={{
@@ -18,21 +16,9 @@ export function DossierExample() {
           paddingRight: "var(--grid-margin)",
         }}
       >
-        {/* Section Header */}
-        <p
-          className="text-[11px] font-bold uppercase tracking-[0.15em]"
-          style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
-        >
-          Example Dossier
-        </p>
-        <h2
-          className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"
-          style={{ fontFamily: "futura-pt, sans-serif" }}
-        >
-          What a Confirmed Connection Looks Like
-        </h2>
-
-        <Separator className="mt-5" />
+        <p className="n-label">Example Dossier</p>
+        <h2 className="n-title">1.3 What a Confirmed Connection Looks Like</h2>
+        <hr className="n-rule" />
 
         {/* Two-column layout */}
         <div className="mt-8 grid gap-8 md:grid-cols-2">

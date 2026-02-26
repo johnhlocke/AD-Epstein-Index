@@ -9,15 +9,14 @@ interface HeroSectionProps {
 
 /* ── NASA-style TOC components ── */
 
-/* Shared 3-column grid: section title | dot leaders + sub labels | page number
- * First column matches 1/3 of the abstract's md:grid-cols-3 gap-6 layout
- * so sub-item text aligns with the abstract's second column left edge. */
-/* First column = abstract col1 width + gap, so column 2 left edge
- * aligns exactly with the abstract's middle column left edge. */
-const TOC_GRID_STYLE: React.CSSProperties = {
+/* Left column width = abstract col1 + gap so sub-item text aligns with the
+ * abstract's middle column left edge. */
+const TOC_LEFT_WIDTH = "calc((100% - 48px) / 3 + 24px)";
+
+/* Sub-item row: label + dot leaders | page number */
+const TOC_SUB_STYLE: React.CSSProperties = {
   display: "grid",
-  gridTemplateColumns: "calc((100% - 48px) / 3 + 24px) 1fr auto",
-  columnGap: 0,
+  gridTemplateColumns: "1fr auto",
   alignItems: "baseline",
 };
 
@@ -38,32 +37,31 @@ function TocSection({
 }) {
   return (
     <div className={`pt-4 pb-3 ${noBorder ? "" : "border-t border-black"}`}>
-      {/* Major section row — title on left, first sub-item aligned on same baseline */}
-      <div style={TOC_GRID_STYLE}>
-        <a href={href} className="text-[19px] font-black transition-colors hover:text-[#B87333]" style={{ fontFamily: "futura-pt, sans-serif" }}>
+      {/* Flex row: title (left) + sub-items (right) — independent heights */}
+      <div style={{ display: "flex", alignItems: "baseline" }}>
+        <a
+          href={href}
+          className="text-[19px] font-black transition-colors hover:text-[#B87333]"
+          style={{ fontFamily: "futura-pt, sans-serif", width: TOC_LEFT_WIDTH, flexShrink: 0 }}
+        >
           {num && <span className="mr-3 font-mono text-[14px]">{num}</span>}
           {title}
         </a>
-        {firstSub ? (
-          <a href={firstSub.href} className="flex items-end overflow-hidden text-[15px] font-medium text-[#333] transition-colors hover:text-[#B87333]">
-            <span className="shrink-0">{firstSub.label}</span>
-            <span className="ml-1 flex-1 overflow-hidden whitespace-nowrap leading-[1] text-black">
-              {"· ".repeat(120)}
-            </span>
-          </a>
-        ) : (
-          <span />
-        )}
-        {firstSub ? (
-          <a href={firstSub.href} className="font-mono text-[14px] font-bold transition-colors hover:text-[#B87333]">
-            {firstSub.num}
-          </a>
-        ) : (
-          <span />
-        )}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {firstSub && (
+            <a href={firstSub.href} className="py-[2px] transition-colors hover:text-[#B87333]" style={TOC_SUB_STYLE}>
+              <span className="flex items-end overflow-hidden text-[15px] font-medium text-[#333]">
+                <span className="shrink-0">{firstSub.label}</span>
+                <span className="ml-1 flex-1 overflow-hidden whitespace-nowrap leading-[1] text-black">
+                  {"· ".repeat(120)}
+                </span>
+              </span>
+              <span className="font-mono text-[14px] font-bold">{firstSub.num}</span>
+            </a>
+          )}
+          {children}
+        </div>
       </div>
-      {/* Remaining sub-items */}
-      {children && <div>{children}</div>}
     </div>
   );
 }
@@ -81,10 +79,8 @@ function TocSub({
     <a
       href={href}
       className="py-[2px] transition-colors hover:text-[#B87333]"
-      style={TOC_GRID_STYLE}
+      style={TOC_SUB_STYLE}
     >
-      {/* Empty first column — keeps sub-labels aligned to column 2 */}
-      <span />
       <span className="flex items-end overflow-hidden text-[15px] font-medium text-[#333]">
         <span className="shrink-0">{label}</span>
         <span className="ml-1 flex-1 overflow-hidden whitespace-nowrap leading-[1] text-black">
@@ -254,7 +250,7 @@ export function HeroSection({ stats, mosaic }: HeroSectionProps) {
             Contents
           </p>
 
-          <div className="border border-black p-8 text-black" style={{ fontFamily: "'Lora', serif" }}>
+          <div className="border border-black p-8 text-black" style={{ fontFamily: "'Lora', serif", boxShadow: "4px 4px 0 0 #000" }}>
             {/* ── How to Read ── */}
             <p className="mb-6 text-[13px] italic leading-[1.7] text-[#666]">
               <span className="underline">Sections 1&ndash;3:</span> presents the overall findings and conclusion.
@@ -267,26 +263,31 @@ export function HeroSection({ stats, mosaic }: HeroSectionProps) {
             <TocSection num="" title="Introduction" href="#introduction" noBorder firstSub={{ label: "Why this project?", num: "i", href: "#introduction" }} />
 
             {/* ── Finding 01: The Names ── */}
-            <TocSection num="1" title="Finding 01: The Names" href="#key-finding" firstSub={{ label: "Who Are They?", num: "1.1", href: "#key-finding" }}>
+            <TocSection num="1" title="Finding 01: The Names" href="#finding-01" firstSub={{ label: "Who Are They?", num: "1.1", href: "#key-finding" }}>
               <TocSub label="What, When and Where Are They" num="1.2" href="#timeline" />
               <TocSub label="What a Confirmed Connection Looks Like" num="1.3" href="#dossier-example" />
             </TocSection>
 
             {/* ── Finding 02: The Aesthetic ── */}
-            <TocSection num="2" title="Finding 02: The Aesthetic" href="#baseline" firstSub={{ label: "The AD Baseline Aesthetic", num: "2.1", href: "#baseline" }}>
+            <TocSection num="2" title="Finding 02: The Aesthetic" href="#finding-02" firstSub={{ label: "The AD Baseline Aesthetic", num: "2.1", href: "#baseline" }}>
               <TocSub label="Is There an Epstein Aesthetic?" num="2.2" href="#epstein-aesthetic" />
               <TocSub label="Why These Homes Perform" num="2.3" href="#aesthetic-analysis" />
               <TocSub label="Testing: 9 East 71st Street" num="2.4" href="#testing" />
             </TocSection>
 
             {/* ── Conclusion ── */}
-            <TocSection num="3" title="Conclusion" href="#conclusion" firstSub={{ label: "What\u2019s Next", num: "3.1", href: "#whats-next" }} />
+            <TocSection num="3" title="Conclusion" href="#finding-03" firstSub={{ label: "What\u2019s Next", num: "3.1", href: "#whats-next" }} />
 
             {/* ── Methodology: Agent AI Pipeline ── */}
-            <TocSection num="4" title="Methodology: Agent AI Pipeline" href="#agent-methodology" firstSub={{ label: "The Pipeline", num: "4.1", href: "#section-1" }}>
-              <TocSub label="Multi-Agent System" num="4.2" href="#section-2" />
-              <TocSub label="Personality as Architecture" num="4.3" href="#section-3" />
-              <TocSub label="Investigation Methodology" num="4.4" href="#section-4" />
+            <TocSection num="4" title="Methodology: Agent AI Pipeline" href="#agent-methodology" firstSub={{ label: "The Pipeline", num: "4.1", href: "#section-4-1" }}>
+              <TocSub label="Multi-Agent System" num="4.2" href="#section-4-2" />
+              <TocSub label="Personality as Architecture" num="4.3" href="#section-4-3" />
+              <TocSub label="Investigation Methodology" num="4.4" href="#section-4-4" />
+              <TocSub label="Intelligence Infrastructure" num="4.5" href="#section-4-5" />
+              <TocSub label="UI Design" num="4.6" href="#section-4-6" />
+              <TocSub label="Limitations" num="4.7" href="#section-4-7" />
+              <TocSub label="Data Sources" num="4.8" href="#section-4-8" />
+              <TocSub label="Conclusions" num="4.9" href="#section-4-9" />
             </TocSection>
 
             {/* ── Methodology: Aesthetic Scoring ── */}

@@ -43,6 +43,27 @@ const appendixItems = [
     href: "/explorer",
     description: "Interactive force-directed graph explorer.",
   },
+  {
+    letter: "G",
+    title: "Category Breakdown Data",
+    href: "/data/category-breakdown",
+    description:
+      "Individual-level data behind Fig. 2: every confirmed name by subject category with aggregate summary.",
+  },
+  {
+    letter: "H",
+    title: "Wealth Origin Classifications",
+    href: "/data/wealth-origin",
+    description:
+      "Individual-level data behind Fig. 3: Opus-classified wealth origins for Epstein orbit and AD baseline.",
+  },
+  {
+    letter: "I",
+    title: "Forbes Self-Made Scores",
+    href: "/data/forbes-scores",
+    description:
+      "Individual-level data behind Fig. 4: Forbes Self-Made Score (1–10) for all 445 classified individuals.",
+  },
 ];
 
 export function Appendix() {

@@ -1,91 +1,98 @@
 "use client";
 
+import { useMemo } from "react";
 import { useMounted } from "@/lib/use-mounted";
 import { Sankey, Tooltip, ResponsiveContainer } from "recharts";
 import type { NodeProps, LinkProps } from "recharts/types/chart/Sankey";
 
-// ── Colors (on-system per design-rules.md) ──────────────────
+// ── Two-tone narrative palette ───────────────────────────────
+// Warm neutral → deepening red as investigation confirms connection.
+// Teal for cleared/dismissed path. Exact hex colors per spec.
 const MONO = "JetBrains Mono, monospace";
-const GREEN = "rgba(45, 106, 79, 0.95)";       // #2D6A4F — forest green
-const GREEN_DIM = "rgba(45, 106, 79, 0.25)";
-const RED = "rgba(155, 34, 38, 0.85)";          // #9B2226
-const RED_DIM = "rgba(155, 34, 38, 0.2)";
-const GOLD = "rgba(184, 134, 11, 0.9)";         // #B8860B
-const GOLD_DIM = "rgba(184, 134, 11, 0.2)";
-const COPPER = "#B87333";
-const COPPER_DIM = "rgba(184, 115, 51, 0.25)";
-const SLATE = "rgba(74, 124, 143, 0.85)";       // #4A7C8F
-const SLATE_DIM = "rgba(74, 124, 143, 0.2)";
-const NEUTRAL = "rgba(160, 160, 176, 0.6)";
-const NEUTRAL_DIM = "rgba(160, 160, 176, 0.15)";
 
-// Color scheme by node name
+// Node colors: 100% opaque (solid bars)
+// Link gradient colors: 95% opacity at stops
+//
+// Confirmation path (warm neutral → blood red):
+//   Features Extracted  #afaaa6 / grad #c6c1bd
+//   Cross-Referenced    #edafa2 / grad #eebcb1
+//   Likely Match        #d66a5d / grad #d47367
+//   Dossier Built       #b8141f / grad #b61f29
+//   Confirmed           #7f000f / grad #7d0514
+//
+// Other tiers interpolate between Cross-Referenced and Dossier Built.
+
+// ── Dark variant (methodology section, dark bg) ─────────────
 const NODE_THEME: Record<string, { fill: string; stroke: string }> = {
-  // Stage -1: corpus
-  "FEATURES EXTRACTED": { fill: NEUTRAL_DIM, stroke: NEUTRAL },
-  "ANONYMOUS": { fill: "rgba(160, 160, 176, 0.08)", stroke: "rgba(160, 160, 176, 0.3)" },
-  // Stage 0
-  "CROSS-REFERENCED NAMES": { fill: NEUTRAL_DIM, stroke: NEUTRAL },
-  "DISMISSED":         { fill: RED_DIM, stroke: RED },
-  // Stage 1: detective tiers
-  "CONFIRMED MATCH":   { fill: GREEN_DIM, stroke: GREEN },
-  "LIKELY MATCH":      { fill: COPPER_DIM, stroke: COPPER },
-  "POSSIBLE MATCH":    { fill: GOLD_DIM, stroke: GOLD },
-  "NEEDS REVIEW":      { fill: SLATE_DIM, stroke: SLATE },
-  "NO MATCH":          { fill: RED_DIM, stroke: RED },
-  "PENDING":           { fill: NEUTRAL_DIM, stroke: NEUTRAL },
-  // Stage 2: researcher dossier
-  "DOSSIER BUILT":     { fill: "rgba(130, 100, 180, 0.2)", stroke: "rgba(130, 100, 180, 0.7)" },
-  // Stage 3: editor verdict
-  "CONFIRMED":         { fill: GREEN_DIM, stroke: GREEN },
-  "REJECTED":          { fill: RED_DIM, stroke: RED },
-  // Stage 3: connection strength
-  "HIGH":              { fill: GREEN_DIM, stroke: GREEN },
-  "MEDIUM":            { fill: COPPER_DIM, stroke: COPPER },
-  "LOW":               { fill: GOLD_DIM, stroke: GOLD },
-  "COINCIDENCE":       { fill: SLATE_DIM, stroke: SLATE },
+  "AD FEATURES SINCE 1988":      { fill: "#afaaa6", stroke: "#afaaa6" },
+  "ANONYMOUS":               { fill: "#000000", stroke: "#000000" },
+  "HOMEOWNER NAMES":  { fill: "#edafa2", stroke: "#edafa2" },
+  "DISMISSED":               { fill: "#013539", stroke: "#013539" },
+  "SUSPECTED EPSTEIN CONNECTION":            { fill: "#d66a5d", stroke: "#d66a5d" },
+  "CONFIRMED MATCH":         { fill: "#c24035", stroke: "#c24035" },
+  "LIKELY CONNECTION":          { fill: "#e08a7e", stroke: "#e08a7e" },
+  "NEEDS REVIEW":            { fill: "#b8a8a0", stroke: "#b8a8a0" },
+  "NO MATCH":                { fill: "#013539", stroke: "#013539" },
+  "PENDING":                 { fill: "#b0a8a2", stroke: "#b0a8a2" },
+  "DOSSIER BUILT":           { fill: "#b8141f", stroke: "#b8141f" },
+  "REJECTED":                { fill: "#013539", stroke: "#013539" },
+  "CONFIRMED EPSTEIN CONNECTION":               { fill: "#7f000f", stroke: "#7f000f" },
 };
 
-const LINK_THEME: Record<string, string> = {
-  "ANONYMOUS": "rgba(160, 160, 176, 0.06)",
-  "CROSS-REFERENCED NAMES": "rgba(160, 160, 176, 0.08)",
-  "DISMISSED":         "rgba(155, 34, 38, 0.12)",
-  "CONFIRMED MATCH":   "rgba(45, 106, 79, 0.14)",
-  "LIKELY MATCH":      "rgba(184, 115, 51, 0.14)",
-  "POSSIBLE MATCH":    "rgba(184, 134, 11, 0.10)",
-  "NEEDS REVIEW":      "rgba(74, 124, 143, 0.10)",
-  "NO MATCH":          "rgba(155, 34, 38, 0.10)",
-  "PENDING":           "rgba(160, 160, 176, 0.08)",
-  "DOSSIER BUILT":     "rgba(130, 100, 180, 0.12)",
-  "CONFIRMED":         "rgba(45, 106, 79, 0.18)",
-  "REJECTED":          "rgba(155, 34, 38, 0.12)",
-  "HIGH":              "rgba(45, 106, 79, 0.18)",
-  "MEDIUM":            "rgba(184, 115, 51, 0.14)",
-  "LOW":               "rgba(184, 134, 11, 0.10)",
-  "COINCIDENCE":       "rgba(74, 124, 143, 0.08)",
+// Link gradient endpoints: { rgb, a } for linearGradient stops.
+interface LinkEnd { rgb: string; a: number }
+const LINK_COLORS: Record<string, LinkEnd> = {
+  "AD FEATURES SINCE 1988":      { rgb: "198, 193, 189", a: 0.95 },  // #c6c1bd
+  "ANONYMOUS":               { rgb: "0, 0, 0", a: 0.95 },
+  "HOMEOWNER NAMES":  { rgb: "238, 188, 177", a: 0.95 },  // #eebcb1
+  "DISMISSED":               { rgb: "5, 61, 67", a: 0.95 },
+  "SUSPECTED EPSTEIN CONNECTION":            { rgb: "212, 115, 103", a: 0.95 },  // #d47367
+  "CONFIRMED MATCH":         { rgb: "194, 64, 53", a: 0.95 },
+  "LIKELY CONNECTION":          { rgb: "224, 138, 126", a: 0.95 },
+  "NEEDS REVIEW":            { rgb: "184, 168, 160", a: 0.95 },
+  "NO MATCH":                { rgb: "5, 61, 67", a: 0.95 },
+  "PENDING":                 { rgb: "176, 168, 162", a: 0.95 },
+  "DOSSIER BUILT":           { rgb: "182, 31, 41", a: 0.95 },    // #b61f29
+  "REJECTED":                { rgb: "5, 61, 67", a: 0.95 },
+  "CONFIRMED EPSTEIN CONNECTION":               { rgb: "125, 5, 20", a: 0.95 },     // #7d0514
 };
 
-// Agent attribution by node name — correlates with vertical flow diagram
-const NODE_AGENT: Record<string, string> = {
-  "FEATURES EXTRACTED":      "Reader + Courier",
-  "CROSS-REFERENCED NAMES":  "Detective",
-  "DISMISSED":               "Detective",
-  "CONFIRMED MATCH":         "Detective",
-  "LIKELY MATCH":            "Detective",
-  "POSSIBLE MATCH":          "Detective",
-  "NEEDS REVIEW":            "Detective",
-  "NO MATCH":                "Detective",
-  "PENDING":                 "Detective",
-  "DOSSIER BUILT":            "Researcher",
-  "CONFIRMED":               "Editor",
-  "REJECTED":                "Editor",
-  "HIGH":                    "Editor",
-  "MEDIUM":                  "Editor",
-  "LOW":                     "Editor",
-  "COINCIDENCE":             "Editor",
+const DEFAULT_NODE = { fill: "#afaaa6", stroke: "#afaaa6" };
+
+// ── Light variant (paper/findings sections, cream bg) ────────
+const LIGHT_NODE_THEME: Record<string, { fill: string; stroke: string }> = {
+  "AD FEATURES SINCE 1988":      { fill: "#afaaa6", stroke: "#afaaa6" },
+  "ANONYMOUS":               { fill: "#000000", stroke: "#000000" },
+  "HOMEOWNER NAMES":  { fill: "#edafa2", stroke: "#edafa2" },
+  "DISMISSED":               { fill: "#013539", stroke: "#013539" },
+  "SUSPECTED EPSTEIN CONNECTION":            { fill: "#d66a5d", stroke: "#d66a5d" },
+  "CONFIRMED MATCH":         { fill: "#c24035", stroke: "#c24035" },
+  "LIKELY CONNECTION":          { fill: "#e08a7e", stroke: "#e08a7e" },
+  "NEEDS REVIEW":            { fill: "#b8a8a0", stroke: "#b8a8a0" },
+  "NO MATCH":                { fill: "#013539", stroke: "#013539" },
+  "PENDING":                 { fill: "#b0a8a2", stroke: "#b0a8a2" },
+  "DOSSIER BUILT":           { fill: "#b8141f", stroke: "#b8141f" },
+  "REJECTED":                { fill: "#013539", stroke: "#013539" },
+  "CONFIRMED EPSTEIN CONNECTION":               { fill: "#7f000f", stroke: "#7f000f" },
+};
+const LIGHT_DEFAULT_NODE = { fill: "#afaaa6", stroke: "#afaaa6" };
+
+const LIGHT_LINK_COLORS: Record<string, LinkEnd> = {
+  "AD FEATURES SINCE 1988":      { rgb: "198, 193, 189", a: 0.95 },
+  "ANONYMOUS":               { rgb: "0, 0, 0", a: 0.95 },
+  "HOMEOWNER NAMES":  { rgb: "238, 188, 177", a: 0.95 },
+  "DISMISSED":               { rgb: "5, 61, 67", a: 0.95 },
+  "SUSPECTED EPSTEIN CONNECTION":            { rgb: "212, 115, 103", a: 0.95 },
+  "CONFIRMED MATCH":         { rgb: "194, 64, 53", a: 0.95 },
+  "LIKELY CONNECTION":          { rgb: "224, 138, 126", a: 0.95 },
+  "NEEDS REVIEW":            { rgb: "184, 168, 160", a: 0.95 },
+  "NO MATCH":                { rgb: "5, 61, 67", a: 0.95 },
+  "PENDING":                 { rgb: "176, 168, 162", a: 0.95 },
+  "DOSSIER BUILT":           { rgb: "182, 31, 41", a: 0.95 },
+  "REJECTED":                { rgb: "5, 61, 67", a: 0.95 },
+  "CONFIRMED EPSTEIN CONNECTION":               { rgb: "125, 5, 20", a: 0.95 },
 };
 
-const DEFAULT_NODE = { fill: NEUTRAL_DIM, stroke: "rgba(160, 160, 176, 0.4)" };
 
 interface VerdictSankeyProps {
   featuresTotal: number;
@@ -95,148 +102,215 @@ interface VerdictSankeyProps {
   rejected: number;
   tierToConfirmed: Record<string, number>;
   tierToRejected: Record<string, number>;
-  strengthCounts: Record<string, number>;
+  strengthCounts?: Record<string, number>;
+  /** "dark" = methodology section (default), "light" = paper/findings sections */
+  variant?: "dark" | "light";
 }
 
 // ── Custom Node ──────────────────────────────────────────────
-function CustomNode(props: NodeProps) {
-  const { x, y, width, height, payload } = props;
-  const name = (payload as { name?: string })?.name ?? "";
-  const value = (payload as { value?: number })?.value ?? 0;
-  const colors = NODE_THEME[name] ?? DEFAULT_NODE;
-  const agent = NODE_AGENT[name];
+function makeCustomNode(variant: "dark" | "light") {
+  const nodeTheme = variant === "light" ? LIGHT_NODE_THEME : NODE_THEME;
+  const defaultNode = variant === "light" ? LIGHT_DEFAULT_NODE : DEFAULT_NODE;
+  const valueFill = variant === "light" ? "#1A1A1A" : "rgba(224, 224, 229, 0.95)";
+  const nameFill = variant === "light" ? "#1A1A1A" : "#E0E0E5";
+  const font = MONO;
 
-  const labelX = x + width + 8;
+  return function CustomNode(props: NodeProps) {
+    const { x, y, width, height, payload } = props;
+    const name = (payload as { name?: string })?.name ?? "";
+    const value = (payload as { value?: number })?.value ?? 0;
+    const colors = nodeTheme[name] ?? defaultNode;
 
-  return (
-    <g>
-      <rect
-        x={x}
-        y={y}
-        width={width}
-        height={height}
-        fill={colors.fill}
-        stroke={colors.stroke}
-        strokeWidth={1.5}
-        rx={2}
-      />
-      {/* Value */}
-      <text
-        x={labelX}
-        y={y + height / 2 - (agent ? 4 : 1)}
-        textAnchor="start"
-        dominantBaseline="central"
-        fontSize={10}
-        fontFamily={MONO}
-        fill="rgba(224, 224, 229, 0.95)"
-        fontWeight="bold"
-        letterSpacing="0.04em"
-      >
-        {value.toLocaleString()}
-      </text>
-      {/* Name */}
-      <text
-        x={labelX}
-        y={y + height / 2 + (agent ? 8 : 11)}
-        textAnchor="start"
-        dominantBaseline="central"
-        fontSize={7}
-        fontFamily={MONO}
-        fill="rgba(160, 160, 176, 0.55)"
-        letterSpacing="0.1em"
-      >
-        {name}
-      </text>
-      {/* Agent attribution */}
-      {agent && (
+    const labelX = x + width + 8;
+    const isConfirmed = name === "CONFIRMED EPSTEIN CONNECTION";
+    const scale = isConfirmed ? 1.5 : 1;
+
+    // Terminal badge: filled rect with centered white text
+    const TERMINAL_BADGES: Record<string, string> = {
+      "ANONYMOUS": "#000000",
+      "DISMISSED": "#013539",
+      "REJECTED":  "#013539",
+      "CONFIRMED EPSTEIN CONNECTION": "#7f000f",
+    };
+    const badgeFill = TERMINAL_BADGES[name];
+    if (badgeFill) {
+      const isEpsteinConfirmed = name === "CONFIRMED EPSTEIN CONNECTION";
+      const badgeW = 100;
+      const badgeH = isEpsteinConfirmed ? 52 : 34;
+      const badgeX = x + width + 4;
+      const badgeY = y + height / 2 - badgeH / 2;
+
+      // Split name into lines for multi-line badges
+      const nameLines = isEpsteinConfirmed
+        ? ["CONFIRMED", "EPSTEIN", "CONNECTION"]
+        : [name];
+
+      return (
+        <g>
+          <rect x={x} y={y} width={width} height={height} fill={colors.stroke} stroke="none" />
+          <rect x={badgeX} y={badgeY} width={badgeW} height={badgeH} fill={badgeFill} />
+          <text
+            x={badgeX + badgeW / 2}
+            y={badgeY + (isEpsteinConfirmed ? 14 : badgeH / 2 - 6)}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={15}
+            fontFamily={font}
+            fill="#ffffff"
+            fontWeight={900}
+            letterSpacing="0.04em"
+          >
+            {value.toLocaleString()}
+          </text>
+          {nameLines.map((line, i) => (
+            <text
+              key={i}
+              x={badgeX + badgeW / 2}
+              y={badgeY + (isEpsteinConfirmed ? 28 + i * 8 : badgeH / 2 + 8)}
+              textAnchor="middle"
+              dominantBaseline="central"
+              fontSize={7}
+              fontFamily={font}
+              fill="#ffffff"
+              letterSpacing="0.1em"
+            >
+              {line}
+            </text>
+          ))}
+        </g>
+      );
+    }
+
+    return (
+      <g>
+        <rect
+          x={x}
+          y={y}
+          width={width}
+          height={height}
+          fill={colors.stroke}
+          stroke="none"
+        />
+        {/* Value */}
         <text
           x={labelX}
-          y={y + height / 2 + 19}
+          y={y + height / 2 - 1}
           textAnchor="start"
           dominantBaseline="central"
-          fontSize={6.5}
-          fontFamily={MONO}
-          fill="rgba(160, 160, 176, 0.3)"
-          letterSpacing="0.06em"
-          fontStyle="italic"
+          fontSize={10 * scale}
+          fontFamily={font}
+          fill={valueFill}
+          fontWeight={900}
+          letterSpacing="0.04em"
         >
-          {agent}
+          {value.toLocaleString()}
         </text>
-      )}
-    </g>
-  );
+        {/* Name */}
+        <text
+          x={labelX}
+          y={y + height / 2 + 11}
+          textAnchor="start"
+          dominantBaseline="central"
+          fontSize={7 * scale}
+          fontFamily={font}
+          fill={nameFill}
+          fontWeight={isConfirmed ? "bold" : "normal"}
+          letterSpacing="0.1em"
+        >
+          {name}
+        </text>
+      </g>
+    );
+  };
 }
 
-// ── Custom Link ──────────────────────────────────────────────
-function CustomLink(props: LinkProps) {
-  const {
-    sourceX,
-    targetX,
-    sourceY,
-    targetY,
-    sourceControlX,
-    targetControlX,
-    linkWidth,
-    payload,
-  } = props;
+// ── Custom Link (gradient ribbons) ───────────────────────────
+const DEFAULT_LINK: LinkEnd = { rgb: "198, 193, 189", a: 0.95 };
 
-  const targetName = (payload?.target as { name?: string })?.name ?? "";
-  const fillColor = LINK_THEME[targetName] ?? "rgba(160, 160, 176, 0.05)";
-  const halfWidth = linkWidth / 2;
+function makeCustomLink(variant: "dark" | "light") {
+  const colors = variant === "light" ? LIGHT_LINK_COLORS : LINK_COLORS;
 
-  return (
-    <path
-      d={`
-        M${sourceX},${sourceY + halfWidth}
-        C${sourceControlX},${sourceY + halfWidth}
-          ${targetControlX},${targetY + halfWidth}
-          ${targetX},${targetY + halfWidth}
-        L${targetX},${targetY - halfWidth}
-        C${targetControlX},${targetY - halfWidth}
-          ${sourceControlX},${sourceY - halfWidth}
-          ${sourceX},${sourceY - halfWidth}
-        Z
-      `}
-      fill={fillColor}
-      stroke="none"
-    />
-  );
+  return function CustomLink(props: LinkProps) {
+    const {
+      sourceX,
+      targetX,
+      sourceY,
+      targetY,
+      linkWidth,
+      payload,
+    } = props;
+
+    const sourceName = (payload?.source as { name?: string })?.name ?? "";
+    const targetName = (payload?.target as { name?: string })?.name ?? "";
+    const src = colors[sourceName] ?? DEFAULT_LINK;
+    const tgt = colors[targetName] ?? DEFAULT_LINK;
+    const halfWidth = linkWidth / 2;
+
+    // Unique gradient ID per ribbon (source position differentiates parallel links)
+    const gradId = `lg-${Math.round(sourceX)}-${Math.round(sourceY)}`;
+
+    return (
+      <g>
+        <defs>
+          <linearGradient
+            id={gradId}
+            x1={sourceX}
+            y1={0}
+            x2={targetX}
+            y2={0}
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop offset="0%" stopColor={`rgb(${src.rgb})`} stopOpacity={src.a} />
+            <stop offset="100%" stopColor={`rgb(${tgt.rgb})`} stopOpacity={tgt.a} />
+          </linearGradient>
+        </defs>
+        <path
+          d={`
+            M${sourceX},${sourceY + halfWidth}
+            L${targetX},${targetY + halfWidth}
+            L${targetX},${targetY - halfWidth}
+            L${sourceX},${sourceY - halfWidth}
+            Z
+          `}
+          fill={`url(#${gradId})`}
+          stroke="none"
+        />
+      </g>
+    );
+  };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-function CustomTooltip({ active, payload }: any) {
+function SankeyTooltip({ active, payload, variant = "dark" }: any) {
   if (!active || !payload?.length) return null;
   const item = payload[0];
   if (!item) return null;
 
+  const bg = variant === "light" ? "#FAFAFA" : "#111118";
+  const border = variant === "light" ? "#E0DCD4" : "#2a2a3a";
+  const titleColor = variant === "light" ? "#1A1A1A" : "#E0E0E5";
+  const dimColor = variant === "light" ? "rgba(26, 26, 26, 0.5)" : "rgba(160, 160, 176, 0.6)";
+  const font = MONO;
+
   // Node tooltip
   if (item.payload?.name && !item.payload?.source) {
-    const agent = NODE_AGENT[item.payload.name];
     return (
       <div
         className="rounded border px-3 py-2 shadow-lg"
-        style={{ backgroundColor: "#111118", borderColor: "#2a2a3a" }}
+        style={{ backgroundColor: bg, borderColor: border }}
       >
         <p
           className="text-[11px] font-bold tracking-wider"
-          style={{ fontFamily: MONO, color: "#E0E0E5" }}
+          style={{ fontFamily: font, color: titleColor }}
         >
           {item.payload.name}
         </p>
         <p
           className="mt-0.5 text-[10px]"
-          style={{ fontFamily: MONO, color: "rgba(160, 160, 176, 0.6)" }}
+          style={{ fontFamily: font, color: dimColor }}
         >
           {Number(item.payload.value ?? 0).toLocaleString()} names
         </p>
-        {agent && (
-          <p
-            className="mt-1 text-[9px]"
-            style={{ fontFamily: MONO, color: "rgba(160, 160, 176, 0.4)" }}
-          >
-            {agent}
-          </p>
-        )}
       </div>
     );
   }
@@ -248,17 +322,17 @@ function CustomTooltip({ active, payload }: any) {
   return (
     <div
       className="rounded border px-3 py-2 shadow-lg"
-      style={{ backgroundColor: "#111118", borderColor: "#2a2a3a" }}
+      style={{ backgroundColor: bg, borderColor: border }}
     >
       <p
         className="text-[10px] tracking-wider"
-        style={{ fontFamily: MONO, color: "rgba(160, 160, 176, 0.6)" }}
+        style={{ fontFamily: font, color: dimColor }}
       >
         {source} &rarr; {target}
       </p>
       <p
         className="mt-0.5 text-[11px] font-bold"
-        style={{ fontFamily: MONO, color: "#E0E0E5" }}
+        style={{ fontFamily: font, color: titleColor }}
       >
         {Number(value).toLocaleString()} names
       </p>
@@ -268,15 +342,14 @@ function CustomTooltip({ active, payload }: any) {
 
 // Detective tier display order + labels
 const TIER_ORDER = [
+  { key: "likely_match", label: "SUSPECTED EPSTEIN CONNECTION" },
   { key: "confirmed_match", label: "CONFIRMED MATCH" },
-  { key: "likely_match", label: "LIKELY MATCH" },
-  { key: "possible_match", label: "POSSIBLE MATCH" },
+  { key: "possible_match", label: "LIKELY CONNECTION" },
   { key: "needs_review", label: "NEEDS REVIEW" },
   { key: "no_match", label: "NO MATCH" },
   { key: "pending", label: "PENDING" },
 ];
 
-const STRENGTH_ORDER = ["HIGH", "MEDIUM", "LOW", "COINCIDENCE"];
 
 export function VerdictSankey({
   featuresTotal,
@@ -286,26 +359,31 @@ export function VerdictSankey({
   rejected,
   tierToConfirmed,
   tierToRejected,
-  strengthCounts,
+  variant = "dark",
 }: VerdictSankeyProps) {
   const mounted = useMounted();
+
+  // Memoize so Recharts render props are stable across re-renders
+  // (must be called before early return to satisfy rules-of-hooks)
+  const NodeRenderer = useMemo(() => makeCustomNode(variant), [variant]);
+  const LinkRenderer = useMemo(() => makeCustomLink(variant), [variant]);
+
   if (!mounted) return null;
 
   const anonymous = featuresTotal - crossRefsTotal;
   const dismissed = crossRefsTotal - dossiersTotal;
 
-  // Build nodes and links for a 6-stage funnel:
-  // Stage 0: FEATURES EXTRACTED → ANONYMOUS + CROSS-REFERENCED NAMES (Reader + Courier)
-  // Stage 1: CROSS-REFERENCED NAMES → DISMISSED + detective tiers (Detective)
+  // Build nodes and links for a 5-stage funnel:
+  // Stage 0: AD FEATURES SINCE 1988 → ANONYMOUS + HOMEOWNER NAMES (Reader + Courier)
+  // Stage 1: HOMEOWNER NAMES → DISMISSED + detective tiers (Detective)
   // Stage 2: detective tiers → DOSSIER BUILT (Researcher)
-  // Stage 3: DOSSIER BUILT → CONFIRMED + REJECTED (Editor)
-  // Stage 4: CONFIRMED → HIGH + MEDIUM + LOW + COINCIDENCE (Editor)
+  // Stage 3: DOSSIER BUILT → REJECTED + CONFIRMED (Editor)
 
   const nodes: { name: string }[] = [];
   const links: { source: number; target: number; value: number }[] = [];
 
   // Node 0: corpus entry
-  nodes.push({ name: "FEATURES EXTRACTED" });    // idx 0
+  nodes.push({ name: "AD FEATURES SINCE 1988" });    // idx 0
 
   // Node 1: anonymous (features without cross-referenced names)
   nodes.push({ name: "ANONYMOUS" });              // idx 1
@@ -313,7 +391,7 @@ export function VerdictSankey({
 
   // Node 2: cross-referenced names
   const xrefIdx = nodes.length;
-  nodes.push({ name: "CROSS-REFERENCED NAMES" }); // idx 2
+  nodes.push({ name: "HOMEOWNER NAMES" }); // idx 2
   links.push({ source: 0, target: xrefIdx, value: Math.max(crossRefsTotal, 1) });
 
   // Node 3: dismissed
@@ -349,31 +427,27 @@ export function VerdictSankey({
     if (total > 0) links.push({ source: tierIdx, target: dossierIdx, value: total });
   }
 
-  // Stage 3: editor verdicts
-  const confirmedIdx = nodes.length;
-  nodes.push({ name: "CONFIRMED" });
+  // Stage 3: editor verdicts (REJECTED first so it sits above CONFIRMED)
   const rejectedIdx = nodes.length;
   nodes.push({ name: "REJECTED" });
+  const confirmedIdx = nodes.length;
+  nodes.push({ name: "CONFIRMED EPSTEIN CONNECTION" });
 
-  // Link DOSSIER BUILT to CONFIRMED / REJECTED
-  if (confirmed > 0) links.push({ source: dossierIdx, target: confirmedIdx, value: confirmed });
+  // Link DOSSIER BUILT to REJECTED / CONFIRMED
   if (rejected > 0) links.push({ source: dossierIdx, target: rejectedIdx, value: rejected });
+  if (confirmed > 0) links.push({ source: dossierIdx, target: confirmedIdx, value: confirmed });
 
-  // Stage 4: connection strength from CONFIRMED
-  const strengthIndices: Record<string, number> = {};
-  for (const s of STRENGTH_ORDER) {
-    const count = strengthCounts[s] ?? 0;
-    if (count === 0) continue;
-    const idx = nodes.length;
-    nodes.push({ name: s });
-    strengthIndices[s] = idx;
-    links.push({ source: confirmedIdx, target: idx, value: count });
-  }
+  // Stage 4 (connection strength) omitted — CONFIRMED and REJECTED
+  // are terminal nodes, keeping them at the same column depth.
 
   const data = { nodes, links };
   const rejectionRate = crossRefsTotal > 0
     ? Math.round(((crossRefsTotal - confirmed) / crossRefsTotal) * 100)
     : 0;
+
+  const annotDim = variant === "light" ? "rgba(90, 90, 100, 0.5)" : "rgba(90, 90, 100, 0.55)";
+  const annotTeal = variant === "light" ? "rgba(1, 53, 57, 0.7)" : "rgba(1, 53, 57, 0.6)";
+  const annotFont = MONO;
 
   return (
     <div className="flex flex-col">
@@ -381,13 +455,13 @@ export function VerdictSankey({
       <div className="flex items-baseline gap-3 px-3 pb-1 pt-2">
         <p
           className="text-[9px] tracking-wider"
-          style={{ fontFamily: MONO, color: "rgba(160, 160, 176, 0.45)" }}
+          style={{ fontFamily: annotFont, color: annotDim }}
         >
           {featuresTotal.toLocaleString()} features &rarr; {crossRefsTotal.toLocaleString()} names cross-referenced
         </p>
         <p
           className="text-[9px] tracking-wider"
-          style={{ fontFamily: MONO, color: "rgba(155, 34, 38, 0.6)" }}
+          style={{ fontFamily: annotFont, color: annotTeal }}
         >
           {rejectionRate}% rejection rate
         </p>
@@ -402,11 +476,11 @@ export function VerdictSankey({
             linkCurvature={0.5}
             iterations={64}
             sort={false}
-            margin={{ top: 12, right: 80, bottom: 32, left: 10 }}
-            node={CustomNode}
-            link={CustomLink}
+            margin={{ top: 12, right: 120, bottom: 32, left: 10 }}
+            node={NodeRenderer}
+            link={LinkRenderer}
           >
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<SankeyTooltip variant={variant} />} />
           </Sankey>
         </ResponsiveContainer>
       </div>

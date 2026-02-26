@@ -1,4 +1,3 @@
-import { Separator } from "@/components/ui/separator";
 import { AestheticRadarCard } from "@/components/charts/AestheticRadarCard";
 import type { AestheticRadarData } from "@/lib/types";
 
@@ -14,7 +13,7 @@ interface EpsteinAestheticProps {
  */
 export function EpsteinAesthetic({ radarData }: EpsteinAestheticProps) {
   return (
-    <section id="epstein-aesthetic" className="bg-background pb-16 pt-14">
+    <section id="epstein-aesthetic" className="narrative bg-background pb-16 pt-14">
       <div
         className="mx-auto w-full"
         style={{
@@ -23,25 +22,12 @@ export function EpsteinAesthetic({ radarData }: EpsteinAestheticProps) {
           paddingRight: "var(--grid-margin)",
         }}
       >
-        {/* Section Header */}
-        <p
-          className="text-[11px] font-bold uppercase tracking-[0.15em]"
-          style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
-        >
-          Key Finding 02 (Cont.)
-        </p>
-        <h2
-          className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"
-          style={{ fontFamily: "futura-pt, sans-serif" }}
-        >
-          Is There an Epstein Aesthetic?
-        </h2>
+        <p className="n-label">Key Finding 02 (Cont.)</p>
+        <h2 className="n-title">2.2 Is There an Epstein Aesthetic?</h2>
+        <hr className="n-rule" />
 
-        <Separator className="mt-5" />
-
-        {/* Three-column: text | radar chart | text */}
-        <div className="mt-5 grid items-start gap-6 md:grid-cols-3">
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+        <div className="n-body n-body-narrow mt-5">
+          <p>
             When the homes of confirmed Epstein connections are analyzed as a
             group, a striking pattern emerges. Across six aesthetic dimensions
             &mdash; from architectural period to decorative philosophy &mdash;
@@ -51,10 +37,7 @@ export function EpsteinAesthetic({ radarData }: EpsteinAestheticProps) {
             decorative approach.
           </p>
 
-          {/* Center: Live radar chart */}
-          <AestheticRadarCard data={radarData} />
-
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+          <p>
             These patterns don&rsquo;t prove anything about the individuals
             themselves. But they do suggest that the intersection of extreme
             wealth, social proximity to Epstein, and a particular flavor of
@@ -62,6 +45,13 @@ export function EpsteinAesthetic({ radarData }: EpsteinAestheticProps) {
             measurable signal in the data &mdash; one that the following
             analysis quantifies across every confirmed home.
           </p>
+        </div>
+
+        {/* Live radar chart */}
+        <div className="mt-10 flex justify-center">
+          <div className="w-full" style={{ maxWidth: 480 }}>
+            <AestheticRadarCard data={radarData} />
+          </div>
         </div>
 
         {/* Diagram Placeholder */}

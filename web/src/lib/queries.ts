@@ -742,6 +742,7 @@ export interface CategoryConfirmedRow {
   name: string;
   category: string;
   connectionStrength: string | null;
+  featureId: number;
 }
 
 export interface CategorySummaryRow {
@@ -797,6 +798,7 @@ export async function getCategoryBreakdownData(): Promise<{
       name: (d.subject_name as string) ?? "Unknown",
       category: featureCategoryMap.get(d.feature_id as number) ?? "Other",
       connectionStrength: (d.connection_strength as string) ?? null,
+      featureId: d.feature_id as number,
     }))
     .sort((a, b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
 

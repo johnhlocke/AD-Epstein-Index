@@ -2,6 +2,7 @@
 
 import { useMounted } from "@/lib/use-mounted";
 import { CATEGORY_COLORS } from "@/lib/category-colors";
+import { CategorySkewChart } from "./CategorySkewChart";
 import { USMapDiagram } from "./USMapDiagram";
 import {
   ScatterChart,
@@ -194,174 +195,14 @@ export function ConfirmedTimeline({ data, categoryBreakdown }: ConfirmedTimeline
     return null;
   }
 
-  // Sort categories by Epstein percentage descending for visual impact
-  const sortedCategories = [...categoryBreakdown].sort(
-    (a, b) => b.epsteinPct - a.epsteinPct
-  );
-
-  const maxPct = Math.max(
-    ...sortedCategories.map((c) => Math.max(c.baselinePct, c.epsteinPct)),
-    1
-  );
-
   return (
     <div>
       {/* ── Three-column content ── */}
       <div className="grid items-start gap-6 md:grid-cols-3">
         {/* ── Left: Category dumbbell chart ── */}
         <div className="flex flex-col">
-          <div
-            className="h-[340px] overflow-hidden rounded border border-border shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
-            style={{ backgroundColor: "#FAFAFA" }}
-          >
-            <div className="flex h-full flex-col px-4 py-3">
-              {/* Legend */}
-              <div className="mb-3 flex items-center gap-4">
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block h-[8px] w-[8px] rounded-full border"
-                    style={{ backgroundColor: "#E8E8E8", borderColor: "#CCCCCC" }}
-                  />
-                  <span
-                    className="text-[8px] uppercase tracking-[0.08em] text-[#999]"
-                    style={{ fontFamily: "futura-pt, sans-serif" }}
-                  >
-                    AD Baseline
-                  </span>
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <span
-                    className="inline-block h-[8px] w-[8px] rounded-full"
-                    style={{ backgroundColor: "#B87333" }}
-                  />
-                  <span
-                    className="text-[8px] uppercase tracking-[0.08em] text-[#999]"
-                    style={{ fontFamily: "futura-pt, sans-serif" }}
-                  >
-                    Epstein Orbit
-                  </span>
-                </span>
-              </div>
-
-              {/* Chart area with grid + axes */}
-              <div className="flex flex-1 gap-2">
-                {/* Category labels column */}
-                <div className="flex shrink-0 flex-col justify-evenly" style={{ width: 62 }}>
-                  {sortedCategories.map((row) => {
-                    const colors = CATEGORY_COLORS[row.category] ?? CATEGORY_COLORS.Other;
-                    return (
-                      <span
-                        key={row.category}
-                        className="truncate rounded-sm px-1.5 py-0.5 text-right text-[10px] font-medium leading-tight"
-                        style={{ backgroundColor: colors.bg, color: colors.text }}
-                      >
-                        {row.category}
-                      </span>
-                    );
-                  })}
-                </div>
-
-                {/* Grid + dots area */}
-                <div className="relative flex-1" style={{ borderLeft: "1px solid #DCDCDC", borderBottom: "1px solid #DCDCDC" }}>
-                  {/* Full-height vertical grid lines */}
-                  {[0, 5, 10, 15, 20, 25, 30].filter(v => v > 0 && v <= maxPct).map((v) => (
-                    <div
-                      key={v}
-                      className="absolute top-0 bottom-0"
-                      style={{
-                        left: `${(v / maxPct) * 100}%`,
-                        width: 0.5,
-                        backgroundColor: "#ECECEC",
-                      }}
-                    />
-                  ))}
-
-                  {/* Dumbbell rows */}
-                  <div className="flex h-full flex-col justify-evenly">
-                    {sortedCategories.map((row) => {
-                      const lo = Math.min(row.baselinePct, row.epsteinPct);
-                      const hi = Math.max(row.baselinePct, row.epsteinPct);
-                      const epsteinHigher = row.epsteinPct >= row.baselinePct;
-                      return (
-                        <div key={row.category} className="relative" style={{ height: 20 }}>
-                          {/* Connecting bar between dots */}
-                          {lo !== hi && (
-                            <div
-                              className="absolute top-1/2 -translate-y-1/2 rounded-full"
-                              style={{
-                                left: `${(lo / maxPct) * 100}%`,
-                                width: `${((hi - lo) / maxPct) * 100}%`,
-                                height: 3,
-                                backgroundColor: epsteinHigher ? "#B8733366" : "#CCCCCC",
-                              }}
-                            />
-                          )}
-                          {/* Baseline dot */}
-                          <div
-                            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full border"
-                            style={{
-                              left: `${(row.baselinePct / maxPct) * 100}%`,
-                              width: 9,
-                              height: 9,
-                              backgroundColor: "#E8E8E8",
-                              borderColor: "#CCCCCC",
-                            }}
-                          />
-                          {/* Epstein dot */}
-                          <div
-                            className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
-                            style={{
-                              left: `${(row.epsteinPct / maxPct) * 100}%`,
-                              width: 11,
-                              height: 11,
-                              backgroundColor: "#B87333",
-                            }}
-                          />
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Percentage labels column */}
-                <div className="flex shrink-0 flex-col justify-evenly" style={{ width: 32 }}>
-                  {sortedCategories.map((row) => {
-                    const epsteinHigher = row.epsteinPct >= row.baselinePct;
-                    return (
-                      <span
-                        key={row.category}
-                        className="text-right text-[9px] font-medium tabular-nums"
-                        style={{
-                          fontFamily: "futura-pt, sans-serif",
-                          color: epsteinHigher ? "#8B5E2B" : "#999",
-                        }}
-                      >
-                        {row.epsteinPct}%
-                      </span>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Scale ticks — aligned under the grid area */}
-              <div className="relative flex items-center" style={{ marginLeft: 70, marginRight: 40, height: 14 }}>
-                <div className="relative w-full">
-                  {[0, 5, 10, 15, 20, 25, 30].filter(v => v <= maxPct).map((v) => (
-                    <span
-                      key={v}
-                      className="absolute -translate-x-1/2 text-[7px]"
-                      style={{
-                        left: `${(v / maxPct) * 100}%`,
-                        fontFamily: "futura-pt, sans-serif",
-                        color: "#A3A3A3",
-                      }}
-                    >
-                      {v}%
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
+          <div className="h-[340px]">
+            <CategorySkewChart data={categoryBreakdown} />
           </div>
           <p className="mt-2 font-serif text-[12px] italic leading-[1.5] text-[#737373]">
             The Epstein orbit skews heavily toward Business and Celebrity

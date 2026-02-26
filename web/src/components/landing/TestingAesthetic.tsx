@@ -1,5 +1,3 @@
-import { Separator } from "@/components/ui/separator";
-
 /**
  * G: Testing the Epstein Aesthetic — Finding 02 continued.
  *
@@ -8,7 +6,7 @@ import { Separator } from "@/components/ui/separator";
  */
 export function TestingAesthetic() {
   return (
-    <section id="testing" className="bg-background pb-16 pt-14">
+    <section id="testing" className="narrative bg-background pb-16 pt-14">
       <div
         className="mx-auto w-full"
         style={{
@@ -17,25 +15,12 @@ export function TestingAesthetic() {
           paddingRight: "var(--grid-margin)",
         }}
       >
-        {/* Section Header */}
-        <p
-          className="text-[11px] font-bold uppercase tracking-[0.15em]"
-          style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
-        >
-          Key Finding 02 (Cont.)
-        </p>
-        <h2
-          className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"
-          style={{ fontFamily: "futura-pt, sans-serif" }}
-        >
-          Testing the Epstein Aesthetic
-        </h2>
+        <p className="n-label">Key Finding 02 (Cont.)</p>
+        <h2 className="n-title">2.4 Testing: 9 East 71st Street</h2>
+        <hr className="n-rule" />
 
-        <Separator className="mt-5" />
-
-        {/* Three-column body — placeholder text */}
-        <div className="mt-5 grid gap-6 md:grid-cols-3">
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+        <div className="n-body n-body-narrow mt-5">
+          <p>
             If a distinct Epstein aesthetic exists, it should be predictable
             &mdash; identifiable from the design alone, without knowledge of the
             homeowner&rsquo;s identity or their documented connections. To test
@@ -44,7 +29,7 @@ export function TestingAesthetic() {
             identifying information and asked to predict whether the homeowner
             appeared in Epstein records.
           </p>
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+          <p>
             The results of this experiment are preliminary but suggestive. When
             a home scores high on Classical Grandeur, Formal decorative
             philosophy, and Euro-Centric cultural orientation simultaneously,
@@ -53,7 +38,7 @@ export function TestingAesthetic() {
             Epstein associate &mdash; but it does indicate that the aesthetic
             signal is real and statistically distinguishable.
           </p>
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+          <p>
             The diagrams below present the blind test results alongside
             confidence scores for each prediction dimension. These findings
             should be interpreted with appropriate caution &mdash; the confirmed

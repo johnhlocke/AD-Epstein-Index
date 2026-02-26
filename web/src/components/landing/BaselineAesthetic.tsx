@@ -1,4 +1,3 @@
-import { Separator } from "@/components/ui/separator";
 import { FeltronAreaCharts } from "@/components/charts/FeltronAreaChart";
 import { AestheticRadarTimelapse } from "@/components/charts/AestheticRadarTimelapse";
 
@@ -447,7 +446,7 @@ function EraHeatmap() {
 
 export function BaselineAesthetic() {
   return (
-    <section className="bg-background pb-16 pt-14" id="baseline">
+    <section className="narrative bg-background pb-16 pt-14" id="baseline">
       <div
         className="mx-auto w-full"
         style={{
@@ -456,25 +455,12 @@ export function BaselineAesthetic() {
           paddingRight: "var(--grid-margin)",
         }}
       >
-        {/* Section Header */}
-        <p
-          className="text-[11px] font-bold uppercase tracking-[0.15em]"
-          style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
-        >
-          Key Finding 02
-        </p>
-        <h2
-          className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"
-          style={{ fontFamily: "futura-pt, sans-serif" }}
-        >
-          Determining the AD Baseline Aesthetic
-        </h2>
+        <p className="n-label">Key Finding 02</p>
+        <h2 className="n-title">2.1 Determining the AD Baseline Aesthetic</h2>
+        <hr className="n-rule" />
 
-        <Separator className="mt-5" />
-
-        {/* ── Three-column prose ── */}
-        <div className="mt-5 grid gap-6 md:grid-cols-3">
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+        <div className="n-body n-body-narrow mt-5">
+          <p>
             Before we can identify an Epstein aesthetic, we need to know what
             Architectural Digest homes look like in general. We scored every
             feature in the archive &mdash; 3,763 homes spanning 37 years &mdash;
@@ -483,7 +469,7 @@ export function BaselineAesthetic() {
             AD&rsquo;s editorial aesthetic ever assembled.
           </p>
 
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+          <p>
             The data reveals a clear editorial identity. AD homes are overwhelmingly
             warm (mean&nbsp;4.12/5 on Material Warmth), richly layered with objects
             in dialogue (Maximalism&nbsp;3.60), and professionally curated
@@ -492,7 +478,7 @@ export function BaselineAesthetic() {
             leather &mdash; shaped by a designer&rsquo;s hand.
           </p>
 
-          <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
+          <p>
             Critically, AD homes do <em>not</em> perform wealth for an outside
             audience. Theatricality is the lowest-scoring axis at 2.37, with 60%
             of features scoring 1 or 2. The correlation structure confirms two
@@ -509,7 +495,7 @@ export function BaselineAesthetic() {
           <div className="md:col-span-2 flex justify-center">
             <div className="w-full" style={{ maxWidth: 560 }}>
               <AestheticRadarTimelapse />
-              <p className="mt-2 font-serif text-[12px] italic leading-[1.5] text-[#737373]">
+              <p className="n-caption">
                 37 years of AD&rsquo;s aesthetic identity, year by year. Watch how
                 Material Warmth dominates throughout while Historicism and Formality
                 steadily contract &mdash; the magazine&rsquo;s shift from traditional
@@ -520,7 +506,7 @@ export function BaselineAesthetic() {
 
           <div className="flex flex-col">
             <DistributionChart />
-            <p className="mt-2 font-serif text-[12px] italic leading-[1.5] text-[#737373]">
+            <p className="n-caption">
               Material Warmth dominates at 4.12 &mdash; nearly 80% of AD homes
               score 4 or 5. Theatricality clusters at the opposite end: the
               magazine consistently publishes homes that don&rsquo;t perform.
@@ -531,7 +517,7 @@ export function BaselineAesthetic() {
 
           <div className="flex flex-col">
             <EraHeatmap />
-            <p className="mt-2 font-serif text-[12px] italic leading-[1.5] text-[#737373]">
+            <p className="n-caption">
               The largest temporal shift is Historicism, dropping 0.9 points
               over 37 years as AD moved from traditional period rooms to
               contemporary design. Formality fell 0.5 points. Curation rose
@@ -545,7 +531,7 @@ export function BaselineAesthetic() {
         {/* ── Feltron-style temporal charts ── */}
         <div className="mt-10">
           <FeltronAreaCharts />
-          <p className="mt-3 font-serif text-[12px] italic leading-[1.5] text-[#737373]">
+          <p className="n-caption">
             Three-year rolling averages across 3,763 scored features. Each
             chart shows one axis group (SPACE / STORY / STAGE) with its
             three sub-metrics overlaid. The organic separation between
