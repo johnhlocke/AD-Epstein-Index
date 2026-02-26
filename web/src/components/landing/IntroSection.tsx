@@ -71,7 +71,7 @@ function Sidenote({
     <>
       {/* eslint-disable-next-line @next/next/no-img-element */}
       {image && <img src={image} alt={imageAlt || ""} className="s-note-img" />}
-      <p className="s-note-title" style={{ color: "#1A1A1A" }}>
+      <p className="s-note-title">
         {num != null && <span className="s-note-num" style={{ textTransform: "none" }}>i{num}.&nbsp;</span>}
         {title}
       </p>
@@ -175,19 +175,8 @@ function usePreventSidenoteOverlap(
         margin.style.top = `${top}px`;
       }
 
-      // ── Phase 5: Extend section if last sidenote overflows past content ──
-      // Re-measure after positions applied (padding was reset in Phase 1)
-      if (positions.length > 0) {
-        const freshSectionRect = el.getBoundingClientRect();
-        const contentBottom = freshSectionRect.bottom; // bottom of section without extra padding
-        let maxNoteBottom = 0;
-        for (const { margin } of positions) {
-          const r = margin.getBoundingClientRect();
-          if (r.bottom > maxNoteBottom) maxNoteBottom = r.bottom;
-        }
-        const overflow = maxNoteBottom - contentBottom + 40; // 40px breathing room
-        el.style.paddingBottom = overflow > 0 ? `${overflow}px` : "";
-      }
+      // Sidenotes extend past section bottom via absolute positioning.
+      // Both sections share bg-background so they render seamlessly.
     };
 
     // Run layout after fonts/images are ready, plus a fallback at 500ms
@@ -286,7 +275,8 @@ export function IntroSection({ stats }: IntroSectionProps) {
           legitimized as sitting at the intersection of culturally visible wealth
           and tastemaking. They are the wealthy who collect art, build
           foundations, sit on museum boards, host Met Galas, and commission named
-          architects. Their homes are meant to be seen. Their wealth performs
+          architects. They&rsquo;re not wearing hoodies and hiding in
+          Silicon Valley. Their homes are meant to be seen. Their wealth performs
           through design. This has been true since Veblen coined the term
           &ldquo;<em>conspicuous consumption</em>&rdquo; in 1899.
           <NoteArrow num={2} /> For the home to serve as the primary theater of
@@ -680,11 +670,12 @@ export function IntroSection({ stats }: IntroSectionProps) {
         }
       >
         <p>
-          The question is not whether the overlap is statistically
+          The question is not whether this overlap is statistically
           anomalous&mdash;institutions that select for dominant-class habitus
-          will independently converge on the same limited population. The
-          question is whether the connected homes share a distinguishable design
-          profile. To test that, this project developed a scoring instrument.
+          will independently converge on the same limited population. The more
+          productive questions are: who are these people, and do
+          their homes share a distinguishable aesthetic signature? What
+          follows begins with the names.
         </p>
       </SidenoteBlock>
     </div>
