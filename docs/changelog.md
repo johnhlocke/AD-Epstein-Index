@@ -6,6 +6,23 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-26 (Session 53)
+
+### Added — NULL Name Resolution & Wealth Origin Research
+
+- **`src/opus_name_recovery.py`** — Complete rewrite: JSONL output (no auto-DB writes), `--apply`/`--apply --names` modes, resume support (skips processed IDs), Azure Blob image fallback via JWT TOC decoding, `--model` flag (default Opus), `--stats` summary mode. Queries only NULL/empty/string-"null" features (not Anonymous). 862 features processed → all genuinely anonymous (zero names recoverable), $60.31 cost
+- **`src/research_classify.py`** — New 1,320-line wealth origin classification pipeline using Gemini Search Grounding (3 parallel web research passes per name) + Opus synthesis. Forbes Self-Made Score (1-10), generational wealth tracking, education/board membership extraction. Supports `--model`, `--split first/second` (parallel runs with different models), `--resume` (now only skips classified names, not failed UNKNOWN entries), `--report`, `--dry-run`. Multi-model tested: Gemini 3 Pro Preview, 3 Flash Preview, 2.5 Pro, 2.5 Flash
+
+### Changed
+
+- **Resume logic fix** in `research_classify.py` — `--resume` now only counts successfully classified names as "done", not failed UNKNOWN entries. Previously, quota-exhausted 429 failures were treated as completed, preventing retry
+
+### Database
+
+- **862 features updated** — All NULL `homeowner_name` features set to "Anonymous" with `subject_category` assigned (Business, Private, Celebrity, Art, Socialite, etc.). Zero NULL homeowner names remain in database
+
+---
+
 ## 2026-02-24 (Session 52)
 
 ### Added — Introduction Section & Hero Mosaic

@@ -188,6 +188,9 @@ This file should be automatically updated when necessary to answer three key que
 | Abstract redesign (drop cap, 3-column Lora serif, methodology overview) | Phase 3 | Done |
 | Textured SVG Venn diagram (halftone + hatching, dynamic data) | Phase 3 | Done |
 | Stats grid removed (conveyed through prose instead) | Phase 3 | Done |
+| NULL name resolution (862 features → Anonymous) | Phase 1 | Done |
+| Wealth origin classification pipeline (research_classify.py) | Phase 2 | In Progress |
+| Multi-model Gemini research (3 Flash, 2.5 Pro, 2.5 Flash) | Phase 2 | In Progress |
 
 ## 2. What's Been Accomplished
 
@@ -358,16 +361,15 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 - Key demographic finding: Socialites 3.5x overrepresented in Epstein orbit vs general AD baseline
 - CLAUDE.md rewritten to reflect actual project state (multi-agent system, deployment, current stats)
 
-**In Progress — Score + Cross-Reference New Features:**
-- Opus Vision scoring: 1,306 features queued (298 never-scored + 1,008 rescoring for subject_category). Running at ~162/hr, ~$130 projected.
-- ~427 features have genuinely anonymous homeowners (Opus tried with full prompt, no name found). Mostly pre-2010 issues.
-- Image data now clean: spread data ground truth for 3,642 features, all wrong images removed, missing pages downloaded. 133 features without spread data (department home tours, AD VISITS) retain original images. 297 unmatched fully resolved (164 deleted, 133 kept).
-- After scoring: cross-reference all new homeowner names against BB + DOJ
-- Run Detective → Researcher → Editor pipeline on new hits
+**In Progress — Wealth Origin Study & Final Pipeline:**
+- **NULL name resolution COMPLETE**: 862 NULL features processed by Opus Vision → all genuinely anonymous. Applied to Supabase. Zero NULL homeowner names remain.
+- **Wealth origin classification**: 421/600 baseline names classified so far. Multi-model Gemini pipeline (3 Flash Preview + 2.5 Pro). Remaining ~398 names processing now.
+  - Key finding so far: MIXED wealth (inherited platform + self-amplified) ~2x overrepresented in Epstein orbit (25.9% vs 13.3% baseline)
+  - Forbes Self-Made Score mean: 5.88 (baseline), bimodal peaks at 3 and 7-8
+- Opus Vision scoring: COMPLETE (3,772/3,772 at v2.3)
 - Test-retest validation COMPLETE: 3 runs × 100 features, 91.1% exact agreement, 100% within ±1, ICC 0.949–0.991 ("Excellent"), $34.89
 - Inter-model reliability COMPLETE: 100 features × Sonnet + Haiku, Opus-Sonnet ICC 0.805, 96.8% within ±1, $4.35
 - Validate with human calibration set (25-30 features)
-- Opus name recovery: Only safe on features with verified article-specific images. 26/27 previous recoveries were cross-contamination (reverted). Need to re-run on clean images.
 
 **Phase 1 — AD Database: COMPLETE**
 - ~~Source additional AD issues beyond archive.org~~ **Done** (AD Archive covers all 456+ issues)

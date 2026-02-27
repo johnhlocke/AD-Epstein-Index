@@ -388,9 +388,12 @@ Examine every page image carefully. Score this home on each of the 9 axes below 
 
 ═══ STRUCTURAL DATA (extract from text/captions) ═══
 Extract these fields from what you can read in the article pages:
-- homeowner_name, designer_name, architecture_firm
-  IMPORTANT: designer_name must be a DIFFERENT person than the homeowner. If the homeowner
-  designed their own home (no distinct designer/architect credited), return null for designer_name.
+- homeowner_name: The person who LIVES IN or OWNS this home. Not the designer or architect.
+- designer_name: The INTERIOR DESIGNER only (credited as "Interior Design by" or "Design by").
+  Do NOT put the architect here. If no separate interior designer is credited, return null.
+  Must be a DIFFERENT person than the homeowner. If the homeowner designed their own home, return null.
+- architecture_firm: The ARCHITECT or architecture firm (credited as "Architecture by").
+  These are often different people from the interior designer. Read the credit line carefully.
 - location_city, location_state, location_country
 - design_style (free text), year_built, square_footage, cost
 - article_author (the writer's name, usually in a byline)
