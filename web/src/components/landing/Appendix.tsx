@@ -64,6 +64,13 @@ const appendixItems = [
     description:
       "Individual-level data behind Fig. 4: Forbes Self-Made Score (1–10) for all 445 classified individuals.",
   },
+  {
+    letter: "J",
+    title: "Agent Office Demo",
+    href: "/demo",
+    description:
+      "Live interactive demo of the Agent Office dashboard (Fig. 12).",
+  },
 ];
 
 export function Appendix() {

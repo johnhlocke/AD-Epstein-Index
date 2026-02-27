@@ -17,7 +17,7 @@ export function DossierExample() {
         }}
       >
         <p className="n-label">Example Dossier</p>
-        <h2 className="n-title">1.3 What a Confirmed Connection Looks Like</h2>
+        <h2 className="n-title">1.4 The Epstein Profile vs the AD Baseline</h2>
         <hr className="n-rule" />
 
         {/* Two-column layout */}

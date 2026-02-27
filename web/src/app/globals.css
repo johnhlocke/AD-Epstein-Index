@@ -177,8 +177,8 @@ html {
 .s-title {
   margin-top: 0.75rem;
   font-family: var(--font-jetbrains-mono), monospace;
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 28px;
+  font-weight: 900;
   line-height: 1.1;
   letter-spacing: -0.025em;
   color: #E0E0E5;
@@ -187,7 +187,7 @@ html {
 .s-subtitle {
   margin-top: 0.75rem;
   font-family: var(--font-jetbrains-mono), monospace;
-  font-size: 15px;
+  font-size: 17px;
   line-height: 1.4;
   color: #A0A0B0;
   max-width: var(--content-narrow);

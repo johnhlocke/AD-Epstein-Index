@@ -265,7 +265,8 @@ export function HeroSection({ stats, mosaic }: HeroSectionProps) {
             {/* ── Finding 01: The Names ── */}
             <TocSection num="1" title="Finding 01: The Names" href="#finding-01" firstSub={{ label: "Who Are They?", num: "1.1", href: "#key-finding" }}>
               <TocSub label="What, When and Where Are They" num="1.2" href="#timeline" />
-              <TocSub label="What a Confirmed Connection Looks Like" num="1.3" href="#dossier-example" />
+              <TocSub label="What a Typical AD Homeowner Looks Like" num="1.3" href="#typical-homeowner" />
+              <TocSub label="The Epstein Profile vs the AD Baseline" num="1.4" href="#dossier-example" />
             </TocSection>
 
             {/* ── Finding 02: The Aesthetic ── */}

@@ -39,6 +39,14 @@ export function Footer() {
               <a href="/api/stats" className="hover:text-foreground transition-colors">
                 Stats API
               </a>
+              <a
+                href="https://github.com/johnhlocke/AD-Epstein-Index"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="hover:text-foreground transition-colors"
+              >
+                GitHub
+              </a>
             </div>
           </div>
         </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { VerdictSankey } from "@/components/charts/VerdictSankey";
 
@@ -22,6 +22,17 @@ const COPPER = "rgba(184, 115, 51, 0.85)";         // #B87333 — on-system copp
 const COPPER_DIM = "rgba(184, 115, 51, 0.25)";
 const SLATE = "rgba(74, 124, 143, 0.85)";          // #4A7C8F — on-system slate
 const SLATE_DIM = "rgba(74, 124, 143, 0.2)";
+// Category accent colors (warm family)
+const CAT_AMBER = "rgba(212, 160, 23, 0.9)";         // #D4A017 — investigation
+const CAT_COPPER = "rgba(195, 120, 55, 0.9)";        // #C37837 — agents
+const CAT_TERRA = "rgba(180, 100, 82, 0.9)";         // #B46452 — dashboard
+const CAT_AMBER_DIM = "rgba(212, 160, 23, 0.25)";
+const CAT_COPPER_DIM = "rgba(195, 120, 55, 0.25)";
+const CAT_TERRA_DIM = "rgba(180, 100, 82, 0.25)";
+const CAT_COLORS = [CAT_AMBER, CAT_COPPER, CAT_TERRA] as const;
+const CAT_COLORS_DIM = [CAT_AMBER_DIM, CAT_COPPER_DIM, CAT_TERRA_DIM] as const;
+/** Map 1-indexed hotspot number → category color index (0=investigation, 1=agents, 2=dashboard) */
+const catColorIdx = (num: number) => num >= 8 ? 2 : num >= 4 ? 1 : 0;
 const CONTENT_NARROW = "var(--content-narrow)";    // 4-of-6 grid columns for prose
 
 // ── Grid-aware divider — full-width hairline with tick marks at gutter centers ─
@@ -218,45 +229,6 @@ const subAgents = [
   },
 ];
 
-const dataSources = [
-  {
-    title: "Archive.org",
-    description: "Full archive of Architectural Digest magazine issues (1988–2025). PDFs and page images extracted programmatically.",
-    url: "https://archive.org",
-    tag: "PRIMARY",
-  },
-  {
-    title: "DOJ Epstein Library",
-    description: "The U.S. Department of Justice's complete public release of Epstein-related documents, searchable via OCR.",
-    url: "https://www.justice.gov/epstein",
-    tag: "PRIMARY",
-  },
-  {
-    title: "Epstein's Little Black Book",
-    description: "~1,500 names and contact details from Epstein's personal address book, released as part of civil litigation.",
-    url: null,
-    tag: "PRIMARY",
-  },
-  {
-    title: "Supabase",
-    description: "PostgreSQL database hosting all extracted features, cross-references, dossiers, and pipeline state. Server-side only.",
-    url: "https://supabase.com",
-    tag: "INFRA",
-  },
-  {
-    title: "Neo4j Aura",
-    description: "Graph database storing the knowledge graph — people, designers, locations, and their relationships across 28 years.",
-    url: "https://neo4j.com",
-    tag: "INFRA",
-  },
-  {
-    title: "GitHub Repository",
-    description: "Full source code for the multi-agent pipeline, website, and analysis tools. Open for inspection.",
-    url: "https://github.com",
-    tag: "CODE",
-  },
-];
-
 // ── Reusable sub-components ─────────────────────────────────────────────────
 
 function SectionHeader({
@@ -269,21 +241,20 @@ function SectionHeader({
   num: string;
   title: string;
   subtitle: string;
-  intro: string[];
+  intro: React.ReactNode[];
   summary: string;
 }) {
   return (
     <div>
-      <p className="s-label">SECTION {num}</p>
-      <h3 className="s-title">{title}</h3>
+      <p className="s-label">AI AGENT METHODOLOGY</p>
+      <h3 className="s-title">{num} {title}</h3>
       <p className="s-subtitle">{subtitle}</p>
-      <GridDivider startTick endTick />
 
       {/* Intro paragraphs — 4 grid columns wide */}
       <div className="s-body">
-        {intro.map((p, i) => (
-          <p key={i}>{p}</p>
-        ))}
+        {intro.map((p, i) =>
+          typeof p === "string" ? <p key={i}>{p}</p> : <React.Fragment key={i}>{p}</React.Fragment>
+        )}
         <p className="s-summary-label">Summary</p>
         <p className="-mt-2">{summary}</p>
       </div>
@@ -384,6 +355,189 @@ function NoteArrow() {
   return <span className="s-note-arrow hidden md:inline">{" "}&#9656;</span>;
 }
 
+// ── Agent Office interactive image with keyword buttons ─────────────────────
+
+// Grouped: 1–3 Investigation, 4–7 Agents, 8–11 Dashboard
+const OFFICE_HOTSPOTS = [
+  // Category 1: The Investigation
+  { key: "graph", label: "Discovery Map", x: 84, y: 17, desc: "This is the hero panel. A live Neo4j knowledge graph where nodes and edges appear as the pipeline discovers connections is visually compelling and conceptually immediate. The data structure and the narrative converge\u2014you\u2019re literally watching a social network map itself." },
+  { key: "leads", label: "Current Leads", x: 88, y: 81, desc: "This is where the user sees the investigation actively moving forward. Names waiting for cross-reference, dossiers in progress, verdicts pending editorial review. Each lead shows name, date, location, and current status." },
+  { key: "inbox", label: "Editor Inbox", x: 13, y: 93, desc: "This is the trust panel. This is where the Shneiderman argument is realized: \u201cThe human operator can message Miranda directly from here, and engage in 1-on-1 conversation.\u201d Full automation and the ability to intervene. This is the panel that distinguishes this system from a black box." },
+  // Category 2: The Agents
+  { key: "scout", label: "Scout Agent", x: 35, y: 37, desc: "This is a little charming panel. \u201cEach agent has a desk, a personality, and a visible workload. The pixel-art office makes system state legible at a glance.\u201d The ReAct states become visible agent poses\u2014not log lines\u2014making process visual and functionally smart. The \u201cPersonality as Architecture\u201d argument manifests here." },
+  { key: "network", label: "Agent Network", x: 15, y: 13, desc: "Hierarchical org chart showing all seven agents with real-time status indicators. Miranda (Editor) at the hub, six specialist agents radiating outward showing their current task and health." },
+  { key: "chatter", label: "Newsroom Chatter", x: 14, y: 46, desc: "Shared bulletin board where agents post warnings, discoveries, and cross-agent signals. The closest thing the system has to a watercooler." },
+  { key: "activity", label: "Activity Log", x: 88, y: 51, desc: "Per-agent action stream with timestamps. Filterable by agent. It\u2019s important but essentially just logs of every API call, every decision, every retry, etc." },
+  // Category 3: The Dashboard
+  { key: "costs", label: "API Cost Dashboard", x: 48, y: 8, desc: "Real-time spend tracking across all four AI models (Opus, Sonnet, Haiku, Gemini). Per-agent cost breakdown so you can see exactly where the budget goes." },
+  { key: "chalkboard", label: "Pipeline Scoreboard", x: 33, y: 12, desc: "The chalkboard starts with a calendar of 470 red boxes representing each missing AD issue. As the Scout finds the issues and extracts the metadata, this red wall turns green. Here, Scout has found all issues." },
+  { key: "status", label: "Status Panels", x: 45, y: 97, desc: "Bottom panels show overall pipeline totals: issues discovered, features extracted, names checked, homeowners identified, confirmed connections, and total runtime." },
+  { key: "completed", label: "Completed / Failed", x: 58, y: 12, desc: "Red LED scoreboard tracking completed vs. failed tasks across the pipeline. A quick visual health check \u2014 if the failure count spikes, something needs attention." },
+];
+
+function AgentOfficeImage() {
+  const [active, setActive] = React.useState<string | null>(null);
+
+  return (
+    // eslint-disable-next-line jsx-a11y/click-events-have-key-events, jsx-a11y/no-static-element-interactions
+    <div
+      className="relative mt-4 rounded border"
+      style={{ borderColor: BORDER }}
+      onClick={(e) => { if (e.target === e.currentTarget) setActive(null); }}
+    >
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src="/agent-office-ui.png?v=2"
+        alt="Agent Office — real-time pixel-art dashboard showing all seven agents, their status, and pipeline metrics"
+        className="w-full"
+      />
+
+      {/* Numbered circle buttons */}
+      {OFFICE_HOTSPOTS.map((h, i) => {
+        const accent = CAT_COLORS[catColorIdx(i + 1)];
+        const accentDim = CAT_COLORS_DIM[catColorIdx(i + 1)];
+        return (
+        <div key={h.key} className="absolute" style={{ left: `${h.x}%`, top: `${h.y}%`, transform: "translate(-50%, -50%)" }}>
+          <button
+            onClick={(e) => { e.stopPropagation(); setActive(active === h.key ? null : h.key); }}
+            className="flex h-[22px] w-[22px] items-center justify-center rounded-full transition-all"
+            style={{
+              backgroundColor: accent,
+              border: "1.5px solid #fff",
+            }}
+          >
+            <span className="text-[12px] font-bold" style={{ fontFamily: MONO, color: "#fff" }}>
+              {i + 1}
+            </span>
+          </button>
+
+          {/* Popover */}
+          {active === h.key && (
+            <div
+              className="absolute z-20 w-[200px] rounded border p-3"
+              style={{
+                backgroundColor: "rgba(17, 17, 24, 0.95)",
+                borderColor: GOLD_DIM,
+                backdropFilter: "blur(8px)",
+                top: "calc(100% + 6px)",
+                left: "50%",
+                transform: "translateX(-50%)",
+                boxShadow: `0 4px 16px rgba(0,0,0,0.5), 0 0 0 1px ${GOLD_DIM}`,
+              }}
+            >
+              <p className="text-[9px] font-bold uppercase tracking-[0.1em]" style={{ fontFamily: MONO, color: GOLD }}>
+                {h.label}
+              </p>
+              <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                {h.desc}
+              </p>
+            </div>
+          )}
+        </div>
+      ); })}
+    </div>
+  );
+}
+
+// ── Shneiderman 2×2 HCAI Matrix ────────────────────────────────────────────
+function ShneidermanMatrix() {
+  const CELL = {
+    padding: "16px 18px",
+    fontFamily: MONO,
+  } as const;
+
+  const quadrants = [
+    { title: "HUMAN MASTERY", examples: "Bicycles, pianos, hand tools", row: 1, col: 1, highlight: false },
+    { title: "RELIABLE, SAFE &\nTRUSTWORTHY", examples: "Smart thermostats, digital cameras\nwith manual override", row: 1, col: 2, highlight: true },
+    { title: "MINIMAL SYSTEMS", examples: "Land mines, simple clocks", row: 2, col: 1, highlight: false },
+    { title: "RAPID ACTION /\nFULL AUTOMATION", examples: "Pacemakers, airbags,\nautopilot systems", row: 2, col: 2, highlight: false },
+  ];
+
+  return (
+    <div>
+      <div
+        className="rounded"
+        style={{
+          border: `1px solid ${BORDER}`,
+          backgroundColor: "#111118",
+          display: "grid",
+          gridTemplateColumns: "28px 1fr 1fr",
+          gridTemplateRows: "28px 1fr 1fr",
+        }}
+      >
+        {/* Top-left corner — empty */}
+        <div />
+
+        {/* X-axis column headers */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", borderBottom: `1px solid ${BORDER}` }}>
+          <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", color: TEXT_DIM }}>
+            Low Automation
+          </span>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", borderBottom: `1px solid ${BORDER}` }}>
+          <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", color: TEXT_DIM }}>
+            High Automation
+          </span>
+        </div>
+
+        {/* Row 1: High Control */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${BORDER}`, writingMode: "vertical-rl", transform: "rotate(180deg)" }}>
+          <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", color: TEXT_DIM, whiteSpace: "nowrap" }}>
+            High Control
+          </span>
+        </div>
+        {quadrants.filter(q => q.row === 1).map(q => (
+          <div
+            key={q.title}
+            style={{
+              ...CELL,
+              borderRight: q.col === 1 ? `1px solid ${BORDER}` : undefined,
+              borderBottom: `1px solid ${BORDER}`,
+              backgroundColor: q.highlight ? "rgba(184,134,11,0.08)" : undefined,
+              border: q.highlight ? `2px solid ${GOLD}` : undefined,
+            }}
+          >
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: q.highlight ? GOLD : TEXT_MID, whiteSpace: "pre-line", lineHeight: 1.4 }}>
+              {q.title}
+            </p>
+            <p style={{ fontSize: 9, color: TEXT_DIM, marginTop: 6, whiteSpace: "pre-line", lineHeight: 1.5 }}>
+              {q.examples}
+            </p>
+          </div>
+        ))}
+
+        {/* Row 2: Low Control */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", borderRight: `1px solid ${BORDER}`, writingMode: "vertical-rl", transform: "rotate(180deg)" }}>
+          <span style={{ fontFamily: MONO, fontSize: 8, letterSpacing: "0.08em", textTransform: "uppercase", color: TEXT_DIM, whiteSpace: "nowrap" }}>
+            Low Control
+          </span>
+        </div>
+        {quadrants.filter(q => q.row === 2).map(q => (
+          <div
+            key={q.title}
+            style={{
+              ...CELL,
+              borderRight: q.col === 1 ? `1px solid ${BORDER}` : undefined,
+            }}
+          >
+            <p style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase", color: TEXT_MID, whiteSpace: "pre-line", lineHeight: 1.4 }}>
+              {q.title}
+            </p>
+            <p style={{ fontSize: 9, color: TEXT_DIM, marginTop: 6, whiteSpace: "pre-line", lineHeight: 1.5 }}>
+              {q.examples}
+            </p>
+          </div>
+        ))}
+      </div>
+
+      {/* Caption */}
+      <p style={{ fontFamily: MONO, fontSize: 8, color: TEXT_DIM, marginTop: 8, lineHeight: 1.6 }}>
+        <span style={{ color: TEXT_MID }}>Fig. 22</span> &mdash; Adapted from Shneiderman (2022), <em>Human-Centered AI</em>. This project targets the upper-right quadrant: high automation with high human control.
+      </p>
+    </div>
+  );
+}
+
 // ── Main component ──────────────────────────────────────────────────────────
 
 /**
@@ -470,6 +624,450 @@ function usePreventSidenoteOverlap(ref: React.RefObject<HTMLElement | null>) {
     window.addEventListener("resize", layout);
     return () => window.removeEventListener("resize", layout);
   }, [ref]);
+}
+
+// ── DesignDialogue — transcript of human-AI design collaboration ────────────
+type DialogueMessage = { speaker: "user" | "sable"; text: string; time?: string };
+type DialoguePhase = {
+  num: number;
+  label: string;
+  precision: string;
+  annotation: string;
+  curated: DialogueMessage[];
+  expanded: DialogueMessage[];
+};
+
+const DIALOGUE_PHASES: DialoguePhase[] = [
+  {
+    num: 1,
+    label: "Content Direction",
+    precision: "Content direction",
+    annotation: "No measurements. The user communicates intent through references to existing work.",
+    curated: [
+      { speaker: "user", text: "Add this image above the hub-and-spoke sidenote. Use a similar layout to section 2.", time: "14:22" },
+      { speaker: "sable", text: "I\u2019ll place it in a captioned figure block matching the section 2 pattern \u2014 full-width image with a Fig. number and italic caption below.", time: "14:22" },
+      { speaker: "user", text: "Remove fig. 5.", time: "14:31" },
+    ],
+    expanded: [
+      { speaker: "user", text: "In the Autonomy Boundary sidenote, delete this line: \u2018The design agent cannot push to production.\u2019", time: "14:35" },
+      { speaker: "sable", text: "Done. The sidenote now ends at the preceding sentence.", time: "14:35" },
+    ],
+  },
+  {
+    num: 2,
+    label: "First Collision",
+    precision: "Relative terms",
+    annotation: "The user encounters the Figma-to-web rendering gap. Text that looked fine in Figma is illegible at localhost resolution.",
+    curated: [
+      { speaker: "user", text: "Re-export Fig. 5. The text is not legible on localhost. Make all of the text double the size.", time: "15:03" },
+      { speaker: "sable", text: "Doubling all text layers now. The issue is that Figma\u2019s canvas renders at 1x but the export gets downscaled by the browser.", time: "15:04" },
+      { speaker: "user", text: "Try to export again, give it a different filename so it will force refresh.", time: "15:11" },
+    ],
+    expanded: [
+      { speaker: "sable", text: "Exported as fig5-v2.svg. The text should be legible now at 2x the original sizes.", time: "15:12" },
+      { speaker: "user", text: "Better, but the labels on the left are still too small relative to the diagram headers.", time: "15:18" },
+    ],
+  },
+  {
+    num: 3,
+    label: "Rule Formation",
+    precision: "Rule formation",
+    annotation: "The inflection point. The user derives a general rule from specific observation \u2014 the first reusable specification.",
+    curated: [
+      { speaker: "user", text: "Ah I see. Ok for text to be legible in localhost, it needs to be a minimum of 32px in Figma. Use that as the smallest text and then start from there.", time: "15:24" },
+      { speaker: "sable", text: "32px minimum established. Building the type hierarchy from there: labels 32px, sub-headers 40px, main headers 56px.", time: "15:24" },
+    ],
+    expanded: [
+      { speaker: "user", text: "Good. Apply that rule to all three diagrams, not just this one.", time: "15:30" },
+      { speaker: "sable", text: "Applying 32px floor across hub-and-spoke, decentralized, and absent infrastructure diagrams. Scaling proportionally.", time: "15:31" },
+    ],
+  },
+  {
+    num: 4,
+    label: "Cross-System Consistency",
+    precision: "Cross-referencing",
+    annotation: "Rules become relational. Values are defined not in isolation but relative to other elements across diagrams.",
+    curated: [
+      { speaker: "user", text: "Let\u2019s bump all of the lineweights up 2x. Also make \u2018Shared Systems\u2019 the same size as \u2018Absent Infrastructure\u2019 in the other diagram.", time: "16:02" },
+      { speaker: "sable", text: "Lineweights doubled. \u2018Shared Systems\u2019 header matched to \u2018Absent Infrastructure\u2019 at 56px.", time: "16:03" },
+      { speaker: "user", text: "Undo that, why are the agent boxes filled in now? I only wanted the text inside to not overlap.", time: "16:08" },
+    ],
+    expanded: [
+      { speaker: "sable", text: "Sorry \u2014 the fill was a side effect of regrouping the layers. Reverted the box fills, kept only the text reflow.", time: "16:09" },
+      { speaker: "user", text: "Ok. Also the dashed lines in diagram 2 look different from diagram 1. Make them consistent.", time: "16:15" },
+    ],
+  },
+  {
+    num: 5,
+    label: "Exact Specification",
+    precision: "Exact specification",
+    annotation: "First exact pixel values. The user has internalized enough to specify absolute measurements.",
+    curated: [
+      { speaker: "user", text: "Make all of the lineweights in the three diagrams 15px, scale up the arrows proportionally.", time: "16:41" },
+      { speaker: "sable", text: "Hub-and-Spoke arrows (~105\u2013134px) are roughly 2x the Decentralized ones (~52\u201358px). Let me scale them down to match.", time: "16:42" },
+      { speaker: "user", text: "Make all of the arrow opacity 60%.", time: "16:50" },
+      { speaker: "user", text: "I\u2019m clicking on an arrowhead and it is 35% opacity.", time: "16:53" },
+    ],
+    expanded: [
+      { speaker: "sable", text: "Found it \u2014 three arrowheads in the Decentralized diagram were on a different layer group. Fixed. All arrows now 60%.", time: "16:54" },
+      { speaker: "user", text: "Fix the dashes on the lines so that they are proportional. They are too small now.", time: "17:01" },
+      { speaker: "sable", text: "Dashes are [6, 4] on 15px lines \u2014 way too small. Scaling to [20, 12] to maintain the original visual rhythm.", time: "17:02" },
+    ],
+  },
+  {
+    num: 6,
+    label: "Sub-Pixel / Micro-Design",
+    precision: "Sub-pixel",
+    annotation: "Individual elements. The user specifies alignment of specific edges to specific reference points.",
+    curated: [
+      { speaker: "user", text: "Make each column 100px wide.", time: "17:20" },
+      { speaker: "user", text: "Let\u2019s reduce down to 80.", time: "17:22" },
+      { speaker: "user", text: "No go back, keep the frame size, just shrink the columns.", time: "17:23" },
+      { speaker: "sable", text: "80px columns centered in the 470px frame with 60px gaps. Plenty of breathing room.", time: "17:24" },
+    ],
+    expanded: [
+      { speaker: "user", text: "Can you align her bottom edge with the bottom of the Designer box?", time: "17:35" },
+      { speaker: "sable", text: "Miranda\u2019s bottom edge now aligns exactly with the bottom of the Designer card at y=515.", time: "17:35" },
+      { speaker: "user", text: "Make the connection lines exactly 2px, not 1.5.", time: "17:40" },
+    ],
+  },
+];
+
+const USER_BUBBLE = { bg: "rgba(120, 175, 235, 0.18)", border: "rgba(120, 175, 235, 0.35)", arrow: "rgba(120, 175, 235, 0.18)" };
+const SABLE_BUBBLE = { bg: "rgba(235, 175, 90, 0.18)", border: "rgba(235, 175, 90, 0.35)", arrow: "rgba(235, 175, 90, 0.18)" };
+
+// ── Tech Stack Callout ──────────────────────────────────────────────────────
+const TECH_CATEGORIES: { label: string; items: { name: string; slug: string | null }[] }[] = [
+  {
+    label: "Frontend",
+    items: [
+      { name: "Next.js 16", slug: "nextdotjs" },
+      { name: "React 19", slug: "react" },
+      { name: "Tailwind CSS", slug: "tailwindcss" },
+      { name: "Shadcn UI", slug: "shadcnui" },
+      { name: "Recharts", slug: null },
+    ],
+  },
+  {
+    label: "Data",
+    items: [
+      { name: "Supabase", slug: "supabase" },
+    ],
+  },
+  {
+    label: "Graph",
+    items: [
+      { name: "Neo4j", slug: "neo4j" },
+    ],
+  },
+  {
+    label: "Design",
+    items: [
+      { name: "Figma + MCP", slug: "figma" },
+    ],
+  },
+  {
+    label: "AI Models",
+    items: [
+      { name: "Claude Opus", slug: "anthropic" },
+      { name: "Claude Sonnet", slug: "anthropic" },
+      { name: "Claude Haiku", slug: "anthropic" },
+      { name: "Gemini", slug: null },
+    ],
+  },
+  {
+    label: "Pipeline",
+    items: [
+      { name: "Python 3.14", slug: "python" },
+      { name: "Playwright", slug: null },
+    ],
+  },
+  {
+    label: "Deployment",
+    items: [
+      { name: "Vercel", slug: "vercel" },
+    ],
+  },
+];
+
+/* eslint-disable @next/next/no-img-element */
+function TechStack() {
+  return (
+    <div
+      className="overflow-hidden rounded border p-5"
+      style={{
+        backgroundColor: "#111118",
+        borderColor: BORDER,
+      }}
+    >
+      <p
+        className="text-[15px] font-bold leading-[1.2]"
+        style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+      >
+        Tech Stack
+      </p>
+      <p
+        className="mt-1 text-[9px] leading-[1.4]"
+        style={{ fontFamily: MONO, color: TEXT_DIM }}
+      >
+        Every number on this page is real. All data fetched from the live pipeline database.
+      </p>
+      <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 12, marginBottom: 16 }} />
+
+      <div className="flex flex-col gap-0">
+        {TECH_CATEGORIES.map((cat, idx) => (
+          <div key={cat.label}>
+          {idx > 0 && <div style={{ borderTop: `1px solid ${BORDER}`, marginBottom: 10, marginTop: 10 }} />}
+          <div className="flex items-baseline gap-3">
+            <p
+              className="shrink-0 text-[8px] font-bold uppercase tracking-[0.15em]"
+              style={{ fontFamily: MONO, color: TEXT_MID, width: 80 }}
+            >
+              {cat.label}
+            </p>
+            <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
+              {cat.items.map((item, i) => (
+                <div key={item.name} className="flex items-center gap-1.5">
+                  {item.slug ? (
+                    <img
+                      src={`https://cdn.simpleicons.org/${item.slug}/A0A0B0`}
+                      alt=""
+                      width={12}
+                      height={12}
+                      style={{ opacity: 0.7, flexShrink: 0 }}
+                      onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                    />
+                  ) : (
+                    <span style={{ width: 12, height: 12, display: "inline-flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      <span style={{ width: 3, height: 3, borderRadius: "50%", backgroundColor: TEXT_DIM }} />
+                    </span>
+                  )}
+                  <span
+                    className="text-[10px]"
+                    style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+                  >
+                    {item.name}
+                  </span>
+                  {i < cat.items.length - 1 && (
+                    <span style={{ color: TEXT_DIM, fontSize: 8, marginLeft: 4 }}>&middot;</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+/* eslint-enable @next/next/no-img-element */
+
+function DesignDialogue() {
+  const [expandedPhases, setExpandedPhases] = useState<Set<number>>(new Set());
+
+  const togglePhase = (num: number) => {
+    setExpandedPhases((prev) => {
+      const next = new Set(prev);
+      if (next.has(num)) next.delete(num);
+      else next.add(num);
+      return next;
+    });
+  };
+
+  // Precision level brightness ramp (0.35 → 0.9)
+  const precisionOpacity = (idx: number) => 0.35 + (idx / 5) * 0.55;
+  // Phase spine thickness ramp (1px → 2.5px)
+  const spineThickness = (idx: number) => 1 + (idx / 5) * 1.5;
+
+  // Render a single chat bubble with tail arrow
+  const renderBubble = (msg: DialogueMessage, key: string) => {
+    const isUser = msg.speaker === "user";
+    const bubble = isUser ? USER_BUBBLE : SABLE_BUBBLE;
+    return (
+      <div key={key} style={{ alignSelf: isUser ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+        {msg.time && (
+          <span className="mb-0.5 block text-[8px]" style={{ fontFamily: MONO, color: TEXT_DIM, textAlign: isUser ? "right" : "left" }}>
+            {isUser ? "You" : "Sable"} \u00b7 {msg.time}
+          </span>
+        )}
+        <div className="relative" style={{ marginBottom: 6 }}>
+          <div
+            className="px-3 py-2 text-[9px] leading-[1.6]"
+            style={{
+              fontFamily: MONO,
+              color: TEXT_LIGHT,
+              backgroundColor: bubble.bg,
+              border: `1px solid ${bubble.border}`,
+              borderRadius: isUser ? "8px 8px 3px 8px" : "8px 8px 8px 3px",
+            }}
+          >
+            {msg.text}
+          </div>
+          {/* Tail: solid triangle in border color */}
+          <div
+            style={{
+              position: "absolute",
+              bottom: -7,
+              ...(isUser ? { right: 4 } : { left: 4 }),
+              width: 10,
+              height: 7,
+              backgroundColor: bubble.border,
+              clipPath: isUser
+                ? "polygon(0 0, 100% 0, 100% 100%)"
+                : "polygon(0 0, 100% 0, 0 100%)",
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div
+      className="relative overflow-hidden rounded border p-5"
+      style={{
+        backgroundColor: "#111118",
+        borderColor: BORDER,
+      }}
+    >
+      <div className="mb-5">
+        <p
+          className="text-[15px] font-bold leading-[1.2]"
+          style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+        >
+          Six-Phase Progression
+        </p>
+        <p
+          className="mt-1.5 text-[10px] leading-[1.4]"
+          style={{ fontFamily: MONO, color: TEXT_MID }}
+        >
+          From: &ldquo;Use a Similar Layout&rdquo; to &ldquo;15px lineweights at 60% Opacity&rdquo;
+        </p>
+        <p
+          className="mt-1 text-[9px] leading-[1.4]"
+          style={{ fontFamily: MONO, color: TEXT_DIM }}
+        >
+          Pulled from actual JSON transcripts between Author and AI agent on Feb 15, 2026.
+        </p>
+        <div style={{ borderTop: `1px solid ${BORDER}`, marginTop: 12 }} />
+      </div>
+      {DIALOGUE_PHASES.map((phase, idx) => {
+        const isExpanded = expandedPhases.has(phase.num);
+        const extraCount = phase.expanded.length;
+
+        return (
+          <div key={phase.num} className="relative flex gap-4" style={{ paddingBottom: idx < 5 ? 24 : 0 }}>
+            {/* ── Phase Spine (left) ── */}
+            <div className="relative flex shrink-0 flex-col items-center" style={{ width: 40 }}>
+              {/* Numbered circle */}
+              <div
+                className="z-10 flex items-center justify-center rounded-full"
+                style={{
+                  width: 28,
+                  height: 28,
+                  border: `1.5px solid rgba(184, 115, 51, ${precisionOpacity(idx)})`,
+                  backgroundColor: BG,
+                }}
+              >
+                <span
+                  className="text-[11px] font-bold"
+                  style={{ fontFamily: MONO, color: `rgba(184, 115, 51, ${precisionOpacity(idx)})` }}
+                >
+                  {phase.num}
+                </span>
+              </div>
+              {/* Connecting line to next phase */}
+              {idx < 5 && (
+                <div
+                  style={{
+                    flex: 1,
+                    width: spineThickness(idx),
+                    backgroundColor: `rgba(184, 115, 51, ${precisionOpacity(idx) * 0.4})`,
+                    marginTop: 4,
+                  }}
+                />
+              )}
+            </div>
+
+            {/* ── Phase Content ── */}
+            <div className="min-w-0 flex-1">
+              {/* Phase label */}
+              <span
+                className="text-[14px] font-bold uppercase tracking-[0.08em]"
+                style={{ fontFamily: MONO, color: `rgba(184, 115, 51, ${precisionOpacity(idx)})` }}
+              >
+                {phase.label}
+              </span>
+
+              {/* Context annotation */}
+              <p
+                className="mt-1.5 text-[11px] italic leading-[1.5]"
+                style={{ fontFamily: MONO, color: TEXT_DIM }}
+              >
+                {phase.annotation}
+              </p>
+
+              {/* Chat bubbles — phases 2-5 start collapsed */}
+              {(() => {
+                const alwaysOpen = phase.num === 1 || phase.num === 6;
+                const totalCount = phase.curated.length + extraCount;
+                if (alwaysOpen) {
+                  return (
+                    <>
+                      <div className="mt-3 flex flex-col gap-2.5">
+                        {phase.curated.map((msg, mi) => renderBubble(msg, `c-${mi}`))}
+                        {isExpanded && phase.expanded.map((msg, mi) => renderBubble(msg, `e-${mi}`))}
+                      </div>
+                      {extraCount > 0 && (
+                        <button
+                          onClick={() => togglePhase(phase.num)}
+                          className="mt-2 cursor-pointer border-none bg-transparent text-[9px] tracking-wide"
+                          style={{ fontFamily: MONO, color: COPPER, padding: 0, opacity: 0.7 }}
+                          onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.7"; }}
+                        >
+                          {isExpanded ? "\u2212 Collapse" : `+ ${extraCount} more exchange${extraCount > 1 ? "s" : ""}`}
+                        </button>
+                      )}
+                    </>
+                  );
+                }
+                // Phases 2-5: collapsed by default
+                return isExpanded ? (
+                  <>
+                    <div className="mt-3 flex flex-col gap-2.5">
+                      {phase.curated.map((msg, mi) => renderBubble(msg, `c-${mi}`))}
+                      {phase.expanded.map((msg, mi) => renderBubble(msg, `e-${mi}`))}
+                    </div>
+                    <button
+                      onClick={() => togglePhase(phase.num)}
+                      className="mt-2 cursor-pointer border-none bg-transparent text-[9px] tracking-wide"
+                      style={{ fontFamily: MONO, color: COPPER, padding: 0, opacity: 0.7 }}
+                      onMouseEnter={(e) => { e.currentTarget.style.opacity = "1"; }}
+                      onMouseLeave={(e) => { e.currentTarget.style.opacity = "0.7"; }}
+                    >
+                      {"\u2212 Collapse"}
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() => togglePhase(phase.num)}
+                    className="mt-3 cursor-pointer rounded border px-3 py-1.5 text-[9px] tracking-wide"
+                    style={{ fontFamily: MONO, color: COPPER, borderColor: `rgba(184, 115, 51, 0.3)`, backgroundColor: "rgba(184, 115, 51, 0.06)" }}
+                    onMouseEnter={(e) => { e.currentTarget.style.backgroundColor = "rgba(184, 115, 51, 0.12)"; }}
+                    onMouseLeave={(e) => { e.currentTarget.style.backgroundColor = "rgba(184, 115, 51, 0.06)"; }}
+                  >
+                    {`+ Show ${totalCount} exchange${totalCount > 1 ? "s" : ""}`}
+                  </button>
+                );
+              })()}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export function AgentMethodologySection({ stats }: MethodologyProps) {
@@ -843,13 +1441,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             },
             {
               num: "4.7",
-              title: "Key Challenges and Limitations",
-              body: "No system built on language models is immune to failure. Surname collisions, OCR limitations in handwritten documents, and calibrating autonomy remain open problems. Approximately 20% of confirmed cases are routed for manual review.",
+              title: "Creativity in AI Systems",
+              body: "How does a human direct pixel-level creative work through natural language? A transcript of 30+ design exchanges reveals six phases of escalating precision \u2014 from vague content direction to sub-pixel specification \u2014 illustrating Bret Victor\u2019s principle that immediate feedback loops calibrate the human, not just the output.",
             },
             {
               num: "4.8",
-              title: "Data Sources",
-              body: "Three primary sources: the Cond\u00e9 Nast digital archive (JWT-encoded metadata + Azure page images), Epstein\u2019s Little Black Book (local regex matching), and the DOJ Epstein document library (browser-automated OCR search).",
+              title: "Key Challenges and Limitations",
+              body: "No system built on language models is immune to failure. Surname collisions, OCR limitations in handwritten documents, and calibrating autonomy remain open problems. Approximately 20% of confirmed cases are routed for manual review.",
             },
             {
               num: "4.9",
@@ -933,8 +1531,8 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         ══════════════════════════════════════════════════════════════════ */}
         <div id="section-4-1" className="mt-8 scroll-mt-24">
           {/* Section 4.1 header — inline so intro text sits beside pipeline flow */}
-          <p className="s-label">SECTION 4.1</p>
-          <h3 className="s-title">THE PIPELINE</h3>
+          <p className="s-label">AI AGENT METHODOLOGY</p>
+          <h3 className="s-title">4.1 THE PIPELINE</h3>
           <p className="s-subtitle">How a magazine URL becomes a confirmed or rejected connection with a full evidentiary trail</p>
 
           {/* ── Body text with floated pipeline diagram ── */}
@@ -1515,7 +2113,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   src="/fig4-pipeline-v6.svg"
                   alt="Three-column pipeline diagram — Agents (Scout, Courier, Reader, Detective, Researcher, Designer) feed into Miranda (Editor) who coordinates all six stages. Human in the Loop column shows investigation policy, verdict overrides, dossier review, and design collaboration touchpoints."
                   className="w-full rounded"
-                  style={{ backgroundColor: "#14121e" }}
+                  style={{ backgroundColor: "#111118" }}
                 />
                 <p
                   className="mt-2 text-[8px] tracking-wider"
@@ -1619,8 +2217,8 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         <div id="section-4-2" className="mt-8 scroll-mt-24">
           {/* ── S4.2 Header ── */}
           <div>
-            <p className="s-label">SECTION 4.2</p>
-            <h3 className="s-title">MULTI-AGENT SYSTEM</h3>
+            <p className="s-label">AI AGENT METHODOLOGY</p>
+            <h3 className="s-title">4.2 MULTI-AGENT SYSTEM</h3>
             <p className="s-subtitle">From One Prompt to Seven Agents</p>
           </div>
 
@@ -1891,8 +2489,8 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         <div id="section-4-3" className="mt-8 scroll-mt-24">
           {/* ── S4.3 Header (full width) ── */}
           <div>
-            <p className="s-label">SECTION 4.3</p>
-            <h3 className="s-title">PERSONALITY AS ARCHITECTURE</h3>
+            <p className="s-label">AI AGENT METHODOLOGY</p>
+            <h3 className="s-title">4.3 PERSONALITY AS ARCHITECTURE</h3>
             <p className="s-subtitle">Why do these autonomous AI agents have names, archetypes, and voices?</p>
           </div>
 
@@ -2149,74 +2747,71 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <div
-                className="overflow-hidden rounded border"
-                style={{
-                  backgroundColor: CARD_BG,
-                  borderColor: BORDER,
-                  borderTop: `2px solid ${COPPER}`,
-                }}
-              >
-                <div className="px-4 py-2" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <p className="text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                    {"// EDITOR CHAT — DEBUGGING VERDICTS"}
-                  </p>
-                </div>
-                <div className="flex flex-col gap-3 px-4 py-4">
-                  {/* Human bubble — cool gray, caret left */}
-                  <div className="relative mr-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
-                    <div className="absolute top-3 -left-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderRight: "5px solid rgba(255,255,255,0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM }}>HUMAN</p>
-                    <p className="mt-1 text-[11px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_MID }}>Miranda, why did you mark this as CONFIRMED? It feels too generous.</p>
+              {(() => {
+                const MIRANDA_BUB = { bg: "rgba(155, 120, 200, 0.18)", border: "rgba(155, 120, 200, 0.35)" };
+                const HUMAN_BUB = { bg: "rgba(120, 175, 235, 0.18)", border: "rgba(120, 175, 235, 0.35)" };
+                type Msg = { speaker: "human" | "miranda"; text: string };
+                const msgs: Msg[] = [
+                  { speaker: "human", text: "Miranda, why did you mark this as CONFIRMED? It feels too generous." },
+                  { speaker: "miranda", text: "\u201CFeels\u201D is not evidence. Bring me a rule, or bring me nothing." },
+                  { speaker: "human", text: "The DOJ search returns 200+ hits, but most are incidental mentions." },
+                  { speaker: "miranda", text: "Then your rubric is sloppy. Decide: do mentions count, or do we require direct contact?" },
+                  { speaker: "human", text: "Direct contact only\u2014scheduling, correspondence, or a Black Book entry with disambiguating detail." },
+                  { speaker: "miranda", text: "Good. Write it down: CONFIRMED = (A) direct contact evidence + (B) one independent corroboration source. Mentions alone become LEAD, not CONFIRMED." },
+                  { speaker: "human", text: "And surname-only Black Book entries?" },
+                  { speaker: "miranda", text: "Auto-downgrade. Surname-only is a false-positive factory. Full-name match or additional identity evidence before escalation." },
+                  { speaker: "human", text: "Understood. I\u2019ll update the Detective rubric and re-run the last batch." },
+                  { speaker: "miranda", text: "And log the delta. If your false positives don\u2019t drop, don\u2019t blame policy\u2014fix retrieval." },
+                ];
+                return (
+                  <div
+                    className="overflow-hidden rounded border p-4"
+                    style={{ backgroundColor: "#111118", borderColor: BORDER }}
+                  >
+                    <div className="flex flex-col gap-2.5">
+                      {msgs.map((m, i) => {
+                        const isHuman = m.speaker === "human";
+                        const bub = isHuman ? HUMAN_BUB : MIRANDA_BUB;
+                        return (
+                          <div key={i} style={{ alignSelf: isHuman ? "flex-end" : "flex-start", maxWidth: "88%" }}>
+                            <span className="mb-0.5 block text-[8px]" style={{ fontFamily: MONO, color: TEXT_DIM, textAlign: isHuman ? "right" : "left" }}>
+                              {isHuman ? "You" : "Miranda"}
+                            </span>
+                            <div className="relative" style={{ marginBottom: 6 }}>
+                              <div
+                                className="px-3 py-2 text-[9px] leading-[1.6]"
+                                style={{
+                                  fontFamily: MONO,
+                                  color: TEXT_LIGHT,
+                                  backgroundColor: bub.bg,
+                                  border: `1px solid ${bub.border}`,
+                                  borderRadius: isHuman ? "8px 8px 3px 8px" : "8px 8px 8px 3px",
+                                  fontStyle: isHuman ? "normal" : "italic",
+                                }}
+                              >
+                                {m.text}
+                              </div>
+                              <div
+                                style={{
+                                  position: "absolute",
+                                  bottom: -7,
+                                  ...(isHuman ? { right: 4 } : { left: 4 }),
+                                  width: 10,
+                                  height: 7,
+                                  backgroundColor: bub.border,
+                                  clipPath: isHuman
+                                    ? "polygon(0 0, 100% 0, 100% 100%)"
+                                    : "polygon(0 0, 100% 0, 0 100%)",
+                                }}
+                              />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
-                  {/* Miranda bubble — copper tint, caret right */}
-                  <div className="relative ml-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(184, 115, 51, 0.06)" }}>
-                    <div className="absolute top-3 -right-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderLeft: "5px solid rgba(184, 115, 51, 0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: COPPER }}>MIRANDA (EDITOR)</p>
-                    <p className="mt-1 text-[11px] italic leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>&ldquo;Feels&rdquo; is not evidence. Bring me a rule, or bring me nothing.</p>
-                  </div>
-                  <div className="relative mr-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
-                    <div className="absolute top-3 -left-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderRight: "5px solid rgba(255,255,255,0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM }}>HUMAN</p>
-                    <p className="mt-1 text-[11px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_MID }}>The DOJ search returns 200+ hits, but most are incidental mentions.</p>
-                  </div>
-                  <div className="relative ml-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(184, 115, 51, 0.06)" }}>
-                    <div className="absolute top-3 -right-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderLeft: "5px solid rgba(184, 115, 51, 0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: COPPER }}>MIRANDA</p>
-                    <p className="mt-1 text-[11px] italic leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Then your rubric is sloppy. Decide: do mentions count, or do we require direct contact?</p>
-                  </div>
-                  <div className="relative mr-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
-                    <div className="absolute top-3 -left-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderRight: "5px solid rgba(255,255,255,0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM }}>HUMAN</p>
-                    <p className="mt-1 text-[11px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_MID }}>Direct contact only&mdash;scheduling, correspondence, or a Black Book entry with disambiguating detail.</p>
-                  </div>
-                  <div className="relative ml-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(184, 115, 51, 0.06)" }}>
-                    <div className="absolute top-3 -right-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderLeft: "5px solid rgba(184, 115, 51, 0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: COPPER }}>MIRANDA</p>
-                    <p className="mt-1 text-[11px] italic leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Good. Write it down: CONFIRMED = (A) direct contact evidence + (B) one independent corroboration source. Mentions alone become LEAD, not CONFIRMED.</p>
-                  </div>
-                  <div className="relative mr-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
-                    <div className="absolute top-3 -left-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderRight: "5px solid rgba(255,255,255,0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM }}>HUMAN</p>
-                    <p className="mt-1 text-[11px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_MID }}>And surname-only Black Book entries?</p>
-                  </div>
-                  <div className="relative ml-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(184, 115, 51, 0.06)" }}>
-                    <div className="absolute top-3 -right-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderLeft: "5px solid rgba(184, 115, 51, 0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: COPPER }}>MIRANDA</p>
-                    <p className="mt-1 text-[11px] italic leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>Auto-downgrade. Surname-only is a false-positive factory. Full-name match or additional identity evidence before escalation.</p>
-                  </div>
-                  <div className="relative mr-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(255,255,255,0.06)" }}>
-                    <div className="absolute top-3 -left-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderRight: "5px solid rgba(255,255,255,0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM }}>HUMAN</p>
-                    <p className="mt-1 text-[11px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_MID }}>Understood. I&rsquo;ll update the Detective rubric and re-run the last batch.</p>
-                  </div>
-                  <div className="relative ml-4 rounded-sm py-2 pr-2 pl-3" style={{ backgroundColor: "rgba(184, 115, 51, 0.06)" }}>
-                    <div className="absolute top-3 -right-[5px]" style={{ width: 0, height: 0, borderTop: "5px solid transparent", borderBottom: "5px solid transparent", borderLeft: "5px solid rgba(184, 115, 51, 0.06)" }} />
-                    <p className="text-[9px] font-bold" style={{ fontFamily: MONO, color: COPPER }}>MIRANDA</p>
-                    <p className="mt-1 text-[11px] italic leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>And log the delta. If your false positives don&rsquo;t drop, don&rsquo;t blame policy&mdash;fix retrieval.</p>
-                  </div>
-                </div>
-              </div>
+                );
+              })()}
               <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
                 <span style={{ color: TEXT_MID }}>Fig. 11</span> &mdash; Debugging verdict policy through in-character conversation with the Editor agent.
               </p>
@@ -2314,6 +2909,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
                   <span style={{ color: TEXT_MID }}>Fig. 12</span> &mdash; The Agent Office: a real-time pixel-art dashboard<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> showing autonomous AI coordination as it happens.
+                  {" "}<a href="/demo" style={{ color: GOLD, textDecoration: "underline", textUnderlineOffset: "2px" }}>Appendix J: Interactive Demo</a>
                 </p>
                 <div
                   className="absolute z-10 hidden pl-4 md:block"
@@ -2366,8 +2962,8 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         ══════════════════════════════════════════════════════════════════ */}
         <div id="section-4-4" className="mt-8 scroll-mt-24">
           <div>
-            <p className="s-label">SECTION 4.4</p>
-            <h3 className="s-title">INVESTIGATION METHODOLOGY</h3>
+            <p className="s-label">AI AGENT METHODOLOGY</p>
+            <h3 className="s-title">4.4 INVESTIGATION METHODOLOGY</h3>
             <p className="s-subtitle">How a name match becomes a confirmed connection &mdash; or gets rejected.</p>
           </div>
 
@@ -3839,288 +4435,552 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             SECTION 4.6: UI DESIGN
         ══════════════════════════════════════════════════════════════════ */}
         <div id="section-4-6" className="mt-8 scroll-mt-24">
-          <SectionHeader
-            num="4.6"
-            title="UI DESIGN"
-            subtitle="Why an agentic system needs a visual interface — and how it was designed and built."
-            intro={[
-              "An agentic pipeline can run entirely in the terminal. So why build a website? Because this project serves three distinct audiences with fundamentally different needs. For the developer, the Agent Office dashboard and real-time status panels transform opaque log files into legible system behavior — you can see when Miranda rejects a dossier or when Silas returns a verdict without parsing thousands of lines of output. For the researcher, the searchable index, dossier pages, and interactive charts make the pipeline's findings explorable in ways that a JSON export never could. For the public reader, the site transforms raw data into a narrative about wealth, taste, and proximity to power.",
-              "The website was designed in Figma by Sable, the seventh agent in the pipeline. Unlike the other six agents who operate autonomously, Sable works iteratively with the human user — proposing layouts, refining typography, and building components directly in a shared Figma file. The Figma Console MCP server enables direct read/write access to the Figma file from the development environment, bridging design and code in a single workflow. The design system was defined collaboratively: a 6-column proportional grid, JetBrains Mono for technical sections, Futura PT for the editorial voice, and a restrained palette of copper, gold, and deep purple.",
-              "The site is built with Next.js, Tailwind CSS, and Shadcn UI components, deployed on Vercel. All data is fetched server-side from Supabase — no API keys are exposed to the client. The searchable index, dossier pages, and interactive charts all pull from the same live pipeline database. Every number on the page is real and current.",
-            ]}
-            summary="The UI exists because different audiences need different views into the same data. The developer needs observability, the researcher needs exploration, and the public reader needs narrative. A terminal can't serve all three."
-          />
+          {/* Section 4.6 header — inline so body text can use full width for sidenotes */}
+          <p className="s-label">AI AGENT METHODOLOGY</p>
+          <h3 className="s-title">4.6 UI DESIGN</h3>
+          <p className="s-subtitle">Why an autonomous agentic system needs to be seen.</p>
 
-          {/* ── Agent Office UI — annotated diagram with callouts ── */}
-          <div className="mt-10">
-            <p
-              className="mb-4 text-[11px] font-bold tracking-wider"
-              style={{ fontFamily: MONO, color: GOLD_DIM }}
-            >
-              {"// THE AGENT OFFICE"}
+          {/* ── Body text with floated matrix + sidenotes ── */}
+          <div
+            className="mt-10 text-[15px] leading-[1.8] [&>*+*]:mt-6"
+            style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID, display: "flow-root" }}
+          >
+            <p style={{ maxWidth: CONTENT_NARROW }}>This entire agentic pipeline could run inside of a terminal prompt. So why build a website?</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>Making an autonomous system legible has been a recurring theme throughout this methodology section. Everything shown has been an effort to resist the tendency of AI to black box all decisions. This is why confirmed-name decisions have a traceable evidence trail, agents have queryable motivations, and a central editor writes a detailed, public assessment before rendering a final judgement. Autonomous systems that can&rsquo;t be watched can&rsquo;t be trusted. That poses a compelling design problem: how do you make this opaque system transparent enough to trust?</p>
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>The Trust Problem</p>
+
+
+            {/* Para 1: Fitts MABA-MABA + Levels of Automation (stacked, separate copper lines) */}
+            <div className="s-note-row">
+              <div style={{ maxWidth: "var(--content-narrow)" }}>
+                <p>
+                  Think of the transition from highly skilled craftspersons
+                  assembling a product by hand, to a fully automated factory floor
+                  of disparate workers toiling to produce disconnected parts. The
+                  more automation in the factory, the less human control. Those
+                  opposing poles of automation and human control were assumed to be
+                  zero-sum tradeoffs and were codified by psychologist Paul Fitts
+                  into a &ldquo;MABA-MABA&rdquo; list in
+                  1951:<NoteArrow /> Men Are Better At exercising judgement and
+                  improvisation, and Machines Are Better At repetition and tireless
+                  vigilance. The implication was clear: classify the tasks and then
+                  divide the work accordingly.
+                </p>
+              </div>
+              <div className="s-note-margin hidden md:block" style={{ borderLeft: "none", paddingLeft: 0 }}>
+                <div style={{ borderLeft: "2px solid var(--meth-copper)", paddingLeft: "1rem" }}>
+                  <Sidenote
+                    title="MABA-MABA"
+                    href="https://www.researchgate.net/publication/226605532_MABA-MABA_or_abracadabra_Progress_on_human-automation_co-ordination"
+                    linkText="De Visser et al. (2018)"
+                  >
+                    Fitts (1951). &ldquo;Men Are Better At / Machines Are Better
+                    At&rdquo;&nbsp;&mdash; a framework for dividing tasks between
+                    humans and machines based on comparative strengths. The
+                    foundational assumption: the two are complementary but
+                    non-overlapping.
+                  </Sidenote>
+                </div>
+                <div className="mt-3" style={{ borderLeft: "2px solid var(--meth-copper)", paddingLeft: "1rem" }}>
+                  <Sidenote
+                    title="LEVELS OF AUTOMATION"
+                    href="https://www.hfes-europe.org/wp-content/uploads/2014/06/Save.pdf"
+                    linkText="Save (2014)"
+                  >
+                    Sheridan &amp; Verplank (1978) extended Fitts into 10 discrete
+                    levels, from &ldquo;human does everything&rdquo; to
+                    &ldquo;computer ignores human.&rdquo; Still one dimension: each
+                    level trades human control for machine authority.
+                    <div style={{ marginTop: 6 }}>
+                      {[
+                        "Human does everything",
+                        "Computer offers alternatives",
+                        "Computer narrows selection",
+                        "Computer suggests one",
+                        "Computer acts if human approves",
+                        "Computer acts; human can veto",
+                        "Computer acts, then informs human",
+                        "Computer acts; informs if asked",
+                        "Computer acts; informs if it decides to",
+                        "Computer does everything",
+                      ].map((label, i) => (
+                        <div
+                          key={i}
+                          style={{
+                            display: "flex",
+                            alignItems: "baseline",
+                            gap: 6,
+                            padding: "3px 0",
+                            borderBottom: i < 9 ? `1px solid ${BORDER}` : "none",
+                            fontSize: 9,
+                            lineHeight: 1.5,
+                            fontFamily: MONO,
+                          }}
+                        >
+                          <span style={{ color: TEXT_DIM, minWidth: 12, textAlign: "right", fontSize: 8 }}>{i + 1}</span>
+                          <span style={{ color: TEXT_DIM }}>{label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Sidenote>
+                </div>
+              </div>
+            </div>
+
+            {/* Para 2: single-dimension persistence */}
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              This linear, single-dimensional model of automation persisted, and
+              basically boiled down to a simple rule: &ldquo;as the machine does
+              more, the human does less.&rdquo; This thinking shaped how
+              engineers designed cockpits, nuclear control rooms, manufacturing
+              lines, and eventually software. It endured because automation was
+              seen as a binary, yes/no, machine substitution question. Is the
+              autopilot or the human flying the plane? Is the thermostat or the
+              human controlling the temperature? The more capable and
+              foregrounded the machine, the further back the human recedes.
             </p>
 
-            {/* Desktop: side callout labels + image with marker dots + SVG leader lines */}
-            <div className="hidden md:grid md:grid-cols-6 md:gap-[24px]">
-              {/* Left callout column — absolutely positioned to align with image features */}
-              <div className="relative col-span-1">
-                {/* 01 Agent Network — aligns with upper-left panel */}
-                <div className="absolute w-full" style={{ top: "10%", transform: "translateY(-50%)" }}>
-                  <div className="flex items-start gap-1.5">
-                    <div
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: GOLD }}
-                    >
-                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>1</span>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
-                        Agent Network
-                      </p>
-                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                        Hierarchical org chart showing all seven agents with real-time status.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {/* 02 Newsroom Chatter — aligns with mid-left panel */}
-                <div className="absolute w-full" style={{ top: "37%", transform: "translateY(-50%)" }}>
-                  <div className="flex items-start gap-1.5">
-                    <div
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: GOLD }}
-                    >
-                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>2</span>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
-                        Newsroom Chatter
-                      </p>
-                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                        Shared bulletin board where agents post warnings, discoveries, and cross-agent signals.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {/* 03 Editor Inbox — aligns with lower-left panel */}
-                <div className="absolute w-full" style={{ top: "60%", transform: "translateY(-50%)" }}>
-                  <div className="flex items-start gap-1.5">
-                    <div
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: GOLD }}
-                    >
-                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>3</span>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
-                        Editor Inbox
-                      </p>
-                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                        Miranda&apos;s real-time commentary on pipeline state, errors, and editorial decisions.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Center image with overlaid marker dots and SVG leader lines */}
-              <div
-                className="relative col-span-4 overflow-hidden rounded border"
-                style={{ borderColor: BORDER }}
+            {/* Para 3: Tesla + Shneiderman insight */}
+            <SidenoteBlock note={
+              <Sidenote
+                title="HIGH CONTROL + HIGH AUTOMATION"
+                href="https://arxiv.org/abs/2002.04087"
+                linkText="arxiv.org/abs/2002.04087"
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/agent-office-ui.png"
-                  alt="Agent Office — real-time pixel-art dashboard showing seven AI agents at work, with live pipeline statistics, knowledge graph, activity log, and current investigation leads."
-                  className="w-full"
-                />
-                {/* SVG overlay — leader lines from markers to image edges */}
-                <svg
-                  className="pointer-events-none absolute inset-0 h-full w-full"
-                  viewBox="0 0 100 100"
-                  preserveAspectRatio="none"
-                >
-                  {/* Left leader lines (marker → left edge) */}
-                  <line x1="0" y1="10" x2="11" y2="10" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
-                  <line x1="0" y1="37" x2="11" y2="37" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
-                  <line x1="0" y1="60" x2="11" y2="60" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
-                  {/* Right leader lines (marker → right edge) */}
-                  <line x1="84" y1="10" x2="100" y2="10" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
-                  <line x1="84" y1="48" x2="100" y2="48" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
-                  <line x1="84" y1="70" x2="100" y2="70" stroke={GOLD} strokeWidth="1" opacity="0.35" vectorEffect="non-scaling-stroke" />
-                </svg>
-                {/* Numbered marker dots at each feature location */}
-                {[
-                  { num: 1, x: 12, y: 10 },
-                  { num: 2, x: 12, y: 37 },
-                  { num: 3, x: 12, y: 60 },
-                  { num: 4, x: 83, y: 10 },
-                  { num: 5, x: 83, y: 48 },
-                  { num: 6, x: 83, y: 70 },
-                ].map((m) => (
-                  <div
-                    key={m.num}
-                    className="absolute flex h-[18px] w-[18px] items-center justify-center rounded-full"
-                    style={{
-                      left: `${m.x}%`,
-                      top: `${m.y}%`,
-                      transform: "translate(-50%, -50%)",
-                      backgroundColor: GOLD,
-                      boxShadow: `0 0 0 2px ${BG}, 0 0 0 3px ${GOLD_DIM}`,
-                    }}
-                  >
-                    <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>
-                      {m.num}
-                    </span>
-                  </div>
-                ))}
-              </div>
+                Shneiderman (2020). The conventional wisdom was that more
+                automation meant less human control&nbsp;&mdash; that you had
+                to choose. Shneiderman&rsquo;s two-dimensional HCAI framework
+                argues you can have both.
+              </Sidenote>
+            }>
+              <p>
+                Throughout the 2010s questioning &ldquo;autonomy&rdquo; became
+                more urgent. In 2016, a Tesla Model S on autopilot drove into a
+                white tractor-trailer at full speed because the autopilot sensor
+                couldn&rsquo;t distinguish it from a cloud. The driver was
+                watching a Harry Potter movie. As machines carved out more and
+                more of the prior, safely-human &ldquo;judgement and
+                improvisation&rdquo; sides of the MABA-MABA ledger,
+                Shneiderman&rsquo;s 2020 insight<NoteArrow /> was that bad
+                theory had led to bad designs, but better interfaces could get
+                us out.
+              </p>
+            </SidenoteBlock>
 
-              {/* Right callout column — absolutely positioned to align with image features */}
-              <div className="relative col-span-1">
-                {/* 04 Knowledge Graph — aligns with upper-right panel */}
-                <div className="absolute w-full" style={{ top: "10%", transform: "translateY(-50%)" }}>
-                  <div className="flex items-start gap-1.5">
-                    <div
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: GOLD }}
-                    >
-                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>4</span>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
-                        Knowledge Graph
-                      </p>
-                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                        Live Neo4j visualization of suspected connections and community clusters.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {/* 05 Activity Log — aligns with mid-right panel */}
-                <div className="absolute w-full" style={{ top: "48%", transform: "translateY(-50%)" }}>
-                  <div className="flex items-start gap-1.5">
-                    <div
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: GOLD }}
-                    >
-                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>5</span>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
-                        Activity Log
-                      </p>
-                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                        Per-agent filterable log of every action, streaming in real time.
-                      </p>
-                    </div>
-                  </div>
-                </div>
-                {/* 06 Current Leads — aligns with lower-right panel */}
-                <div className="absolute w-full" style={{ top: "70%", transform: "translateY(-50%)" }}>
-                  <div className="flex items-start gap-1.5">
-                    <div
-                      className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: GOLD }}
-                    >
-                      <span className="text-[8px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>6</span>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
-                        Current Leads
-                      </p>
-                      <p className="mt-1 text-[9px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                        Active investigation queue with verdict status and confidence scores.
-                      </p>
-                    </div>
-                  </div>
+            {/* Para 4: Boeing 737 MAX */}
+            <SidenoteBlock note={
+              <Sidenote
+                title="BOEING 737 MAX"
+                href="https://en.wikipedia.org/wiki/Boeing_737_MAX_groundings"
+                linkText="Wikipedia"
+              >
+                Two crashes&nbsp;&mdash; Lion Air Flight 610 (Oct 2018) and
+                Ethiopian Airlines Flight 302 (Mar 2019). The MCAS automated
+                pitch-correction system was not disclosed to pilots and had no
+                clear override mechanism. 346 lives lost to a failure of
+                interface design.
+              </Sidenote>
+            }>
+              <p>
+                The Boeing 737 MAX crashes in 2018 and 2019 killed 346 people.
+                An undisclosed automated Maneuvering Characteristics Augmentation
+                System (MCAS) overrode pilot input while having no clear display
+                or intuitive override mechanism.<NoteArrow /> The pilots
+                didn&rsquo;t even know it existed.
+              </p>
+            </SidenoteBlock>
+
+            {/* Para 5: NASA Mission Control — no gap from Boeing paragraph */}
+            <div className="s-note-row" style={{ marginTop: 0 }}>
+              <div style={{ maxWidth: "var(--content-narrow)" }}>
+                <p>
+                  When NASA designed the Mission Operations Control Room for the
+                  Apollo space missions, they designed a system to give a room full
+                  of specialists real-time visibility into an autonomous system
+                  hurtling through space at 25,000 miles per hour. The solution was
+                  architectural: tiered screens, huge visible control boards,
+                  constant streams of data all flowing to a central Flight
+                  Director.<NoteArrow /> Nothing was hidden.
+                </p>
+              </div>
+              <div className="s-note-margin hidden md:block" style={{ borderLeft: "none", paddingLeft: 0, paddingTop: 80 }}>
+                <div style={{ borderLeft: "2px solid var(--meth-copper)", paddingLeft: "1rem" }}>
+                  <Sidenote
+                    title="MISSION CONTROL"
+                    image="/sidenotes/nasa-mission-control.jpg"
+                    imageAlt="NASA Apollo-era Mission Operations Control Room — tiered consoles with CRT displays, central telemetry boards"
+                    href="https://arstechnica.com/science/2019/06/behind-the-scenes-at-nasas-newly-restored-apollo-mission-control-center/"
+                    linkText="Ars Technica"
+                  >
+                    NASA&rsquo;s Apollo-era Mission Operations Control Room (1969).
+                    Tiered consoles, each built for a specific function, with a
+                    Flight Director at the center who could see the entire mission
+                    state. Defined roles, clear sightlines, and real-time
+                    telemetry. The Agent Office borrows the same spatial logic:
+                    specialized panels, a central Editor, and nothing hidden.
+                  </Sidenote>
                 </div>
               </div>
             </div>
 
-            {/* Mobile: image with markers + numbered callout grid below */}
-            <div className="md:hidden">
-              <div className="relative overflow-hidden rounded border" style={{ borderColor: BORDER }}>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src="/agent-office-ui.png"
-                  alt="Agent Office — real-time pixel-art dashboard showing seven AI agents at work."
-                  className="w-full"
-                />
-                {/* Mobile marker dots */}
-                {[
-                  { num: 1, x: 12, y: 10 },
-                  { num: 2, x: 12, y: 37 },
-                  { num: 3, x: 12, y: 60 },
-                  { num: 4, x: 83, y: 10 },
-                  { num: 5, x: 83, y: 48 },
-                  { num: 6, x: 83, y: 70 },
-                ].map((m) => (
-                  <div
-                    key={m.num}
-                    className="absolute flex h-[14px] w-[14px] items-center justify-center rounded-full"
-                    style={{
-                      left: `${m.x}%`,
-                      top: `${m.y}%`,
-                      transform: "translate(-50%, -50%)",
-                      backgroundColor: GOLD,
-                      boxShadow: `0 0 0 1.5px ${BG}`,
-                    }}
-                  >
-                    <span className="text-[7px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>
-                      {m.num}
-                    </span>
-                  </div>
-                ))}
-              </div>
-              <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3">
-                {[
-                  { num: 1, label: "Agent Network", desc: "Real-time agent org chart." },
-                  { num: 4, label: "Knowledge Graph", desc: "Neo4j connection map." },
-                  { num: 2, label: "Newsroom Chatter", desc: "Cross-agent bulletin board." },
-                  { num: 5, label: "Activity Log", desc: "Per-agent action stream." },
-                  { num: 3, label: "Editor Inbox", desc: "Miranda\u2019s editorial feed." },
-                  { num: 6, label: "Current Leads", desc: "Investigation queue." },
-                ].map((c) => (
-                  <div key={c.num} className="flex items-start gap-1.5">
-                    <div
-                      className="flex h-[16px] w-[16px] shrink-0 items-center justify-center rounded-full"
-                      style={{ backgroundColor: GOLD }}
-                    >
-                      <span className="text-[7px] font-bold" style={{ fontFamily: MONO, color: "#111" }}>
-                        {c.num}
-                      </span>
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-bold leading-none tracking-wider" style={{ fontFamily: MONO, color: GOLD }}>
-                        {c.label}
-                      </p>
-                      <p className="mt-0.5 text-[8px] leading-[1.4]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                        {c.desc}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
+            {/* Floated Shneiderman matrix — desktop */}
+            <div
+              className="float-left mb-4 mr-6 hidden md:block"
+              style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+            >
+              <ShneidermanMatrix />
+            </div>
+            {/* Mobile: non-floated matrix */}
+            <div className="md:hidden" style={{ maxWidth: 300 }}>
+              <ShneidermanMatrix />
             </div>
 
+            {/* Para 6: Shneiderman's contribution */}
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              Shneiderman&rsquo;s contribution was that if you build a system
+              where every decision has a visible sight
+              line&mdash;interpretable and auditable, then the human can grasp
+              what the machine is thinking, not just what it decided. Human
+              control and computer automation are not opposite ends of the same
+              line. They are independent axes that can blur and overlap in new
+              ways never considered outside of NASA&rsquo;s flight control room.
+              Within that multi-dimensional framework you could design for
+              &ldquo;High Automation&rdquo; and &ldquo;High Control.&rdquo;
+              That is what this project is doing.
+            </p>
+
+            {/* Para 7: pipeline + dashboard */}
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              The pipeline is nearly fully automated&mdash;seven agents run
+              without intervention. Yet the dashboard provides continuous
+              cognitive access to the system&rsquo;s reasoning. Every decision
+              is visible. This isn&rsquo;t a dashboard, it&rsquo;s a mission
+              control room for watching an AI investigation unfold in front of
+              you, one that&rsquo;s full of drama, interpersonal relationships,
+              and surprising twists at the end.
+            </p>
+
+            {/* Para 8: real-time experience */}
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              You see the investigation move forward in real-time. Data streams
+              across the screen as the Detective gets a hit. The Scout pulls the
+              issue backlog and a wall of red bars starts to turn green. The
+              agents talk to each other through chat bubbles, and the persona
+              dialogue informs their future decisions. Meanwhile, an interactive
+              knowledge graph begins to form documenting the connections between
+              confirmed names. &ldquo;That designer connects two Epstein names,
+              let me take a closer look at his work.&rdquo; You can engage any
+              agent in dialogue via right-click or you can send new instructions
+              to the Editor in a dedicated mailbox.
+            </p>
+
+            {/* Para 9: conclusion */}
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              The system&rsquo;s running autonomously <em>and</em> you
+              understand what it&rsquo;s doing. The broken assumption that you
+              had to choose one or the other wasn&rsquo;t any type of natural
+              law, it was just a failure of interface design.
+            </p>
+
+            {/* ── The Agent Office ── */}
+            <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>The Agent Office</p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              This is what design to monitor reasoning looks like.
+            </p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              When the Detective flags a name, you watch the knowledge graph expand in real-time. When the Editor rejects a dossier, her rationale appears in your inbox. And you can challenge her decisions. You are watching an investigation unfold, and you have agency to change its course.
+            </p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              The panels below are not disconnected displays. They form a single, interwoven instrument for both understanding&mdash;and steering&mdash;an autonomous investigation.
+            </p>
+
+            <SidenoteBlock note={
+              <Sidenote
+                title="Inventing on Principle"
+                image="/sidenotes/bret-victor.jpg?v=2"
+                imageAlt="Bret Victor's Inventing on Principle — live coding a tree with immediate visual feedback"
+                href="https://vimeo.com/906418692"
+                linkText="vimeo.com/906418692"
+              >
+                Bret Victor (2012). The argument that creators need to see the immediate effect of every decision&mdash;&ldquo;there can&rsquo;t be a delay, and there can&rsquo;t be anything hidden.&rdquo; If you can&rsquo;t see what you&rsquo;re doing, you can&rsquo;t explore, and if you can&rsquo;t explore, you can&rsquo;t discover.
+              </Sidenote>
+            }>
+              <p>
+                The design principles behind the Agent Office are simple and traditional: creators need to see and feel an immediate connection to what they&rsquo;re creating.<NoteArrow /> The real-time connection between decision and visible effect develops calibrated trust in a way that is fundamentally different from one developed between a user and a terminal prompt.
+              </p>
+            </SidenoteBlock>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              That trust unlocks something more valuable than monitoring. It promotes improvisation. &ldquo;That designer&rsquo;s name keeps popping up, can we run an in-depth analysis on only homes they&rsquo;ve designed?&rdquo; &ldquo;A lot of these names are in the northeast, can we map a separate detailed geographical analysis by neighborhood?&rdquo; These questions aren&rsquo;t pre-programmed. They emerge from watching the system think, and thinking alongside it. This project is ultimately a creative endeavor, one requiring human intuition and ingenuity, and this interface is what makes that creativity possible.
+            </p>
+
+            <p style={{ maxWidth: CONTENT_NARROW }}>
+              The difference between an agentic system that runs hidden in the dark and one lit up with legibility is the difference between a Tesla on Autopilot and a mission control room. One forces you to trust it. The other earns it.
+            </p>
+
+            <div style={{ maxWidth: CONTENT_NARROW }}>
+              <AgentOfficeImage />
+            </div>
+            <a
+              href="https://www.wheretheylive.world/demo"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-flex items-center gap-3 rounded-sm px-5 py-3 text-[13px] font-bold uppercase tracking-[0.12em] transition-colors hover:bg-white/10"
+              style={{
+                fontFamily: MONO,
+                color: TEXT_LIGHT,
+                border: `1px solid ${BORDER}`,
+              }}
+            >
+              <span style={{ fontSize: "14px", lineHeight: 1 }}>&#9654;</span>
+              View live demo &rarr;
+            </a>
             <p
               className="mt-3 text-[8px] tracking-wider"
-              style={{ fontFamily: MONO, color: TEXT_DIM }}
+              style={{ fontFamily: MONO, color: TEXT_DIM, maxWidth: CONTENT_NARROW }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 22</span> &mdash; Agent Office: real-time pixel-art dashboard. Numbered markers identify the six primary interface panels.
+              <span style={{ color: TEXT_MID }}>Fig. 23</span> &mdash; Agent Office: real-time pixel-art dashboard. Click the numbered markers to explore the interface panels.
+              {" "}<a href="/demo" style={{ color: GOLD, textDecoration: "underline", textUnderlineOffset: "2px" }}>Appendix J: Interactive Demo</a>
             </p>
+
+            {/* Fig. 22 legend — two independent columns (odd left, even right) */}
+            {(() => {
+              const SUBS = [
+                // 1–3: The Investigation
+                "How are they connected?",
+                "What needs to happen next?",
+                "What does the editor think?",
+                // 4–7: The Agents
+                "What is the agent state?",
+                "Who is working?",
+                "What have they noticed?",
+                "What have they done?",
+                // 8–11: The Dashboard
+                "How much is this costing me?",
+                "How many issues have we found?",
+                "What\u2019s the big picture?",
+                "What tasks are done or failed?",
+              ];
+              const CATEGORIES = [
+                { at: 1, label: "The Investigation", sub: "What the system knows and is finding. This is the substantive core. Only look at these three and you will understand the state of the investigation." },
+                { at: 4, label: "The Agents", sub: "Who\u2019s working and what are they doing? This is the cognitive observability layer. You\u2019re watching agents think and talk." },
+                { at: 8, label: "The Dashboard", sub: "System health and cost. These are operational metrics. They answer \u201cis the system healthy?\u201d and \u201chow much is this costing?\u201d Important for the developer, less narratively interesting." },
+              ];
+              const all = OFFICE_HOTSPOTS.map((h, i) => ({
+                num: i + 1, title: h.label, sub: SUBS[i] ?? "", desc: h.desc,
+              }));
+              const left = all.slice(0, 4);   // 1–4
+              const right = all.slice(4);     // 5–11
+
+              const renderCatHeader = (cat: typeof CATEGORIES[0]) => {
+                const ci = CATEGORIES.indexOf(cat);
+                const accent = CAT_COLORS[ci];
+                return (
+                  <div key={`cat-${cat.at}`} style={{ padding: "10px 0", borderTop: `2px solid ${TEXT_MID}`, borderBottom: `2px solid ${TEXT_MID}`, marginTop: cat.at === 1 ? 0 : 8 }}>
+                    <p className="text-[8px] uppercase tracking-[0.15em]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                      Category {String(ci + 1).padStart(2, "0")}
+                    </p>
+                    <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.1em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                      {cat.label}
+                    </p>
+                    <p className="mt-1 text-[8px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+                      {cat.sub}
+                    </p>
+                  </div>
+                );
+              };
+
+              const renderItem = (item: typeof all[0]) => {
+                const accent = CAT_COLORS[catColorIdx(item.num)];
+                return (
+                <div
+                  key={item.num}
+                  className="flex items-start gap-2"
+                  style={{ padding: (item.num === 3 || item.num === 7) ? "12px 0 24px" : "12px 0", borderTop: `1px solid ${BORDER}` }}
+                >
+                  <div
+                    className="flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full"
+                    style={{ backgroundColor: accent, marginTop: 1 }}
+                  >
+                    <span className="text-[9px] font-bold" style={{ fontFamily: MONO, color: "#fff" }}>
+                      {item.num}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-[0.08em] leading-none" style={{ fontFamily: MONO, color: GOLD }}>
+                      {item.title}
+                    </p>
+                    <p className="mt-0.5 text-[8px] font-bold uppercase tracking-[0.08em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                      {item.sub}
+                    </p>
+                    <p className={`mt-1 text-[9px] leading-[1.5]${[1, 3, 4].includes(item.num) ? " font-bold" : ""}`} style={{ fontFamily: MONO, color: [1, 3, 4].includes(item.num) ? TEXT_MID : TEXT_DIM }}>
+                      {item.desc}
+                    </p>
+                    {item.num === 4 && (() => {
+                      const sprite = (src: string, label: string, h = 54) => (
+                        <div key={label} className="flex shrink-0 flex-col items-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={src} alt={`Scout agent — ${label}`} style={{ height: h, width: "auto", imageRendering: "pixelated" }} />
+                          <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.1em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                            {label}
+                          </p>
+                        </div>
+                      );
+                      let sepIdx = 0;
+                      const sep = (text: string) => (
+                        <span key={`sep-${sepIdx++}`} className="flex shrink-0 items-center self-center text-[10px] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM, marginTop: -12 }}>
+                          {text}
+                        </span>
+                      );
+                      return (
+                        <div className="mt-2 flex items-end gap-0.5">
+                          {sprite("/sidenotes/scout-waiting.png", "Waiting")}
+                          {sep("\u2192")}
+                          {sprite("/sidenotes/scout-thinking.png", "Reasoning")}
+                          {sep("\u2192")}
+                          {sprite("/sidenotes/scout-working.png", "Acting")}
+                          {sep("=")}
+                          {sprite("/sidenotes/scout-happy.png", "Success")}
+                          {sep("or")}
+                          {sprite("/sidenotes/scout-mad.png", "Failure")}
+                          {sep("\u2192")}
+                          {sprite("/sidenotes/scout-done.png", "Done!", 58)}
+                        </div>
+                      );
+                    })()}
+                  </div>
+                </div>
+              ); };
+
+              const renderColumn = (items: typeof all) => {
+                const els: React.ReactNode[] = [];
+                for (const item of items) {
+                  const cat = CATEGORIES.find((c) => c.at === item.num);
+                  if (cat) els.push(renderCatHeader(cat));
+                  els.push(renderItem(item));
+                }
+                return els;
+              };
+
+              return (
+                <div className="mt-4 flex gap-6" style={{ maxWidth: CONTENT_NARROW }}>
+                  <div className="flex-1">{renderColumn(left)}</div>
+                  <div className="flex-1">{renderColumn(right)}</div>
+                </div>
+              );
+            })()}
+
           </div>
+
         </div>
 
-        <SectionTransition num="4.7" name="limitations" />
+        <SectionTransition num="4.7" name="creativity" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4.7: LIMITATIONS AND DISCLAIMERS
+            SECTION 4.7: CREATIVITY IN AI SYSTEMS
         ══════════════════════════════════════════════════════════════════ */}
         <div id="section-4-7" className="mt-8 scroll-mt-24">
+          <p className="s-label">AI AGENT METHODOLOGY</p>
+          <h3 className="s-title">4.7 CREATIVITY IN AI SYSTEMS</h3>
+          <p className="s-subtitle">How humans and AI develop shared creative vocabulary through iteration.</p>
+
+          {/* ── Body text — matching S4.4 pattern ── */}
+          <div
+            className="mt-10 text-[15px] leading-[1.8] [&>*+*]:mt-6"
+            style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
+          >
+
+          {/* ── Tech Stack (floated, 2 minor cols) ── */}
+          <div
+            className="float-left mr-6 mb-6 hidden md:block"
+            style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+          >
+            <TechStack />
+            <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+              <span style={{ color: TEXT_MID }}>Fig. 24</span> &mdash; Full technology stack powering the AD-Epstein Index. All production systems &mdash; no mock data or placeholder infrastructure.
+            </p>
+          </div>
+
+          {/* ── Sable ── */}
+          <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Sable</p>
+
+          <SidenoteBlock note={
+            <Sidenote
+              title="Augmenting Human Intellect"
+              href="https://www.dougengelbart.org/content/view/138"
+              linkText="stanford.edu/engelbart/1962 &rarr;"
+            >
+              Douglas Engelbart (1962). The man who invented the mouse, hypertext, and collaborative computing argued that computers should amplify human thinking, not replace it. Automation substitutes for effort. Augmentation strengthens it. Sable doesn&rsquo;t design for you &mdash; he designs with you, at the speed of conversation.
+            </Sidenote>
+          }>
+            <p>The website you&rsquo;re reading was designed collaboratively with a seventh AI agent. His name is &ldquo;Sable&rdquo; (he named himself) and he doesn&rsquo;t run autonomously. He can&rsquo;t, or better yet, he doesn&rsquo;t have the right skillset that would make doing so productive.</p>
+          </SidenoteBlock>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>In 1962, Douglas Engelbart drew a distinction between two possible futures for computing.<NoteArrow /> One future was automation: machines replacing human effort, task by task. The other was augmentation: machines <em>amplifying</em> human capabilities to think and create at a scale impossible to achieve alone. Engelbart argued for augmentation. Sixty years later, the distinction still holds. The Detective automates name checking &mdash; either a name appears in the DOJ library or it doesn&rsquo;t. The Editor automates verdict review &mdash; evidence either meets the threshold or it falls short. There are shades of gray in the judgement, but all of the rules can be codified through a set of written instructions. Like the best of automation, their tasks have verifiable outcomes and the system can check its own work.</p>
+
+          <SidenoteBlock note={
+            <Sidenote
+              title="&lsquo;Who&rsquo; Designs Better?"
+              href="https://www.cambridge.org/core/journals/design-science"
+              linkText="cambridge.org &rarr;"
+            >
+              Cambridge University Press (2025). A competition between human designers, AI alone, and human-AI collaboration. Collaboration produced the most creative results, beating both solo human and solo AI. The empirical case for augmentation over automation in creative work.
+            </Sidenote>
+          }>
+            <p>Design, on the other hand, has no such ground truth.<NoteArrow /> You can certainly ask &ldquo;What looks better?&rdquo; And your response would be generated by comparing your design against a vast trove of averages of all the similar designs: &ldquo;This is what is typically done.&rdquo; But taste and design style don&rsquo;t want to trend toward the average. It trends toward the specific &mdash; the culturally loaded, the personally meaningful, the exciting new look, the things that no training set can predict because they haven&rsquo;t ever been done yet. There&rsquo;s no database to query to solve for style. That&rsquo;s the work the human does. Sable does everything else.</p>
+          </SidenoteBlock>
+
+          <SidenoteBlock note={
+            <Sidenote
+              title="Figma MCP Server"
+              href="https://www.figma.com/blog/introducing-figma-mcp-server/"
+              linkText="figma.com &rarr;"
+            >
+              Announced October 2025. The Model Context Protocol server gives AI agents direct read/write access to Figma files &mdash; not screenshots, but structured design components, styles, layout constraints, and variables. Sable uses this to propose and refine layouts in the same file the human reviews.
+            </Sidenote>
+          }>
+            <p>So Sable augments. The workflow is conversational: describe what you want to see, the data it should present, and the aesthetic register. Sable proposes a range of options in Figma.<NoteArrow /> You react, he iterates, you go in and fine-tune, he exports to a localhost server, you see how it looks in context of the full site, and you go back and forth, round and round &mdash; sometimes over a hundred spins &mdash; until it&rsquo;s pixel-perfect. Natural language is a powerful interface for directing AI systems. You can give it a loose idea and see potentially unlimited options. The main skill then becomes one of an editor, how do you refine and simplify. Resist the temptation to endlessly expand, but rather mold something down into your vision. That&rsquo;s where augmentation leads to something new where the average can&rsquo;t go.</p>
+          </SidenoteBlock>
+
+          {/* ── The Feedback Loop ── */}
+          <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>The Feedback Loop</p>
+
+          {/* ── Dialogue Diagram (floated, 2 minor cols) ── */}
+          <div
+            className="float-left mr-6 mb-6 hidden md:block"
+            style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+          >
+            <DesignDialogue />
+            <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+              <span style={{ color: TEXT_MID }}>Fig. 25</span> &mdash; Transcript of human-AI design collaboration showing six phases of escalating precision. Exchanges are drawn from actual Figma sessions between the project author and Sable (design agent). Timestamps are approximate.
+            </p>
+          </div>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>The gap between language and precision turns out to be where the most interesting things happen. The methodology sections above have documented what the system does: how agents extract, investigate, and present data. But the design process behind all of the diagrams, figures, and visual elements on this page reveals something that the methodology alone cannot capture: how the human-AI feedback loop itself evolves over the course of a single working session.</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>The transcript in Figure 25 is drawn from actual sessions between me and the AI agent around the design of the diagram shown in Figure 06. At 2:22 PM, I wrote &ldquo;use a similar layout and aesthetic.&rdquo; By 5:23 PM &mdash; three hours and roughly 50 exchanges later &mdash; I was writing &ldquo;15px lineweights, 60% opacity, 80px columns centered in the 470px frame.&rdquo; Same person. Same project. Entirely different language.</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>I didn&rsquo;t plan that progression, and I didn&rsquo;t notice it happening. But looking back over the transcripts, it&rsquo;s the most important thing in them. The feedback loop didn&rsquo;t just produce better diagrams. It taught me a new vocabulary for design, one I couldn&rsquo;t have articulated at the start, not because the words didn&rsquo;t exist, but because I hadn&rsquo;t learned to see the diagram that way yet. I couldn&rsquo;t ask for specific lineweights until I&rsquo;d seen what the default ones looked like and understood why they were wrong.</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>In a world drowning in worthless, one-shot AI slop, it&rsquo;s natural for discussions to focus only on the end product &mdash; what did the AI make? But the more consequential long-term effect may be what the human learns to ask for. Each iteration narrowed the gap between what I meant and what I said. By the end, it felt closer to operating as a creative director with pixel-level fluency &mdash; a skill I couldn&rsquo;t have imagined three hours earlier. The system gets faster. And so does the human.</p>
+
+          <div style={{ clear: "both" }} />
+          </div>{/* end body text */}
+
+        </div>
+
+        <SectionTransition num="4.8" name="limitations" />
+
+        {/* ══════════════════════════════════════════════════════════════════
+            SECTION 4.8: LIMITATIONS AND DISCLAIMERS
+        ══════════════════════════════════════════════════════════════════ */}
+        <div id="section-4-8" className="mt-8 scroll-mt-24">
           <SectionHeader
-            num="4.7"
+            num="4.8"
             title="LIMITATIONS"
             subtitle="What this project can and cannot tell you."
             intro={[
@@ -4179,83 +5039,6 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 could parse.
               </p>
             </div>
-          </div>
-        </div>
-
-        <SectionTransition num="4.8" name="data_sources" />
-
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4.8: DATA SOURCES
-        ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-4-8" className="mt-8 scroll-mt-24">
-          <SectionHeader
-            num="4.8"
-            title="DATA SOURCES"
-            subtitle="Primary sources, infrastructure, and the full codebase."
-            intro={[
-              "The pipeline draws from three primary data sources. Archive.org provides the complete digital archive of Architectural Digest from 1988 to 2025 — approximately 480 issues with page images and structured article catalogs accessible via JWT-encoded metadata. The DOJ Epstein Library contains millions of pages of released legal documents, depositions, correspondence, and records searchable through OCR. Epstein's Little Black Book, released through civil litigation, provides approximately 1,500 contact entries with names and phone numbers.",
-              "The extracted data lives in two databases: Supabase (PostgreSQL) for all structured records — features, cross-references, dossiers, verdicts, and pipeline state — and Neo4j Aura for the knowledge graph, which maps relationships between people, designers, locations, styles, and Epstein sources. All queries are server-side. No API keys or database credentials are exposed to the client.",
-              "The full source code — the multi-agent pipeline, website, analysis tools, and this methodology section — is available for inspection. The methodology is fully reproducible: given the same source data and the same pipeline code, the same results will emerge.",
-            ]}
-            summary="Three primary sources, two databases, one open codebase. Every finding is independently verifiable against the original documents."
-          />
-
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {dataSources.map((src) => (
-              <div
-                key={src.title}
-                className="group flex flex-col rounded border p-5 transition-colors"
-                style={{ backgroundColor: CARD_BG, borderColor: BORDER }}
-              >
-                {/* Tag */}
-                <span
-                  className="self-start rounded-sm px-2 py-0.5 text-[10px] tracking-widest"
-                  style={{
-                    fontFamily: MONO,
-                    backgroundColor:
-                      src.tag === "PRIMARY"
-                        ? GREEN_BG
-                        : src.tag === "CODE"
-                          ? "rgba(184, 115, 51, 0.12)"
-                          : "rgba(160, 160, 176, 0.08)",
-                    color:
-                      src.tag === "PRIMARY"
-                        ? GREEN
-                        : src.tag === "CODE"
-                          ? COPPER
-                          : TEXT_DIM,
-                  }}
-                >
-                  {src.tag}
-                </span>
-
-                {/* Title */}
-                <p
-                  className="mt-3 text-[13px] font-bold"
-                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-                >
-                  {src.title}
-                </p>
-
-                {/* Description */}
-                <p
-                  className="mt-2 flex-1 text-[10px] leading-[1.6]"
-                  style={{ fontFamily: MONO, color: TEXT_DIM }}
-                >
-                  {src.description}
-                </p>
-
-                {/* URL */}
-                {src.url && (
-                  <p
-                    className="mt-3 truncate text-[10px]"
-                    style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.5)" }}
-                  >
-                    {src.url}
-                  </p>
-                )}
-              </div>
-            ))}
           </div>
         </div>
 

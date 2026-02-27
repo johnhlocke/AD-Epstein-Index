@@ -157,7 +157,23 @@ export default async function Home() {
       </section>
       */}
 
-      {/* ── Dossier Example ── */}
+      {/* ── 1.3 What a Typical AD Homeowner Looks Like ── */}
+      <section id="typical-homeowner" className="narrative bg-background pb-20 pt-14">
+        <div
+          className="mx-auto w-full"
+          style={{
+            maxWidth: "var(--grid-max-width)",
+            paddingLeft: "var(--grid-margin)",
+            paddingRight: "var(--grid-margin)",
+          }}
+        >
+          <p className="n-label">Key Finding 01 (Cont.)</p>
+          <h2 className="n-title">1.3 What a Typical AD Homeowner Looks Like</h2>
+          <hr className="n-rule" />
+        </div>
+      </section>
+
+      {/* ── 1.4 The Epstein Profile vs the AD Baseline ── */}
       <DossierExample />
 
       {/* ── Bridge: The Aesthetic Pivot ── */}
