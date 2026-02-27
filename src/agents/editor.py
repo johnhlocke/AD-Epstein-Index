@@ -984,6 +984,15 @@ class EditorAgent(Agent):
             binary_db = binary_verdict if binary_verdict in ("YES", "NO") else None
 
             for fid in feature_id_list:
+                # Skip feature IDs that don't exist (orphaned by cleanup)
+                try:
+                    feat_check = get_supabase().table("features").select("id").eq("id", fid).execute()
+                    if not feat_check.data:
+                        self.log(f"Skipping orphan feature_id={fid} for {name} (deleted)", level="DEBUG")
+                        continue
+                except Exception:
+                    pass  # If check fails, proceed and let the upsert handle it
+
                 xref_written = False
                 try:
                     # Write full xref data to cross_references table
@@ -1988,7 +1997,7 @@ Respond with JSON only:
         feature_ids = {}  # name → list of feature IDs
         for feat in unchecked[:50]:
             name = (feat.get("homeowner_name") or "").strip()
-            if not name:
+            if not name or "anonymous" in name.lower():
                 continue
             if name not in seen_names:
                 names.append(name)
@@ -2033,13 +2042,20 @@ Respond with JSON only:
 
         try:
             sb = get_supabase()
-            result = (
-                sb.table("features")
-                .select("id, homeowner_name")
-                .eq("detective_verdict", "YES")
-                .execute()
-            )
-            yes_features = result.data
+            yes_features = []
+            offset = 0
+            while True:
+                batch = (
+                    sb.table("features")
+                    .select("id, homeowner_name")
+                    .eq("detective_verdict", "YES")
+                    .range(offset, offset + 999)
+                    .execute()
+                )
+                yes_features.extend(batch.data)
+                if len(batch.data) < 1000:
+                    break
+                offset += 1000
         except Exception as e:
             self.log(f"Planning researcher tasks failed: {e}", level="ERROR")
             return

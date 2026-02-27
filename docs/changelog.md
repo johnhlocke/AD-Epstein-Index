@@ -6,6 +6,27 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-27 (Session 54)
+
+### Added — Wealth Classification Methodology & Pipeline Fixes
+
+- **`docs/wealth-classification-methodology.md`** — New formal methodology document covering the entire wealth origin classification framework: Forbes Self-Made Score (1-10), five wealth categories, safety net test, wealth multiplication test, consistency rules, three-pass research pipeline, academic framework (Han/Nunes/Dreze 2010), quality controls, and known biases
+- **Googleable Parent Rule** — Formalized in both code prompt (`src/research_classify.py`) and methodology doc: if a person's parents have web search presence, Forbes score is capped at 7 (same industry → 6 max; Wikipedia-level parent → MIXED/Forbes 4-5). Motivating case: Robert Downey Jr. scored Forbes 9 despite father being filmmaker Robert Downey Sr.
+
+### Fixed — Pipeline Bottleneck (Editor FK Error Loop)
+
+- **Orphan feature ID loop** — Editor was retrying 53 deleted feature IDs × 53+ times each (2,835 wasted API cycles) due to FK constraint violations on `cross_references` upsert. Added pre-check: verify feature exists before attempting upsert, skip with DEBUG log if deleted
+- **Anonymous in detective queue** — `_fill_detective_queue()` now skips "Anonymous" names (never useful to cross-reference). `get_features_needing_detective()` in `db.py` also filters Anonymous as belt-and-suspenders
+- **Researcher queue pagination** — `_fill_researcher_queue()` was capped at Supabase's 1,000-row default limit, missing 314 of 1,314 YES features. Added pagination loop
+- **Ledger exhaustion reset** — 30 names were marked exhausted (3+ failures) due to the FK error loop, not genuine investigation failures. Ledger cleared so Elena can investigate them
+- **Detective status accuracy** — `agent_status.py` `with_homeowner` count now excludes Anonymous features, so detective completion math is correct. Silas correctly shows "Done" instead of phantom "657 remaining"
+
+### Database
+
+- **657 Anonymous features** set to `detective_verdict = NO` (were NULL, inflating detective's remaining count)
+
+---
+
 ## 2026-02-26 (Session 53)
 
 ### Added — NULL Name Resolution & Wealth Origin Research

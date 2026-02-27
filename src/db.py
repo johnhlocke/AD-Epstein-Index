@@ -294,6 +294,7 @@ def get_features_needing_detective(issue_id=None):
         .not_.is_("homeowner_name", "null")
         .neq("homeowner_name", "null")   # Filter string "null" from Gemini
         .neq("homeowner_name", "None")   # Filter string "None" from Gemini
+        .neq("homeowner_name", "Anonymous")  # Never cross-ref Anonymous
     )
     if issue_id is not None:
         query = query.eq("issue_id", issue_id)

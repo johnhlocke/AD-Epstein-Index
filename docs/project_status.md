@@ -191,6 +191,13 @@ This file should be automatically updated when necessary to answer three key que
 | NULL name resolution (862 features → Anonymous) | Phase 1 | Done |
 | Wealth origin classification pipeline (research_classify.py) | Phase 2 | In Progress |
 | Multi-model Gemini research (3 Flash, 2.5 Pro, 2.5 Flash) | Phase 2 | In Progress |
+| Wealth classification methodology doc | Phase 2 | Done |
+| Googleable Parent Rule (Forbes score cap) | Phase 2 | Done |
+| Pipeline FK error loop fix (orphan features) | Tooling | Done |
+| Detective/Editor Anonymous exclusion | Tooling | Done |
+| Researcher queue pagination fix (1000-row cap) | Tooling | Done |
+| Anonymous features → detective_verdict NO (657) | Database | Done |
+| Dossier false negative audit (Couturier, Walters, Bensley, Redford, Askari) | Phase 2 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -350,7 +357,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 1,396 issues, **3,763 features** (after 621 non-home + 6 additional deletions), 1,106 cross-references (309 YES), 420 dossiers, **84+ confirmed connections**
+- **Final stats**: 1,396 issues, **3,615 features**, 2,958 cross-references (1,314 YES), 1,417 dossiers, **206 confirmed connections**
 - Scoring v2.3: aesthetic_summary field, structural overwrite on rescore, expanded subject_category (Art/Media/Design), --offset flag, checkpoint refresh
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
@@ -363,9 +370,12 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **In Progress — Wealth Origin Study & Final Pipeline:**
 - **NULL name resolution COMPLETE**: 862 NULL features processed by Opus Vision → all genuinely anonymous. Applied to Supabase. Zero NULL homeowner names remain.
-- **Wealth origin classification**: 421/600 baseline names classified so far. Multi-model Gemini pipeline (3 Flash Preview + 2.5 Pro). Remaining ~398 names processing now.
-  - Key finding so far: MIXED wealth (inherited platform + self-amplified) ~2x overrepresented in Epstein orbit (25.9% vs 13.3% baseline)
-  - Forbes Self-Made Score mean: 5.88 (baseline), bimodal peaks at 3 and 7-8
+- **Wealth origin classification**: ~850/1,246 names backfilled with Perplexity third pass. Full pipeline: Gemini Search Grounding (2 passes) + Perplexity (1 pass) + Opus synthesis. ~1,859 names still need initial classification.
+  - Key finding: MIXED wealth (inherited platform + self-amplified) ~2x overrepresented in Epstein orbit (25.9% vs 13.3% baseline)
+  - **Googleable Parent Rule** formalized: parents with web presence → Forbes 7 max; same-industry → Forbes 6 max; Wikipedia-level parent → MIXED
+  - Formal methodology: `docs/wealth-classification-methodology.md`
+- **Dossier false negative audit COMPLETE**: Deep audit of all 1,209 rejected dossiers found 5 false negatives — Robert Couturier (#350, #1240), Barbara Walters (#1345), Bill Bensley (#731), Robert Redford (#986), Emma Roig Askari (#684). All confirmed. Pipeline timing bug identified (triage before DOJ results) and documented.
+- **Pipeline health**: Editor FK error loop fixed (was starving Elena of work). Detective correctly shows done. 206 confirmed dossiers, 1,417 total.
 - Opus Vision scoring: COMPLETE (3,772/3,772 at v2.3)
 - Test-retest validation COMPLETE: 3 runs × 100 features, 91.1% exact agreement, 100% within ±1, ICC 0.949–0.991 ("Excellent"), $34.89
 - Inter-model reliability COMPLETE: 100 features × Sonnet + Haiku, Opus-Sonnet ICC 0.805, 96.8% within ±1, $4.35

@@ -106,7 +106,11 @@ def read_pipeline_stats():
                     break
                 offset += 1000
             total_features = len(feat_rows)
-            with_name = sum(1 for r in feat_rows if r.get("homeowner_name"))
+            with_name = sum(
+                1 for r in feat_rows
+                if r.get("homeowner_name")
+                and "anonymous" not in r["homeowner_name"].lower()
+            )
             distinct_issues = len(set(r["issue_id"] for r in feat_rows if r.get("issue_id")))
 
             return {

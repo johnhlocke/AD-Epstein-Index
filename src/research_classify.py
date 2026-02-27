@@ -32,6 +32,9 @@ Usage:
     python3 src/research_classify.py --baseline 600 --epstein
     python3 src/research_classify.py --report
     python3 src/research_classify.py --baseline 600 --resume
+    python3 src/research_classify.py --all-baseline --resume
+    python3 src/research_classify.py --apply-db
+    python3 src/research_classify.py --appendix
 
 Cost estimates:
     Search Grounding (3.1 Pro): ~$0.10-0.15/name → 600 baseline ≈ $60-90
@@ -40,6 +43,7 @@ Cost estimates:
 
 import argparse
 import concurrent.futures
+import csv
 import json
 import os
 import random
@@ -48,6 +52,7 @@ import time
 from datetime import datetime, timezone
 
 import anthropic
+import requests as http_requests
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
@@ -70,6 +75,10 @@ OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "wealth_resea
 
 POLL_INTERVAL = 15  # seconds between Deep Research polls
 MAX_RESEARCH_WAIT = 3600  # 60 min max wait per task
+
+# ── Perplexity Configuration ────────────────────────────────
+PERPLEXITY_MODEL = "sonar-reasoning-pro"  # reasoning + search grounding
+PERPLEXITY_API_URL = "https://api.perplexity.ai/chat/completions"
 
 # ── Research Prompt (Deep Research mode) ─────────────────────
 
@@ -233,6 +242,28 @@ Key test for 5 vs 6 — SAFETY NET existence:
 Did family wealth EXIST and was it AVAILABLE (even if not directly used)? \
 If yes → 5 or below (the safety net is the advantage). \
 If no family wealth existed → 6+ (truly self-made, no fallback if they failed).
+
+## THE GOOGLEABLE PARENT RULE (mandatory cap on Forbes score)
+If one or both parents are publicly prominent enough to appear in web search results — \
+meaning they have a Wikipedia page, press coverage, industry recognition, or any \
+documented public career — the subject CANNOT score Forbes 8 or higher. The logic:
+- Forbes 8+ means "self-made from middle-class or below, no particular advantages."
+- A parent with a public profile in ANY professional field = meaningful access, \
+connections, cultural capital, or safety net. That is NOT "no particular advantages."
+
+Scoring caps when parents are Googleable:
+- Parent prominent in the SAME or adjacent industry → Forbes 6 max, classify MIXED likely. \
+(e.g., Robert Downey Jr.'s father was filmmaker Robert Downey Sr. — not self-made.)
+- Parent prominent in an UNRELATED industry → Forbes 7 max. \
+(e.g., parent was a famous surgeon but subject became a fashion designer.)
+- Parent has a Wikipedia page → almost certainly MIXED (Forbes 4-5), not SELF_MADE. \
+A Wikipedia-level parent means the subject grew up with a level of access, \
+network, and cultural capital that is incompatible with "self-made."
+- Parent was a working professional with NO public profile → no cap applies.
+
+SELF-CHECK: Before assigning Forbes 8+, ask: "Can I find this person's parents \
+in the research?" If the research mentions a parent by name, occupation, or \
+accomplishment, the subject is NOT Forbes 8+. Adjust downward.
 
 ## 3. Education
 List specific schools attended (prep school, undergraduate, graduate). If unknown, say "Unknown."
@@ -432,6 +463,72 @@ def get_baseline_candidates(sb, n, exclude_names=None):
 
     random.shuffle(candidates)
     return candidates[:n]
+
+
+def get_all_baseline_candidates(sb):
+    """Get ALL non-confirmed, non-Anonymous unique homeowner names (no sampling)."""
+    dossiers = sb.table("dossiers").select(
+        "feature_id"
+    ).eq("editor_verdict", "CONFIRMED").execute()
+    confirmed_fids = set(
+        d["feature_id"] for d in (dossiers.data or []) if d["feature_id"]
+    )
+
+    all_features = []
+    offset = 0
+    while True:
+        batch = sb.table("features").select(
+            "id, homeowner_name, subject_category, location_city, "
+            "location_state, location_country, issue_id"
+        ).not_.is_("homeowner_name", "null").range(offset, offset + 999).execute()
+        if not batch.data:
+            break
+        all_features.extend(batch.data)
+        if len(batch.data) < 1000:
+            break
+        offset += 1000
+
+    issue_ids = list(set(
+        f.get("issue_id") for f in all_features if f.get("issue_id")
+    ))
+    issues_map = {}
+    for i in range(0, len(issue_ids), 100):
+        batch_ids = issue_ids[i:i+100]
+        result = sb.table("issues").select("id, year").in_("id", batch_ids).execute()
+        if result.data:
+            for iss in result.data:
+                issues_map[iss["id"]] = iss.get("year")
+
+    candidates = []
+    seen_names = set()
+    for f in all_features:
+        name = (f.get("homeowner_name") or "").strip()
+        if not name or name.lower() == "anonymous":
+            continue
+        if f["id"] in confirmed_fids:
+            continue
+        if name in seen_names:
+            continue
+        seen_names.add(name)
+
+        loc_parts = [
+            f.get("location_city"),
+            f.get("location_state"),
+            f.get("location_country"),
+        ]
+        location = ", ".join(p for p in loc_parts if p) or "Unknown"
+        issue_year = issues_map.get(f.get("issue_id"), "Unknown")
+
+        candidates.append({
+            "name": name,
+            "group": "baseline",
+            "feature_id": f["id"],
+            "category": f.get("subject_category", "Unknown"),
+            "location": location,
+            "year": str(issue_year),
+        })
+
+    return candidates
 
 
 # ── Deep Research (Interactions API) ─────────────────────────
@@ -706,7 +803,7 @@ def research_person_grounded(gemini_client, person, max_retries=2):
             }
 
 
-NUM_RESEARCH_PASSES = 3  # independent web searches per name
+NUM_RESEARCH_PASSES = 3  # independent Gemini web searches per name
 
 
 def _single_research_call(gemini_client, prompt):
@@ -718,13 +815,64 @@ def _single_research_call(gemini_client, prompt):
     return {
         "research": text,
         "grounded": grounded,
+        "source": "gemini",
         "gemini_input_tokens": usage.prompt_token_count if usage else 0,
         "gemini_output_tokens": usage.candidates_token_count if usage else 0,
     }
 
 
+# ── Perplexity Research ──────────────────────────────────────
+
+def _single_perplexity_call(prompt):
+    """Single Perplexity Sonar research call — runs in thread, returns dict or raises."""
+    api_key = os.getenv("PERPLEXITY_API_KEY")
+    if not api_key:
+        return {
+            "research": "ERROR: PERPLEXITY_API_KEY not set",
+            "grounded": False,
+            "source": "perplexity",
+            "gemini_input_tokens": 0,
+            "gemini_output_tokens": 0,
+        }
+
+    resp = http_requests.post(
+        PERPLEXITY_API_URL,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": PERPLEXITY_MODEL,
+            "messages": [
+                {"role": "system", "content": "You are a biographical researcher. "
+                 "Provide factual, well-sourced biographical and financial information. "
+                 "If you cannot find information, say so clearly."},
+                {"role": "user", "content": prompt},
+            ],
+            "temperature": 0.1,
+        },
+        timeout=GEMINI_TIMEOUT,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    text = data["choices"][0]["message"]["content"]
+    usage = data.get("usage", {})
+    return {
+        "research": text,
+        "grounded": True,  # Sonar always searches the web
+        "source": "perplexity",
+        "gemini_input_tokens": usage.get("prompt_tokens", 0),
+        "gemini_output_tokens": usage.get("completion_tokens", 0),
+    }
+
+
 def _run_parallel_research(gemini_client, person, num_passes=NUM_RESEARCH_PASSES):
-    """Run multiple independent Gemini research passes in parallel with timeout."""
+    """Run Gemini + Perplexity research passes in parallel with timeout.
+
+    Fires NUM_RESEARCH_PASSES Gemini calls + 1 Perplexity call concurrently.
+    Returns list of results: [gemini_1, gemini_2, gemini_3, perplexity_1].
+    """
     prompt = SEARCH_GROUNDING_PROMPT.format(
         name=person["name"],
         year=person.get("year", "Unknown"),
@@ -735,25 +883,50 @@ def _run_parallel_research(gemini_client, person, num_passes=NUM_RESEARCH_PASSES
     failed_result = {
         "research": "ERROR: timeout or failure",
         "grounded": False,
+        "source": "unknown",
         "gemini_input_tokens": 0,
         "gemini_output_tokens": 0,
     }
 
+    has_perplexity = bool(os.getenv("PERPLEXITY_API_KEY"))
+    total_workers = num_passes + (1 if has_perplexity else 0)
+
     # Use daemon threads so they don't block process exit
-    pool = concurrent.futures.ThreadPoolExecutor(max_workers=num_passes)
-    futures = [pool.submit(_single_research_call, gemini_client, prompt)
-               for _ in range(num_passes)]
+    pool = concurrent.futures.ThreadPoolExecutor(max_workers=total_workers)
+
+    # Submit Gemini passes
+    gemini_futures = [pool.submit(_single_research_call, gemini_client, prompt)
+                      for _ in range(num_passes)]
+
+    # Submit Perplexity pass
+    pplx_future = pool.submit(_single_perplexity_call, prompt) if has_perplexity else None
 
     results = []
-    for i, future in enumerate(futures):
+    # Collect Gemini results
+    for i, future in enumerate(gemini_futures):
         try:
             result = future.result(timeout=GEMINI_TIMEOUT)
             results.append(result)
         except concurrent.futures.TimeoutError:
             future.cancel()
-            results.append({**failed_result, "research": f"ERROR: pass {i+1} timeout ({GEMINI_TIMEOUT}s)"})
+            results.append({**failed_result, "source": "gemini",
+                            "research": f"ERROR: Gemini pass {i+1} timeout ({GEMINI_TIMEOUT}s)"})
         except Exception as e:
-            results.append({**failed_result, "research": f"ERROR: pass {i+1}: {e}"})
+            results.append({**failed_result, "source": "gemini",
+                            "research": f"ERROR: Gemini pass {i+1}: {e}"})
+
+    # Collect Perplexity result
+    if pplx_future:
+        try:
+            result = pplx_future.result(timeout=GEMINI_TIMEOUT)
+            results.append(result)
+        except concurrent.futures.TimeoutError:
+            pplx_future.cancel()
+            results.append({**failed_result, "source": "perplexity",
+                            "research": f"ERROR: Perplexity timeout ({GEMINI_TIMEOUT}s)"})
+        except Exception as e:
+            results.append({**failed_result, "source": "perplexity",
+                            "research": f"ERROR: Perplexity: {e}"})
 
     # Don't wait for hung threads — let them die as daemon threads
     pool.shutdown(wait=False, cancel_futures=True)
@@ -762,17 +935,25 @@ def _run_parallel_research(gemini_client, person, num_passes=NUM_RESEARCH_PASSES
 
 
 def _merge_research_texts(research_results):
-    """Format multiple research results for Opus, labeling each pass."""
+    """Format multiple research results for Opus, labeling each pass with source."""
     sections = []
-    for i, r in enumerate(research_results, 1):
+    gemini_idx = 0
+    for r in research_results:
         text = r.get("research", "")
+        source = r.get("source", "gemini")
+
+        if source == "perplexity":
+            label = "Perplexity Sonar"
+        else:
+            gemini_idx += 1
+            label = f"Gemini Pass {gemini_idx}"
+
         if text.startswith("ERROR:"):
-            sections.append(f"**Research Pass {i}**: [Search failed — no results]")
+            sections.append(f"**{label}**: [Search failed — no results]")
         else:
             grounded = "web-grounded" if r.get("grounded") else "ungrounded"
-            sections.append(
-                f"**Research Pass {i}** ({grounded}):\n{text}"
-            )
+            sections.append(f"**{label}** ({grounded}):\n{text}")
+
     return "\n\n---\n\n".join(sections)
 
 
@@ -787,11 +968,14 @@ def run_search_grounding_pipeline(gemini_client, opus_client, persons, output_pa
         print("All names already processed.")
         return []
 
+    has_perplexity = bool(os.getenv("PERPLEXITY_API_KEY"))
+    total_passes = NUM_RESEARCH_PASSES + (1 if has_perplexity else 0)
     est = total * 0.08 * NUM_RESEARCH_PASSES
-    est_hours = total * 100 / 3600  # ~100s per name (3 parallel searches + Opus)
-    print(f"\n  Mode: {NUM_RESEARCH_PASSES}-Pass Search Grounding ({SEARCH_MODEL})")
+    est_hours = total * 100 / 3600  # ~100s per name (parallel searches + Opus)
+    pplx_label = f" + Perplexity {PERPLEXITY_MODEL}" if has_perplexity else ""
+    print(f"\n  Mode: {total_passes}-Pass Search Grounding ({SEARCH_MODEL}{pplx_label})")
     print(f"  Names: {total}")
-    print(f"  Research passes per name: {NUM_RESEARCH_PASSES} (concurrent)")
+    print(f"  Research passes per name: {total_passes} (concurrent)")
     print(f"  Estimated cost: ~${est:.0f} (Gemini) + ~${total * 0.09:.0f} (Opus)")
     print(f"  Estimated time: ~{est_hours:.1f} hours\n")
 
@@ -815,16 +999,20 @@ def run_search_grounding_pipeline(gemini_client, opus_client, persons, output_pa
             ]
 
             if not good_passes:
-                print(f" → ALL {NUM_RESEARCH_PASSES} PASSES FAILED")
+                total_passes = len(research_results)
+                print(f" → ALL {total_passes} PASSES FAILED")
                 result = {
                     **person,
                     **_make_unknown_fields(),
                     "research_1": research_results[0]["research"] if research_results else "",
                     "research_2": research_results[1]["research"] if len(research_results) > 1 else "",
                     "research_3": research_results[2]["research"] if len(research_results) > 2 else "",
+                    "research_4": research_results[3]["research"] if len(research_results) > 3 else "",
                     "passes_succeeded": 0,
                     "grounded": False,
-                    "research_mode": f"search-grounding-{NUM_RESEARCH_PASSES}pass",
+                    "research_mode": f"search-grounding-{total_passes}pass",
+                    "gemini_model": SEARCH_MODEL,
+                    "perplexity_model": PERPLEXITY_MODEL if any(r.get("source") == "perplexity" for r in research_results) else None,
                     "gemini_input_tokens": 0,
                     "gemini_output_tokens": 0,
                     "opus_input_tokens": 0,
@@ -844,7 +1032,11 @@ def run_search_grounding_pipeline(gemini_client, opus_client, persons, output_pa
             gen = classification.get("generational_wealth", "?")
             cls_conf = classification.get("classification_confidence", "?")
             any_grounded = any(r.get("grounded") for r in research_results)
+            total_passes = len(research_results)
+            has_pplx = any(r.get("source") == "perplexity" for r in research_results)
             grounded_tag = f"{len(good_passes)}G" if any_grounded else "U"
+            if has_pplx:
+                grounded_tag += "+P"
 
             print(f" → {cls:<12s} Forbes {score or '?':>2}/10 "
                   f"Gen:{gen:<8s} ({cls_conf}) [{grounded_tag}]")
@@ -858,9 +1050,12 @@ def run_search_grounding_pipeline(gemini_client, opus_client, persons, output_pa
                 "research_1": research_results[0]["research"] if research_results else "",
                 "research_2": research_results[1]["research"] if len(research_results) > 1 else "",
                 "research_3": research_results[2]["research"] if len(research_results) > 2 else "",
+                "research_4": research_results[3]["research"] if len(research_results) > 3 else "",
                 "passes_succeeded": len(good_passes),
                 "grounded": any_grounded,
-                "research_mode": f"search-grounding-{NUM_RESEARCH_PASSES}pass",
+                "research_mode": f"search-grounding-{total_passes}pass",
+                "gemini_model": SEARCH_MODEL,
+                "perplexity_model": PERPLEXITY_MODEL if has_pplx else None,
                 **classification,
                 "gemini_input_tokens": total_gemini_in,
                 "gemini_output_tokens": total_gemini_out,
@@ -1102,6 +1297,325 @@ def print_report(results):
     print(f"  Total:  ~${deep_est + gemini_cost + opus_cost:,.2f}")
 
 
+# ── Backfill Perplexity ──────────────────────────────────────
+
+def backfill_perplexity():
+    """Add Perplexity pass to existing results and re-classify with Opus."""
+    records = _load_all_results()
+    if not records:
+        return
+
+    api_key = os.getenv("PERPLEXITY_API_KEY")
+    if not api_key:
+        print("ERROR: PERPLEXITY_API_KEY not set in .env")
+        sys.exit(1)
+
+    opus_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+
+    # Filter to records that DON'T already have a perplexity pass
+    needs_backfill = [r for r in records if not r.get("research_4")]
+    already_done = len(records) - len(needs_backfill)
+
+    print(f"Total unique records: {len(records)}")
+    print(f"Already have Perplexity pass: {already_done}")
+    print(f"Need backfill: {len(needs_backfill)}")
+
+    if not needs_backfill:
+        print("All records already have Perplexity pass.")
+        return
+
+    est_cost_pplx = len(needs_backfill) * 0.02
+    est_cost_opus = len(needs_backfill) * 0.09
+    est_hours = len(needs_backfill) * 15 / 3600  # ~15s per name (Perplexity + Opus)
+    print(f"\nEstimated cost: ~${est_cost_pplx:.0f} (Perplexity) + "
+          f"~${est_cost_opus:.0f} (Opus re-classify)")
+    print(f"Estimated time: ~{est_hours:.1f} hours")
+
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
+    output_path = os.path.join(OUTPUT_DIR, f"backfill_pplx_{timestamp}.jsonl")
+    print(f"Output: {output_path}\n")
+
+    results = []
+    with open(output_path, "w") as f:
+        for i, rec in enumerate(needs_backfill, 1):
+            name = rec.get("name", "Unknown")
+            print(f"  [{i:>4d}/{len(needs_backfill)}] {name:<45s}", end="", flush=True)
+
+            # Build the prompt for Perplexity
+            prompt = SEARCH_GROUNDING_PROMPT.format(
+                name=name,
+                year=rec.get("year", "Unknown"),
+                category=rec.get("category", "Unknown"),
+                location=rec.get("location", "Unknown"),
+            )
+
+            # Run Perplexity pass
+            try:
+                pplx_result = _single_perplexity_call(prompt)
+            except Exception as e:
+                pplx_result = {
+                    "research": f"ERROR: Perplexity: {e}",
+                    "grounded": False,
+                    "source": "perplexity",
+                    "gemini_input_tokens": 0,
+                    "gemini_output_tokens": 0,
+                }
+
+            pplx_text = pplx_result.get("research", "")
+            pplx_ok = not pplx_text.startswith("ERROR:")
+
+            # Merge existing Gemini passes + new Perplexity pass for Opus
+            all_research = []
+            for pass_key in ["research_1", "research_2", "research_3"]:
+                text = rec.get(pass_key, "")
+                if text:
+                    all_research.append({"research": text, "grounded": True, "source": "gemini"})
+
+            all_research.append(pplx_result)
+            merged = _merge_research_texts(all_research)
+
+            # Re-classify with Opus using all passes
+            person = {
+                "name": name,
+                "category": rec.get("category", "Unknown"),
+                "year": rec.get("year", "Unknown"),
+                "location": rec.get("location", "Unknown"),
+            }
+            classification = classify_person(opus_client, person, merged)
+
+            cls = classification.get("classification", "?")
+            score = classification.get("forbes_score")
+            gen = classification.get("generational_wealth", "?")
+            pplx_tag = "P" if pplx_ok else "Px"
+            print(f" → {cls:<12s} Forbes {score or '?':>2}/10 "
+                  f"Gen:{gen:<8s} [{pplx_tag}]")
+
+            # Build updated record
+            result = {
+                **rec,
+                "research_4": pplx_text,
+                "perplexity_model": PERPLEXITY_MODEL,
+                "passes_succeeded": (rec.get("passes_succeeded", 0) or 0) + (1 if pplx_ok else 0),
+                **classification,
+            }
+            _save_result(f, result, results)
+
+            time.sleep(0.3)
+
+    print(f"\nBackfill complete: {len(results)}/{len(needs_backfill)}")
+    print(f"Output: {output_path}")
+    print(f"\nRun --apply-db to push updated results to Supabase.")
+
+
+# ── Apply to DB ──────────────────────────────────────────────
+
+# Model mapping for legacy files (before gemini_model field was added)
+FILE_MODEL_MAP = {
+    "researched_20260226_171429.jsonl": "gemini-3-pro-preview",
+    "researched_20260226_203239.jsonl": "gemini-2.5-pro",
+    "researched_20260226_203947.jsonl": "gemini-3-flash-preview",
+    "researched_20260226_220217.jsonl": "gemini-3-flash-preview",
+}
+
+
+def _load_all_results():
+    """Load all JSONL results, deduplicate (best record per name), return list."""
+    files = sorted(
+        f for f in os.listdir(OUTPUT_DIR)
+        if (f.startswith("researched_") or f.startswith("backfill_pplx_"))
+        and f.endswith(".jsonl")
+    )
+    if not files:
+        print("No output files found in", OUTPUT_DIR)
+        return []
+
+    # Load all records, tagging with source file
+    all_records = []
+    for fname in files:
+        fpath = os.path.join(OUTPUT_DIR, fname)
+        model_fallback = FILE_MODEL_MAP.get(fname)
+        with open(fpath) as f:
+            for line in f:
+                if line.strip():
+                    rec = json.loads(line)
+                    # Backfill gemini_model for legacy files
+                    if not rec.get("gemini_model") and model_fallback:
+                        rec["gemini_model"] = model_fallback
+                    rec["_source_file"] = fname
+                    all_records.append(rec)
+
+    print(f"Loaded {len(all_records)} records from {len(files)} files")
+
+    # Deduplicate: best record per name
+    # Priority: classified > UNKNOWN, more passes > fewer, later file > earlier
+    best = {}
+    for rec in all_records:
+        name = rec.get("name", "").strip()
+        if not name:
+            continue
+        existing = best.get(name)
+        if existing is None:
+            best[name] = rec
+            continue
+        # Prefer classified over UNKNOWN
+        new_classified = rec.get("classification", "UNKNOWN") != "UNKNOWN"
+        old_classified = existing.get("classification", "UNKNOWN") != "UNKNOWN"
+        if new_classified and not old_classified:
+            best[name] = rec
+        elif new_classified == old_classified:
+            # Prefer more passes succeeded
+            new_passes = rec.get("passes_succeeded", 0) or 0
+            old_passes = existing.get("passes_succeeded", 0) or 0
+            if new_passes > old_passes:
+                best[name] = rec
+            elif new_passes == old_passes:
+                # Prefer later file (already sorted)
+                best[name] = rec
+
+    print(f"Deduplicated to {len(best)} unique names")
+    return list(best.values())
+
+
+def apply_to_db():
+    """Read all JSONL results and upsert into wealth_profiles table."""
+    records = _load_all_results()
+    if not records:
+        return
+
+    sb = get_supabase()
+
+    # Build name→feature_id map from records
+    # Some records have feature_id, some might not
+    records_with_fid = [r for r in records if r.get("feature_id")]
+    records_without_fid = [r for r in records if not r.get("feature_id")]
+
+    if records_without_fid:
+        print(f"  {len(records_without_fid)} records missing feature_id — "
+              "looking up by name...")
+        # Look up feature_ids by homeowner_name
+        all_features = []
+        offset = 0
+        while True:
+            batch = sb.table("features").select(
+                "id, homeowner_name"
+            ).not_.is_("homeowner_name", "null").range(offset, offset + 999).execute()
+            if not batch.data:
+                break
+            all_features.extend(batch.data)
+            if len(batch.data) < 1000:
+                break
+            offset += 1000
+
+        name_to_fid = {}
+        for f in all_features:
+            name = (f.get("homeowner_name") or "").strip()
+            if name and name not in name_to_fid:
+                name_to_fid[name] = f["id"]
+
+        for rec in records_without_fid:
+            name = rec.get("name", "").strip()
+            fid = name_to_fid.get(name)
+            if fid:
+                rec["feature_id"] = fid
+                records_with_fid.append(rec)
+            else:
+                print(f"    SKIP (no feature_id): {name}")
+
+    # Upsert into wealth_profiles
+    success = 0
+    errors = 0
+    for i, rec in enumerate(records_with_fid):
+        row = {
+            "feature_id": rec["feature_id"],
+            "homeowner_name": rec.get("name", "Unknown"),
+            "classification": rec.get("classification", "UNKNOWN"),
+            "classification_confidence": rec.get("classification_confidence", "LOW"),
+            "forbes_score": rec.get("forbes_score"),
+            "forbes_confidence": rec.get("forbes_confidence", "LOW"),
+            "wealth_source": rec.get("wealth_source", "Unknown") or "Unknown",
+            "background": rec.get("background", "Unknown") or "Unknown",
+            "trajectory": rec.get("trajectory", "Unknown") or "Unknown",
+            "rationale": rec.get("rationale", "Unknown") or "Unknown",
+            "education": rec.get("education", "Unknown") or "Unknown",
+            "museum_boards": rec.get("museum_boards", "Unknown") or "Unknown",
+            "elite_boards": rec.get("elite_boards", "Unknown") or "Unknown",
+            "generational_wealth": rec.get("generational_wealth", "UNKNOWN") or "UNKNOWN",
+            "cultural_capital_notes": rec.get("cultural_capital_notes", "Unknown") or "Unknown",
+            "social_capital_notes": rec.get("social_capital_notes", "Unknown") or "Unknown",
+            "gemini_model": rec.get("gemini_model"),
+            "research_pass_1": rec.get("research_1", "")[:60000] if rec.get("research_1") else None,
+            "research_pass_2": rec.get("research_2", "")[:60000] if rec.get("research_2") else None,
+            "research_pass_3": rec.get("research_3", "")[:60000] if rec.get("research_3") else None,
+            "research_pass_4": rec.get("research_4", "")[:60000] if rec.get("research_4") else None,
+            "passes_succeeded": rec.get("passes_succeeded", 0) or 0,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+
+        # Clean None/empty strings that would violate CHECK constraints
+        if row["classification"] not in ("SELF_MADE", "OLD_MONEY", "MIXED", "MARRIED_INTO", "UNKNOWN"):
+            row["classification"] = "UNKNOWN"
+        if row["classification_confidence"] not in ("HIGH", "MEDIUM", "LOW"):
+            row["classification_confidence"] = "LOW"
+        if row["forbes_confidence"] not in ("HIGH", "MEDIUM", "LOW"):
+            row["forbes_confidence"] = "LOW"
+        if row["generational_wealth"] not in ("1ST_GEN", "2ND_GEN", "3RD_PLUS", "UNKNOWN"):
+            row["generational_wealth"] = "UNKNOWN"
+
+        try:
+            sb.table("wealth_profiles").upsert(
+                row, on_conflict="feature_id"
+            ).execute()
+            success += 1
+        except Exception as e:
+            errors += 1
+            if errors <= 5:
+                print(f"    ERROR {rec.get('name', '?')}: {e}")
+
+        if (i + 1) % 100 == 0:
+            print(f"  Upserted {i + 1}/{len(records_with_fid)}...")
+
+    print(f"\nApply complete: {success} upserted, {errors} errors")
+
+
+# ── Appendix CSV ─────────────────────────────────────────────
+
+APPENDIX_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "wealth_origin")
+
+def export_appendix():
+    """Generate wealth_profiles_all.csv from all JSONL files."""
+    records = _load_all_results()
+    if not records:
+        return
+
+    os.makedirs(APPENDIX_DIR, exist_ok=True)
+    out_path = os.path.join(APPENDIX_DIR, "wealth_profiles_all.csv")
+
+    fieldnames = [
+        "name", "group", "feature_id", "category", "location", "year",
+        "classification", "classification_confidence",
+        "forbes_score", "forbes_confidence",
+        "wealth_source", "background", "trajectory", "rationale",
+        "education", "museum_boards", "elite_boards",
+        "generational_wealth", "cultural_capital_notes", "social_capital_notes",
+        "gemini_model", "perplexity_model", "passes_succeeded",
+        "research_pass_1", "research_pass_2", "research_pass_3", "research_pass_4",
+    ]
+
+    with open(out_path, "w", newline="", encoding="utf-8") as csvfile:
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames, extrasaction="ignore")
+        writer.writeheader()
+        for rec in sorted(records, key=lambda r: (r.get("group", ""), r.get("name", ""))):
+            row = {k: rec.get(k, "") for k in fieldnames}
+            # Map research_1/2/3/4 to research_pass_1/2/3/4
+            row["research_pass_1"] = rec.get("research_1", "")
+            row["research_pass_2"] = rec.get("research_2", "")
+            row["research_pass_3"] = rec.get("research_3", "")
+            row["research_pass_4"] = rec.get("research_4", "")
+            writer.writerow(row)
+
+    print(f"Exported {len(records)} rows to {out_path}")
+
+
 # ── Main ─────────────────────────────────────────────────────
 
 def main():
@@ -1116,7 +1630,11 @@ def main():
     )
     parser.add_argument(
         "--baseline", type=int, default=0,
-        help="Number of baseline names to classify",
+        help="Number of baseline names to classify (random sample)",
+    )
+    parser.add_argument(
+        "--all-baseline", action="store_true",
+        help="Classify ALL non-Epstein, non-Anonymous homeowners (no sampling)",
     )
     parser.add_argument(
         "--epstein", action="store_true",
@@ -1133,6 +1651,18 @@ def main():
     parser.add_argument(
         "--report", action="store_true",
         help="Print results summary from latest output",
+    )
+    parser.add_argument(
+        "--apply-db", action="store_true",
+        help="Read all JSONL results and upsert into wealth_profiles table",
+    )
+    parser.add_argument(
+        "--appendix", action="store_true",
+        help="Export wealth_profiles_all.csv from all JSONL files",
+    )
+    parser.add_argument(
+        "--backfill-perplexity", action="store_true",
+        help="Add Perplexity pass to existing results and re-classify with Opus",
     )
     parser.add_argument(
         "--concurrency", type=int, default=5,
@@ -1159,6 +1689,21 @@ def main():
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
 
+    # ── Backfill Perplexity mode ──
+    if args.backfill_perplexity:
+        backfill_perplexity()
+        return
+
+    # ── Apply-DB mode ──
+    if args.apply_db:
+        apply_to_db()
+        return
+
+    # ── Appendix mode ──
+    if args.appendix:
+        export_appendix()
+        return
+
     # ── Report mode ──
     if args.report:
         files = sorted(
@@ -1178,9 +1723,9 @@ def main():
         print_report(results)
         return
 
-    if not args.baseline and not args.epstein:
+    if not args.baseline and not args.epstein and not args.all_baseline:
         parser.print_help()
-        print("\nSpecify --baseline N and/or --epstein")
+        print("\nSpecify --baseline N, --all-baseline, and/or --epstein")
         sys.exit(1)
 
     # ── Build name lists ──
@@ -1194,7 +1739,13 @@ def main():
         print(f"Epstein confirmed names: {len(epstein_names)}")
         names_to_process.extend(epstein_names)
 
-    if args.baseline > 0:
+    if args.all_baseline:
+        epstein_name_set = set(n["name"] for n in names_to_process)
+        baseline_names = get_all_baseline_candidates(sb)
+        baseline_names = [n for n in baseline_names if n["name"] not in epstein_name_set]
+        print(f"All baseline candidates: {len(baseline_names)}")
+        names_to_process.extend(baseline_names)
+    elif args.baseline > 0:
         epstein_name_set = set(n["name"] for n in names_to_process)
         baseline_names = get_baseline_candidates(
             sb, args.baseline, exclude_names=epstein_name_set
