@@ -72,13 +72,27 @@ def fetch_all_data():
     print(f"  {len(features)} features")
 
     print("Fetching cross-references...")
-    xrefs_result = sb.table("cross_references").select("*").execute()
-    xrefs = {x["feature_id"]: x for x in (xrefs_result.data or [])}
+    xrefs_all = []
+    offset = 0
+    while True:
+        batch = sb.table("cross_references").select("*").range(offset, offset + 999).execute()
+        xrefs_all.extend(batch.data or [])
+        if len(batch.data or []) < 1000:
+            break
+        offset += 1000
+    xrefs = {x["feature_id"]: x for x in xrefs_all}
     print(f"  {len(xrefs)} cross-references")
 
     print("Fetching dossiers...")
-    dossiers_result = sb.table("dossiers").select("*").execute()
-    dossiers = {d["feature_id"]: d for d in (dossiers_result.data or [])}
+    dossiers_all = []
+    offset = 0
+    while True:
+        batch = sb.table("dossiers").select("*").range(offset, offset + 999).execute()
+        dossiers_all.extend(batch.data or [])
+        if len(batch.data or []) < 1000:
+            break
+        offset += 1000
+    dossiers = {d["feature_id"]: d for d in dossiers_all}
     print(f"  {len(dossiers)} dossiers")
 
     return issues, features, xrefs, dossiers
@@ -433,11 +447,25 @@ def incremental_sync():
     issues_result = sb.table("issues").select("*").execute()
     issues = {i["id"]: i for i in (issues_result.data or [])}
 
-    xrefs_result = sb.table("cross_references").select("*").execute()
-    xrefs = {x["feature_id"]: x for x in (xrefs_result.data or [])}
+    xrefs_all = []
+    off = 0
+    while True:
+        batch = sb.table("cross_references").select("*").range(off, off + 999).execute()
+        xrefs_all.extend(batch.data or [])
+        if len(batch.data or []) < 1000:
+            break
+        off += 1000
+    xrefs = {x["feature_id"]: x for x in xrefs_all}
 
-    dossiers_result = sb.table("dossiers").select("*").execute()
-    dossiers = {d["feature_id"]: d for d in (dossiers_result.data or [])}
+    dossiers_all = []
+    off = 0
+    while True:
+        batch = sb.table("dossiers").select("*").range(off, off + 999).execute()
+        dossiers_all.extend(batch.data or [])
+        if len(batch.data or []) < 1000:
+            break
+        off += 1000
+    dossiers = {d["feature_id"]: d for d in dossiers_all}
 
     # Ensure static nodes exist
     create_static_nodes()

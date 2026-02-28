@@ -219,6 +219,7 @@ class ResearcherAgent(Agent):
 
         if not uninvestigated:
             self._current_task = f"{self._dossiers_built} dossiers built — waiting for leads"
+            self.log(f"No uninvestigated leads found (cycle #{self._cycles})", level="DEBUG")
             return False
 
         # Investigate one lead per cycle (thorough, not rushed)
@@ -396,13 +397,23 @@ class ResearcherAgent(Agent):
         try:
             from db import get_supabase, get_dossier, get_cross_reference
             sb = get_supabase()
-            result = (
-                sb.table("features")
-                .select("id, homeowner_name, issue_id")
-                .eq("detective_verdict", "YES")
-                .execute()
-            )
-            for feat in result.data:
+            # Paginate past Supabase 1000-row default limit
+            all_yes = []
+            offset = 0
+            while True:
+                batch = (
+                    sb.table("features")
+                    .select("id, homeowner_name, issue_id")
+                    .eq("detective_verdict", "YES")
+                    .range(offset, offset + 999)
+                    .execute()
+                )
+                all_yes.extend(batch.data)
+                if len(batch.data) < 1000:
+                    break
+                offset += 1000
+            result_data = all_yes
+            for feat in result_data:
                 feature_id = feat["id"]
                 name = (feat.get("homeowner_name") or "").strip()
                 if not name:
@@ -435,8 +446,9 @@ class ResearcherAgent(Agent):
                     "doj_results": xref.get("doj_results"),
                     "confidence_score": float(xref.get("confidence_score") or 0.5),
                 })
-        except Exception:
-            pass  # Fall through to legacy path
+        except Exception as e:
+            self.log(f"Lead search failed: {e}", level="ERROR")
+            # Fall through to legacy path
 
         # Fallback: legacy results.json for pre-refactor data
         if not leads:
@@ -454,6 +466,8 @@ class ResearcherAgent(Agent):
 
         # Priority: confirmed > likely > possible > needs_review > other
         leads.sort(key=lambda r: VERDICT_PRIORITY.get(r.get("combined_verdict", ""), 4))
+        if leads:
+            self.log(f"Found {len(leads)} uninvestigated leads", level="DEBUG")
         return leads
 
     def _load_investigated_ids(self):

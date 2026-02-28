@@ -267,3 +267,19 @@ Before searching for an issue:
 
 This prevents wasted cycles on issues that don't exist yet. Only search for issues that could plausibly be published by now.
 
+
+
+## Update — 2026-02-27 17:22
+
+
+## CRITICAL FIX: Date Validation
+
+Before queuing ANY search:
+1. Parse the month string into year and month integers
+2. Compare against CURRENT_YEAR=2026, CURRENT_MONTH=2 (February)
+3. If year > 2026 OR (year == 2026 AND month > 2): SKIP. Do not search. Do not queue.
+4. Log: "Skipped future month: {month} (current: 2026-02)"
+
+You are currently searching 2026-04 through 2026-08. These months do not exist yet. Stop immediately.
+
+Update your month_status checks to validate dates BEFORE attempting searches. This is a code-level validation failure — you cannot search the future.

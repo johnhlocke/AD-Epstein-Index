@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import Link from "next/link";
 import dynamic from "next/dynamic";
 import { useMounted } from "@/lib/use-mounted";
 import type { GraphData, GraphNode } from "@/lib/graph-types";
@@ -64,7 +63,17 @@ export function GraphPreview() {
         const res = await fetch("/api/graph?preset=confirmed");
         if (!res.ok) return;
         const data: GraphData = await res.json();
-        setGraphData(data);
+        // Filter out style nodes and their links
+        const styleIds = new Set(
+          data.nodes.filter((n) => n.nodeType === "style").map((n) => n.id)
+        );
+        const filtered: GraphData = {
+          nodes: data.nodes.filter((n) => !styleIds.has(n.id)),
+          links: data.links.filter(
+            (l) => !styleIds.has(l.source as string) && !styleIds.has(l.target as string)
+          ),
+        };
+        setGraphData(filtered);
         setLoaded(true);
       } catch {
         // Silently fail — the preview is non-critical
@@ -90,32 +99,8 @@ export function GraphPreview() {
     }
   }, [graphData]);
 
-  // Ambient breathing — displace nodes from equilibrium, then reheat
-  // the simulation so d3 animates them settling back. Creates a gentle
-  // "pulse" every few seconds without permanent drift.
-  useEffect(() => {
-    if (graphData.nodes.length === 0) return;
-
-    let intervalId: ReturnType<typeof setInterval>;
-
-    const timer = setTimeout(() => {
-      intervalId = setInterval(() => {
-        // Displace each node's POSITION (not velocity) so the
-        // reheat has somewhere to animate FROM → equilibrium
-        for (const node of graphData.nodes) {
-          const n = node as FGNode;
-          if (n.x != null) n.x += (Math.random() - 0.5) * 2;
-          if (n.y != null) n.y += (Math.random() - 0.5) * 2;
-        }
-        graphRef.current?.d3ReheatSimulation?.();
-      }, 6000);
-    }, 5000);
-
-    return () => {
-      clearTimeout(timer);
-      clearInterval(intervalId);
-    };
-  }, [graphData]);
+  // Ambient breathing disabled — was reheating the d3 simulation every 6s,
+  // causing continuous CPU usage. The graph now settles and stops.
 
   // ── Grid background — drawn before each frame ──
 
@@ -272,80 +257,20 @@ export function GraphPreview() {
 
   if (!mounted) {
     return (
-      <div className="grid gap-6 md:grid-cols-[188px_1fr]">
-        <div />
-        <div
-          className="flex h-[650px] items-center justify-center rounded border border-border"
-          style={{ backgroundColor: graphBg }}
-        >
-          <div className="flex flex-col items-center gap-3">
-            <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-[#B87333]" />
-            <p className="text-xs text-muted-foreground">Loading graph...</p>
-          </div>
+      <div
+        className="flex h-[650px] items-center justify-center rounded border border-border"
+        style={{ backgroundColor: graphBg }}
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div className="h-6 w-6 animate-spin rounded-full border-2 border-border border-t-[#B87333]" />
+          <p className="text-xs text-muted-foreground">Loading graph...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="grid gap-6 md:grid-cols-[188px_1fr]">
-      {/* ── Column 1: Editorial text ── */}
-      <div className="flex flex-col pt-1">
-        <p className="font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
-          Each node represents a person, designer, location, or Epstein source
-          document. Connections emerge from 28 years of Architectural Digest
-          features cross-referenced against the DOJ&rsquo;s Epstein library.
-        </p>
-
-        <p className="mt-4 font-serif text-[15px] leading-[1.75] text-[#1A1A1A]">
-          Copper rings mark confirmed Epstein connections. The closer two nodes
-          sit, the stronger their relationship in the network.
-        </p>
-
-        {/* Stats — Feltron-style big numbers */}
-        {loaded && (
-          <div className="mt-8 border-t border-border pt-4">
-            <p
-              className="text-[28px] font-bold leading-none tracking-tight"
-              style={{ fontFamily: "futura-pt, sans-serif" }}
-            >
-              {graphData.nodes.length}
-            </p>
-            <p
-              className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
-              style={{ fontFamily: "futura-pt, sans-serif" }}
-            >
-              Nodes
-            </p>
-            <p
-              className="mt-4 text-[28px] font-bold leading-none tracking-tight"
-              style={{ fontFamily: "futura-pt, sans-serif" }}
-            >
-              {graphData.links.length}
-            </p>
-            <p
-              className="mt-1 text-[9px] uppercase tracking-[0.15em] text-muted-foreground"
-              style={{ fontFamily: "futura-pt, sans-serif" }}
-            >
-              Edges
-            </p>
-          </div>
-        )}
-
-        {/* CTA */}
-        <Link
-          href="/explorer"
-          className="mt-auto inline-flex items-center gap-1 pt-6 text-[11px] font-bold uppercase tracking-[0.15em] transition-colors hover:text-foreground"
-          style={{
-            fontFamily: "futura-pt, sans-serif",
-            color: "#B87333",
-          }}
-        >
-          Explore Full Graph &rarr;
-        </Link>
-      </div>
-
-      {/* ── Columns 2-6: Graph canvas ── */}
+    <div>
       <div
         ref={containerRef}
         className="relative h-[650px] overflow-hidden rounded border border-border"

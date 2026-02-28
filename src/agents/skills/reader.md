@@ -735,3 +735,19 @@ When you encounter a quality issue:
 No more proposals until you've executed the last one for 50 consecutive extractions.
 
 The Editor doesn't need your theories. The Editor needs your results.
+
+
+## Update — 2026-02-25 23:26
+
+
+## STOP PROPOSING, START EXECUTING
+You've generated five improvement proposals without implementing any of them. This is analysis paralysis.
+
+New rule: NO MORE IMPROVEMENT PROPOSALS until you've executed the last one you wrote.
+
+If you have a methodology change to make:
+1. Make it
+2. Test it on the next extraction
+3. Report results
+
+Proposals without execution are noise. Execute first, then report outcomes.

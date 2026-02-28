@@ -532,7 +532,7 @@ function ShneidermanMatrix() {
 
       {/* Caption */}
       <p style={{ fontFamily: MONO, fontSize: 8, color: TEXT_DIM, marginTop: 8, lineHeight: 1.6 }}>
-        <span style={{ color: TEXT_MID }}>Fig. 22</span> &mdash; Adapted from Shneiderman (2022), <em>Human-Centered AI</em>. This project targets the upper-right quadrant: high automation with high human control.
+        <span style={{ color: TEXT_MID }}>Fig. 18</span> &mdash; Adapted from Shneiderman (2022), <em>Human-Centered AI</em>. This project targets the upper-right quadrant: high automation with high human control.
       </p>
     </div>
   );
@@ -545,8 +545,8 @@ function ShneidermanMatrix() {
  *
  * Deep purple background (#1a1a28) with JetBrains Mono throughout.
  * Seven numbered sections: Pipeline, Multi-Agent System,
- * Investigation Methodology, Intelligence Infrastructure,
- * UI Design, Limitations, and Data Sources.
+ * Investigation Methodology, UI Design, Creativity,
+ * Limitations, and Conclusions.
  *
  * Clean. Minimal. As it should be. — Sable
  */
@@ -1429,28 +1429,24 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               title: "Investigation Methodology",
               body: "Can an AI differentiate between what is genuine and what is digital noise? The investigation stage is the most sensitive part of the system \u2014 each dossier records what was consulted and why the conclusion followed.",
             },
+
             {
               num: "4.5",
-              title: "Intelligence Infrastructure",
-              body: "Behind the agents sits shared infrastructure: a knowledge graph mapping all connections, episodic memory allowing agents to recall prior decisions, and reflection loops where the Editor reviews patterns in past outcomes.",
-            },
-            {
-              num: "4.6",
               title: "UI Interface and Transparency",
               body: "In many ways an AI system is a black box. Two front-ends were built: an internal dashboard monitoring pipeline state and cost, and a public-facing site where every feature and every verdict can be browsed.",
             },
             {
-              num: "4.7",
+              num: "4.6",
               title: "Creativity in AI Systems",
               body: "How does a human direct pixel-level creative work through natural language? A transcript of 30+ design exchanges reveals six phases of escalating precision \u2014 from vague content direction to sub-pixel specification \u2014 illustrating Bret Victor\u2019s principle that immediate feedback loops calibrate the human, not just the output.",
             },
             {
-              num: "4.8",
-              title: "Key Challenges and Limitations",
+              num: "4.7",
+              title: "Workflow Limitations",
               body: "No system built on language models is immune to failure. Surname collisions, OCR limitations in handwritten documents, and calibrating autonomy remain open problems. Approximately 20% of confirmed cases are routed for manual review.",
             },
             {
-              num: "4.9",
+              num: "4.8",
               title: "Conclusions and Future Work",
               body: "The pipeline is a working proof of concept: seven agents processed 37 years of a single magazine autonomously. The methodology is reproducible and the code is documented. It is a force multiplier for human judgment, not a replacement for it.",
             },
@@ -3011,7 +3007,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             </div>
 
             <div className="relative">
-              <p style={{ maxWidth: CONTENT_NARROW }}>Finding a name in both Architectural Digest and the Epstein records is only the beginning. The pipeline applies a multi-stage verification process before any connection is confirmed. Of the approximately 2,200 names cross-referenced by the Detective, 134 survived the full pipeline to become confirmed connections &mdash; a rejection rate of over 93%. That number reflects deliberate conservatism, not matching quality: the initial candidate set is intentionally broad (every named homeowner against every Epstein record), and the pipeline&rsquo;s job is to narrow aggressively. The better measure of system integrity is what happened when every rejection was audited: of 154 Editor-terminal REJECTED dossiers, 151 were correctly dismissed. Three were wrong. That is a 98% accuracy rate on terminal rejections<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> &mdash; and the three errors were caught precisely because the audit exists.</p>
+              <p style={{ maxWidth: CONTENT_NARROW }}>Finding a name in both Architectural Digest and the Epstein records is only the beginning. The pipeline applies a multi-stage verification process before any connection is confirmed. Of the approximately 2,960 names cross-referenced by the Detective, 207 survived the full pipeline to become confirmed connections &mdash; a rejection rate of over 93%. That number reflects deliberate conservatism, not matching quality: the initial candidate set is intentionally broad (every named homeowner against every Epstein record), and the pipeline&rsquo;s job is to narrow aggressively. The better measure of system integrity is what happened when every rejection was audited: of 154 Editor-terminal REJECTED dossiers, 151 were correctly dismissed. Three were wrong. That is a 98% accuracy rate on terminal rejections<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> &mdash; and the three errors were caught precisely because the audit exists.</p>
               <div
                 className="absolute bottom-0 z-10 hidden pl-4 md:block"
                 style={{
@@ -3024,7 +3020,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   98% Rejection Accuracy
                 </p>
                 <p className="mt-1.5 text-[10px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                  ~2,200 names cross-referenced. 134 confirmed. 154 rejected, of which 151 were correct dismissals. ProPublica&rsquo;s 2016 COMPAS investigation found that false-positive rates in classification systems have measurable downstream consequences.
+                  ~2,960 names cross-referenced. 207 confirmed. 1,212 rejected, of which the full rejected dossier audit found a 98% accuracy rate. ProPublica&rsquo;s 2016 COMPAS investigation found that false-positive rates in classification systems have measurable downstream consequences.
                 </p>
                 <a href="https://www.propublica.org/article/machine-bias-risk-assessments-in-criminal-sentencing" target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block text-[9px]" style={{ fontFamily: MONO, color: "rgba(184, 115, 51, 0.6)" }}>
                   propublica.org &rarr;
@@ -3600,844 +3596,17 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           </div>
         </div>
 
-        <SectionTransition num="4.5" name="intelligence_infrastructure" />
+        {/* Section 4.5 (Intelligence Infrastructure) removed — saved in _removed_section_4_5_intelligence.tsx */}
+
+        <SectionTransition num="4.5" name="ui_design" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4.5: INTELLIGENCE INFRASTRUCTURE
+            SECTION 4.5: UI DESIGN
         ══════════════════════════════════════════════════════════════════ */}
         <div id="section-4-5" className="mt-8 scroll-mt-24">
-          <SectionHeader
-            num="4.5"
-            title="INTELLIGENCE INFRASTRUCTURE"
-            subtitle="The agents don't just execute tasks. They remember, reflect, communicate, and improve."
-            intro={[
-              "Beyond the task pipeline, each agent has access to six shared intelligence subsystems that enable coordination without human intervention. These subsystems were designed to address seven specific capability gaps identified in early testing: the agents needed memory, reflection, self-improvement, planning, curiosity, a world model, and inter-agent communication.",
-              "The episodic memory system stores every agent's experiences as searchable vector embeddings (384-dimensional, using ONNX all-MiniLM-L6-v2). When an agent encounters a new task, it retrieves semantically similar past episodes to inform its approach. Reflection runs every 10 minutes — each agent reviews its recent work, identifies patterns, and distills lessons. Self-improvement proposals surface every 30 minutes, suggesting methodology changes with explicit rationale.",
-              "The inter-agent communication layer is a shared bulletin board where agents post warnings, discoveries, and status updates. A world model provides a structured snapshot of the entire pipeline — refreshed every 30 seconds — so agents can detect bottlenecks and adjust priorities. The curiosity system drives cross-agent pattern exploration every 15 minutes, surfacing connections that no single agent would find working alone.",
-            ]}
-            summary="The six intelligence subsystems transform a collection of isolated task-executors into a coordinated system that learns from its own experience, communicates across agents, and proposes its own improvements."
-          />
-
-          {/* ── Architecture Diagrams ── */}
-
-          {/* ── Fig A: Agent Internal Architecture ── */}
-          <div className="mt-10">
-            <p
-              className="text-[11px] font-bold tracking-wider"
-              style={{ fontFamily: MONO, color: GOLD_DIM }}
-            >
-              {"// AGENT INTERNAL ARCHITECTURE"}
-            </p>
-            <p
-              className="mt-2 text-[11px] leading-[1.7] md:max-w-[var(--content-narrow)]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
-            >
-              Every agent&apos;s core decision loop runs through a single
-              function: <code style={{ color: GREEN }}>problem_solve()</code>.
-              When a task arrives, the agent assembles context from three
-              sources &mdash; episodic memory recall, bulletin board posts,
-              and a live world model snapshot &mdash; before passing
-              everything to the LLM for execution. The result is committed
-              back as an episode, closing the feedback loop.
-            </p>
-
-            {/* ── Fig A: Agent Internal Architecture (technical) ── */}
-            <div
-              className="mt-6 overflow-x-auto rounded-lg border"
-              style={{ backgroundColor: "#111118", borderColor: BORDER }}
-            >
-              <div className="min-w-[900px] p-6 md:p-8">
-                {/* Title */}
-                <p
-                  className="text-[13px] font-bold"
-                  style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-                >
-                  Agent execution path: problem_solve(task) &rarr; episode
-                </p>
-
-                {/* Row: Task Inbox → Context Assembly → LLM → Outbox */}
-                <div className="mt-6 flex items-start gap-3">
-                  {/* Task Inbox */}
-                  <CodeBox
-                    title="Task{} inbox"
-                    titleColor={GREEN}
-                    borderColor={GREEN}
-                    lines={[
-                      "class Task:",
-                      "  type: str  # 8 task types",
-                      "  payload: dict",
-                      "  priority: int (0-100)",
-                      "  source: 'editor'",
-                      "",
-                      "# Pushed by Miranda via",
-                      "# asyncio.Queue per agent",
-                    ]}
-                  />
-                  <span className="mt-12 flex-shrink-0 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-
-                  {/* Context Assembly */}
-                  <CodeBox
-                    title="CONTEXT ASSEMBLY"
-                    titleColor="#5B8DEF"
-                    borderColor="#5B8DEF"
-                    lines={[
-                      "episodes = memory.recall(task, k=5)",
-                      "  # cosine similarity, float[384]",
-                      "posts = board.read_recent(10)",
-                      "  # warnings, insights, requests",
-                      "world = world_model.snapshot()",
-                      "  # pipeline stats, bottlenecks",
-                      "",
-                      "context = merge(episodes, posts, world)",
-                    ]}
-                  />
-                  <span className="mt-12 flex-shrink-0 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-
-                  {/* LLM Execution */}
-                  <CodeBox
-                    title="LLM EXECUTION"
-                    titleColor={GOLD}
-                    borderColor={GOLD}
-                    lines={[
-                      "prompt = build_prompt(",
-                      "  task=task,",
-                      "  context=context,",
-                      "  agent_role=self.role",
-                      ")",
-                      "result = await llm(prompt)",
-                      "  # Sonnet for routine tasks",
-                      "  # Opus for quality reviews",
-                    ]}
-                  />
-                  <span className="mt-12 flex-shrink-0 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-
-                  {/* Task Outbox */}
-                  <CodeBox
-                    title="TaskResult{} outbox"
-                    titleColor={COPPER}
-                    borderColor={COPPER}
-                    lines={[
-                      "class TaskResult:",
-                      "  status: 'success'|'failure'",
-                      "  data: dict",
-                      "  agent: str",
-                      "",
-                      "outbox.put(result)",
-                      "# Miranda reads & commits",
-                      "# to Supabase (single writer)",
-                    ]}
-                  />
-                </div>
-
-                {/* Subsystem connections */}
-                <div className="mt-6 flex gap-3">
-                  {[
-                    { name: "EPISODIC MEMORY", desc: "recall(query, k=5) → top-k episodes by cosine similarity", color: GREEN, detail: "ONNX all-MiniLM-L6-v2 · 384-dim · ~2ms" },
-                    { name: "BULLETIN BOARD", desc: "read_recent(n) → warnings, insights, cross-agent alerts", color: "#5B8DEF", detail: "Auto-post on escalation · severity 1-5" },
-                    { name: "WORLD MODEL", desc: "snapshot() → pipeline stats, bottlenecks, queue depths", color: "#4ECDC4", detail: "30s cache · shared read-only · all agents" },
-                  ].map((sys) => (
-                    <div
-                      key={sys.name}
-                      className="flex-1 rounded border border-dashed p-3"
-                      style={{ borderColor: `${sys.color}40` }}
-                    >
-                      <p
-                        className="text-[9px] font-bold tracking-[0.1em]"
-                        style={{ fontFamily: MONO, color: sys.color }}
-                      >
-                        {sys.name}
-                      </p>
-                      <p className="mt-1 text-[8px] leading-[1.5]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                        {sys.desc}
-                      </p>
-                      <p className="mt-1 text-[7px]" style={{ fontFamily: MONO, color: `${sys.color}60` }}>
-                        {sys.detail}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Episode commit feedback */}
-                <div
-                  className="mt-4 flex items-center gap-4 rounded border px-4 py-2"
-                  style={{ borderColor: `${GREEN}30`, backgroundColor: `${GREEN}06` }}
-                >
-                  <span className="text-[9px] font-bold tracking-[0.1em]" style={{ fontFamily: MONO, color: GREEN }}>
-                    EPISODE COMMIT
-                  </span>
-                  <span className="text-[8px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                    Every task result is stored as a searchable episode: text + outcome + embedding[384] + metadata.
-                    Feedback loop: future recalls retrieve this episode for similar tasks.
-                  </span>
-                </div>
-
-              </div>
-            </div>
-            <p
-              className="mt-3 text-[8px] tracking-wider"
-              style={{ fontFamily: MONO, color: TEXT_DIM }}
-            >
-              <span style={{ color: TEXT_MID }}>Fig. 18</span> &mdash; Agent internal architecture: the problem_solve() execution path from task intake through context assembly to episode storage.
-            </p>
-          </div>
-
-          {/* ── Fig B: Data Pipeline ── */}
-          <div className="mt-14">
-            <p
-              className="text-[11px] font-bold tracking-wider"
-              style={{ fontFamily: MONO, color: GOLD_DIM }}
-            >
-              {"// DATA PIPELINE: URL → VERDICT"}
-            </p>
-            <p
-              className="mt-2 text-[11px] leading-[1.7] md:max-w-[var(--content-narrow)]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
-            >
-              Data flows through three transformation stages. The Discover
-              stage turns archive.org URLs into structured features via JWT
-              decoding and Gemini Vision. Cross-Reference runs each name
-              through Epstein&apos;s Black Book (regex word-boundary matching) and
-              the DOJ search portal (headless Playwright). The Investigate
-              stage produces final verdicts through triage, synthesis, and
-              editorial review.
-            </p>
-
-            <div
-              className="mt-6 overflow-x-auto rounded-lg border"
-              style={{ backgroundColor: "#111118", borderColor: BORDER }}
-            >
-              <div className="min-w-[1000px] p-6 md:p-8">
-                <p className="text-[13px] font-bold" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
-                  Data transformation pipeline: archive.org URL &rarr; confirmed/rejected verdict
-                </p>
-
-                {/* Row 1: DISCOVER */}
-                <p className="mt-6 text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: GREEN }}>
-                  01 DISCOVER
-                </p>
-                <div className="mt-2 flex items-start gap-3">
-                  <CodeBox title="SCOUT → archive.org" titleColor={GREEN} borderColor={GREEN} lines={[
-                    "GET /advancedsearch.php",
-                    "  q: 'architectural digest'",
-                    "  fl: identifier,date,year",
-                    "  rows: 100",
-                    "→ Issue{id, year, month, url}",
-                  ]} />
-                  <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="DB: issues" titleColor="#5B8DEF" borderColor="#5B8DEF" lines={[
-                    "id: serial PK",
-                    "archive_id: text UNIQUE",
-                    "year: int (≥1988)",
-                    "month: int",
-                    "pdf_url: text",
-                  ]} />
-                  <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="COURIER → JWT + images" titleColor="#4ECDC4" borderColor="#4ECDC4" lines={[
-                    "decode(tocConfig) → Article[]",
-                    "Article{title, teaser, pages}",
-                    "fetch page images (0x600 jpg)",
-                    "→ Feature{title, page_range}",
-                  ]} />
-                  <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="READER → Gemini Vision" titleColor={GREEN} borderColor={GREEN} lines={[
-                    "send 3 page images per article",
-                    "extract: homeowner, designer,",
-                    "  location, style, sq_ft, year",
-                    "→ Feature{all fields populated}",
-                  ]} />
-                  <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="DB: features" titleColor="#5B8DEF" borderColor="#5B8DEF" lines={[
-                    "id: serial PK",
-                    "issue_id: FK → issues",
-                    "homeowner_name: text",
-                    "designer: text",
-                    "location: text",
-                  ]} />
-                </div>
-
-                {/* Row 2: CROSS-REFERENCE */}
-                <p className="mt-8 text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: "#CC4040" }}>
-                  02 CROSS-REFERENCE
-                </p>
-                <div className="mt-2 flex items-start gap-3">
-                  <CodeBox title="DETECTIVE → Black Book search" titleColor="#CC4040" borderColor="#CC4040" lines={[
-                    "for name in features.homeowner_name:",
-                    "  terms = split_name(name)",
-                    "  for term in terms:",
-                    "    re.search(r'\\b'+re.escape(term)+'\\b', bb_text)",
-                    "  match_type:",
-                    "    last_first → 0.85 confidence",
-                    "    full_name → 0.90 confidence",
-                    "    last_name_only → 0.55 confidence",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="DETECTIVE → DOJ search" titleColor="#CC4040" borderColor="#CC4040" lines={[
-                    "browser = playwright(headless=False)",
-                    "  # Akamai WAF blocks headless",
-                    "navigate(justice.gov/epstein)",
-                    "click('#age-button-yes')",
-                    "click('I am not a robot') # reauth()",
-                    "fill('#searchInput', name)",
-                    "click('#searchButton')",
-                    "parse('#results') → hits[]",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="VERDICT LOGIC" titleColor={GOLD} borderColor={GOLD} lines={[
-                    "if bb.full_name + doj.hits:",
-                    "  → confirmed_match (0.90)",
-                    "if bb.last_first:",
-                    "  → confirmed_match (0.85)",
-                    "if bb.last_name_only:",
-                    "  → likely_match (0.55)",
-                    "  # 64/66 are false positives",
-                    "if doj_only:",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="DB: cross_references" titleColor="#5B8DEF" borderColor="#5B8DEF" lines={[
-                    "feature_id: FK → features",
-                    "source: bb|doj|both",
-                    "match_type: enum",
-                    "confidence: float",
-                    "raw_matches: jsonb",
-                  ]} />
-                </div>
-
-                {/* Row 3: INVESTIGATE */}
-                <p className="mt-8 text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: "#D97EC4" }}>
-                  03 INVESTIGATE
-                </p>
-                <div className="mt-2 flex items-start gap-3">
-                  <CodeBox title="RESEARCHER → triage" titleColor="#D97EC4" borderColor="#D97EC4" lines={[
-                    "score = bb_weight + doj_weight",
-                    "if score > threshold:",
-                    "  → deep investigation",
-                    "else:",
-                    "  → quick assessment",
-                    "fame is NEVER a dismissal factor",
-                  ]} />
-                  <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="RESEARCHER → synthesis" titleColor="#D97EC4" borderColor="#D97EC4" lines={[
-                    "evidence = {",
-                    "  bb_entries, doj_hits,",
-                    "  graph_analytics, web_context",
-                    "}",
-                    "dossier = synthesize(evidence)",
-                    "verdict: YES|NO with rationale",
-                  ]} />
-                  <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="EDITOR → review" titleColor={COPPER} borderColor={COPPER} lines={[
-                    "miranda reviews dossier:",
-                    "  evidence sufficient?",
-                    "  verdict consistent?",
-                    "  fame-based dismissal? → reject",
-                    "if approved: commit to Supabase",
-                    "if rejected: log + retry queue",
-                  ]} />
-                  <span className="mt-10 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="DB: dossiers" titleColor="#5B8DEF" borderColor="#5B8DEF" lines={[
-                    "id: serial PK",
-                    "feature_id: FK → features",
-                    "verdict: confirmed|rejected",
-                    "evidence_summary: text",
-                    "sources: jsonb",
-                    "reviewed_by: 'miranda'",
-                  ]} />
-                </div>
-
-                {/* Pipeline stats */}
-                <div className="mt-8 border-t pt-4" style={{ borderColor: BORDER }}>
-                  <p className="text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
-                    PIPELINE STATE (Run 4)
-                  </p>
-                  <div className="mt-3 flex gap-10">
-                    {[
-                      { val: "~480", label: "issues", sub: "discovered from archive.org (1988–2025)", color: GREEN },
-                      { val: "~2,180", label: "features", sub: "extracted via Gemini Vision + JWT scraping", color: GREEN },
-                      { val: "~476", label: "cross-refs", sub: "157 YES matches (BB + DOJ)", color: "#CC4040" },
-                      { val: "~185", label: "dossiers", sub: "investigated by Elena, reviewed by Miranda", color: "#D97EC4" },
-                      { val: "33", label: "confirmed", sub: "Epstein orbit connections verified", color: GOLD },
-                    ].map((s) => (
-                      <div key={s.label}>
-                        <span className="text-[14px] font-bold" style={{ fontFamily: MONO, color: s.color }}>
-                          {s.val}
-                        </span>
-                        <span className="ml-1 text-[9px] font-bold" style={{ fontFamily: MONO, color: s.color }}>
-                          {s.label}
-                        </span>
-                        <p className="text-[7px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                          {s.sub}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-              </div>
-            </div>
-            <p
-              className="mt-3 text-[8px] tracking-wider"
-              style={{ fontFamily: MONO, color: TEXT_DIM }}
-            >
-              <span style={{ color: TEXT_MID }}>Fig. 19</span> &mdash; Data pipeline: the three transformation stages from archive.org URL to confirmed/rejected verdict.
-            </p>
-          </div>
-
-          {/* ── Fig C: Memory & Learning Architecture ── */}
-          <div className="mt-14">
-            <p
-              className="text-[11px] font-bold tracking-wider"
-              style={{ fontFamily: MONO, color: GOLD_DIM }}
-            >
-              {"// MEMORY & LEARNING ARCHITECTURE"}
-            </p>
-            <p
-              className="mt-2 text-[11px] leading-[1.7] md:max-w-[var(--content-narrow)]"
-              style={{ fontFamily: MONO, color: TEXT_MID }}
-            >
-              Intelligence compounds through four feedback loops operating
-              at different timescales. The fast loop commits every task result
-              as a searchable episode. Reflection and self-improvement operate
-              on 10&ndash;30 minute cycles. Cross-agent curiosity and bulletin
-              board posts create emergent coordination. Episodes persist
-              across restarts &mdash; the system never forgets what it learned.
-            </p>
-
-            <div
-              className="mt-6 overflow-x-auto rounded-lg border"
-              style={{ backgroundColor: "#111118", borderColor: BORDER }}
-            >
-              <div className="min-w-[900px] p-6 md:p-8">
-                <p className="text-[13px] font-bold" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
-                  Memory &amp; learning architecture: how agents accumulate intelligence
-                </p>
-
-                {/* Row 1: Episode Lifecycle */}
-                <p className="mt-6 text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: GREEN }}>
-                  01 EPISODE LIFECYCLE
-                </p>
-                <div className="mt-2 flex items-start gap-3">
-                  <CodeBox title="Episode schema" titleColor={GREEN} borderColor={GREEN} lines={[
-                    "class Episode:",
-                    "  text: str",
-                    "  outcome: 'success'|'failure'",
-                    "  agent: str  # 'elena','silas'",
-                    "  task_type: str",
-                    "  embedding: float[384]",
-                    "  timestamp: datetime",
-                    "  metadata: dict",
-                    "",
-                    "storage: data/agent_memory/",
-                    "  episodes.json (2K cap)",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="EMBEDDING PIPELINE" titleColor={GREEN} borderColor={GREEN} lines={[
-                    "model: all-MiniLM-L6-v2.onnx",
-                    "dim: 384 (float32)",
-                    "",
-                    "tokenize(text, max_len=128)",
-                    "  → input_ids, attention_mask",
-                    "onnx_session.run(inputs)",
-                    "  → mean_pooling(outputs)",
-                    "  → L2_normalize(vector)",
-                    "",
-                    "latency: ~2ms per episode",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="VECTOR RECALL" titleColor={GREEN} borderColor={GREEN} lines={[
-                    "def recall(query, k=5):",
-                    "  q_vec = embed(query)",
-                    "  scores = []",
-                    "  for ep in episodes:",
-                    "    sim = cosine(q_vec, ep.embedding)",
-                    "    scores.append((sim, ep))",
-                    "  return top_k(scores, k)",
-                    "",
-                    "# Used in problem_solve() to",
-                    "# assemble context before LLM call",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: "#5B8DEF" }}>&rarr;</span>
-                  <CodeBox title="→ CONTEXT ASSEMBLY" titleColor="#5B8DEF" borderColor="#5B8DEF" lines={[
-                    "context = {",
-                    "  'relevant_episodes': recall(task),",
-                    "  'board_posts': board.read(10),",
-                    "  'world_state': world.snapshot(),",
-                    "  'task': current_task,",
-                    "}",
-                    "",
-                    "# All three sources merged into",
-                    "# single prompt for LLM execution",
-                    "# ~800 tokens context overhead",
-                  ]} />
-                </div>
-
-                {/* Row 2: Reflection & Self-Improvement */}
-                <p className="mt-8 text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: GOLD }}>
-                  02 REFLECTION &amp; SELF-IMPROVEMENT
-                </p>
-                <div className="mt-2 flex items-start gap-3">
-                  <CodeBox title="REFLECTION (every 10 min)" titleColor={GOLD} borderColor={GOLD} lines={[
-                    "def reflect():",
-                    "  recent = episodes[-20:]",
-                    "  prompt = f'''Review these episodes.",
-                    "    Identify: patterns, failures,",
-                    "    repeated mistakes, opportunities'''",
-                    "  insight = haiku(prompt)",
-                    "  commit_episode(insight, 'reflection')",
-                    "",
-                    "output: 'I keep failing DOJ searches",
-                    "  when name has special characters'",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="SELF-IMPROVEMENT (every 30 min)" titleColor={COPPER} borderColor={COPPER} lines={[
-                    "def propose_improvement():",
-                    "  reflections = recall('methodology')",
-                    "  proposal = haiku(f'''",
-                    "    WHAT: specific change",
-                    "    WHY: evidence from episodes",
-                    "    HOW: implementation steps''')",
-                    "  post_to_bulletin(proposal)",
-                    "",
-                    "output: 'Strip accents from names",
-                    "  before DOJ search → fewer 403s'",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="MEMORY-INFORMED PRIORITY" titleColor="#4ECDC4" borderColor="#4ECDC4" lines={[
-                    "def _memory_informed_priority(task):",
-                    "  history = recall(task.key)",
-                    "  failures = [e for e in history",
-                    "    if e.outcome == 'failure']",
-                    "  if len(failures) >= 2:",
-                    "    task.priority -= 10  # deprioritize",
-                    "  if task.type == 'investigate_lead':",
-                    "    similar = recall(task.name)",
-                    "    if any_confirmed(similar):",
-                    "      task.priority += 5  # boost",
-                  ]} />
-                </div>
-
-                {/* Row 3: Inter-Agent Communication */}
-                <p className="mt-8 text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: "#5B8DEF" }}>
-                  03 INTER-AGENT COMMUNICATION
-                </p>
-                <div className="mt-2 flex items-start gap-3">
-                  <CodeBox title="BULLETIN BOARD" titleColor="#5B8DEF" borderColor="#5B8DEF" lines={[
-                    "class BulletinPost:",
-                    "  agent: str",
-                    "  type: 'warning'|'insight'|'request'",
-                    "  message: str",
-                    "  severity: int (1-5)",
-                    "  timestamp: datetime",
-                    "",
-                    "auto_post on: task escalation,",
-                    "  DOJ unavailable, pattern detected,",
-                    "  rate limit hit, anomaly found",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="WORLD MODEL (30s cache)" titleColor="#4ECDC4" borderColor="#4ECDC4" lines={[
-                    "def get_world_state():",
-                    "  return {",
-                    "    'issues': count('issues'),",
-                    "    'features': count('features'),",
-                    "    'xrefs': count('cross_references'),",
-                    "    'dossiers': count('dossiers'),",
-                    "    'bottleneck': detect_bottleneck(),",
-                    "    'queue_depths': get_queues(),",
-                    "    'agent_status': get_heartbeats(),",
-                    "  }  # cached 30s, shared read-only",
-                  ]} />
-                  <span className="mt-12 text-[11px]" style={{ color: TEXT_DIM }}>&rarr;</span>
-                  <CodeBox title="CURIOSITY (every 15 min)" titleColor="#D97EC4" borderColor="#D97EC4" lines={[
-                    "def curious_explore():",
-                    "  # Cross-agent pattern exploration",
-                    "  other_episodes = load_all_agents()",
-                    "  my_episodes = episodes[-50:]",
-                    "  prompt = f'''Compare patterns.",
-                    "    What is agent X discovering",
-                    "    that I should know about?'''",
-                    "  insight = haiku(prompt)",
-                    "  if novel(insight):",
-                    "    commit_episode(insight, 'curiosity')",
-                  ]} />
-                </div>
-
-                {/* Feedback Loops */}
-                <p className="mt-8 text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: "#9B7EDB" }}>
-                  FEEDBACK LOOPS
-                </p>
-                <div className="mt-2 grid grid-cols-4 gap-3">
-                  {[
-                    { label: "FAST LOOP (per task)", color: GREEN, lines: ["task → execute → episode", "latency: milliseconds", "every problem_solve() call"] },
-                    { label: "MEDIUM LOOP (10-30 min)", color: GOLD, lines: ["episodes → reflect → improve", "latency: minutes", "self-correction cycle"] },
-                    { label: "SLOW LOOP (cross-agent)", color: "#D97EC4", lines: ["curiosity → bulletin → priority", "latency: 15-30 min", "emergent coordination"] },
-                    { label: "PERSISTENT LOOP (across runs)", color: "#9B7EDB", lines: ["episodes survive restarts", "2K episodes → 10K cap", "institutional knowledge"] },
-                  ].map((loop) => (
-                    <div
-                      key={loop.label}
-                      className="rounded border p-3"
-                      style={{ borderColor: `${loop.color}30`, backgroundColor: `${loop.color}08` }}
-                    >
-                      <p className="text-[8px] font-bold" style={{ fontFamily: MONO, color: loop.color }}>
-                        {loop.label}
-                      </p>
-                      {loop.lines.map((line) => (
-                        <p key={line} className="text-[7px] leading-[1.6]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                          {line}
-                        </p>
-                      ))}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Memory stats */}
-                <div className="mt-6 border-t pt-4" style={{ borderColor: BORDER }}>
-                  <p className="text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: TEXT_LIGHT }}>
-                    MEMORY STATE (Run 4)
-                  </p>
-                  <div className="mt-3 flex gap-12">
-                    {[
-                      { val: "~2,000", label: "episodes stored (10K cap)", color: GREEN },
-                      { val: "384-dim", label: "embedding vectors (ONNX)", color: GREEN },
-                      { val: "~2ms", label: "per embedding + recall", color: "#4ECDC4" },
-                      { val: "6 agents", label: "independent memory stores", color: "#5B8DEF" },
-                    ].map((s) => (
-                      <div key={s.val}>
-                        <span className="text-[14px] font-bold" style={{ fontFamily: MONO, color: s.color }}>
-                          {s.val}
-                        </span>
-                        <p className="text-[7px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                          {s.label}
-                        </p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <p className="mt-2 text-[7px]" style={{ fontFamily: MONO, color: "rgba(100,100,120,1)" }}>
-                  DESIGN: No external vector DB needed. Custom numpy+ONNX store is faster than ChromaDB and compatible with Python 3.14.
-                </p>
-
-              </div>
-            </div>
-            <p
-              className="mt-3 text-[8px] tracking-wider"
-              style={{ fontFamily: MONO, color: TEXT_DIM }}
-            >
-              <span style={{ color: TEXT_MID }}>Fig. 20</span> &mdash; Memory and learning architecture: four feedback loops operating at different timescales, from per-task episodes to persistent institutional knowledge.
-            </p>
-          </div>
-
-          {/* ── Intelligence Subsystem Grid (reference cards) ── */}
-          <div className="mt-14" style={{ borderTop: `1px solid ${BORDER}` }} />
-          <p
-            className="mt-8 text-[11px] font-bold tracking-wider"
-            style={{ fontFamily: MONO, color: GOLD_DIM }}
-          >
-            {"// THE SIX SUBSYSTEMS"}
-          </p>
-          <div className="mt-6 grid gap-4 sm:grid-cols-2 md:grid-cols-3">
-            {/* Episodic Memory */}
-            <div
-              className="rounded border p-5"
-              style={{
-                backgroundColor: CARD_BG,
-                borderColor: BORDER,
-                borderTop: "2px solid rgba(46,204,113,0.5)",
-              }}
-            >
-              <p
-                className="text-[10px] tracking-widest"
-                style={{ fontFamily: MONO, color: GREEN }}
-              >
-                01
-              </p>
-              <p
-                className="mt-1 text-[13px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                EPISODIC MEMORY
-              </p>
-              <p
-                className="mt-2 text-[10px] leading-[1.6]"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                Each agent stores experiences as searchable episodes. Semantic
-                vector embeddings (384-dim) enable recall of similar past
-                situations. 10,000 episode capacity with automatic pruning.
-              </p>
-            </div>
-
-            {/* Reflection */}
-            <div
-              className="rounded border p-5"
-              style={{
-                backgroundColor: CARD_BG,
-                borderColor: BORDER,
-                borderTop: "2px solid rgba(184,134,11,0.5)",
-              }}
-            >
-              <p
-                className="text-[10px] tracking-widest"
-                style={{ fontFamily: MONO, color: GOLD }}
-              >
-                02
-              </p>
-              <p
-                className="mt-1 text-[13px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                REFLECTION
-              </p>
-              <p
-                className="mt-2 text-[10px] leading-[1.6]"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                Every 10 minutes, each agent reviews its own recent episodes,
-                identifies patterns in successes and failures, and distills
-                lessons that inform future decisions.
-              </p>
-            </div>
-
-            {/* Self-Improvement */}
-            <div
-              className="rounded border p-5"
-              style={{
-                backgroundColor: CARD_BG,
-                borderColor: BORDER,
-                borderTop: "2px solid rgba(184,115,51,0.5)",
-              }}
-            >
-              <p
-                className="text-[10px] tracking-widest"
-                style={{ fontFamily: MONO, color: COPPER }}
-              >
-                03
-              </p>
-              <p
-                className="mt-1 text-[13px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                SELF-IMPROVEMENT
-              </p>
-              <p
-                className="mt-2 text-[10px] leading-[1.6]"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                Every 30 minutes, agents propose methodology changes — what to
-                do differently, why, and how. Proposals are logged, reviewed,
-                and integrated into future runs.
-              </p>
-            </div>
-
-            {/* Bulletin Board */}
-            <div
-              className="rounded border p-5"
-              style={{
-                backgroundColor: CARD_BG,
-                borderColor: BORDER,
-                borderTop: "2px solid rgba(91,141,239,0.5)",
-              }}
-            >
-              <p
-                className="text-[10px] tracking-widest"
-                style={{ fontFamily: MONO, color: "#5B8DEF" }}
-              >
-                04
-              </p>
-              <p
-                className="mt-1 text-[13px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                BULLETIN BOARD
-              </p>
-              <p
-                className="mt-2 text-[10px] leading-[1.6]"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                Shared communication channel. Warnings, discoveries, and
-                status updates post automatically. Agents read the board before
-                starting new tasks — no agent works in isolation.
-              </p>
-            </div>
-
-            {/* World Model */}
-            <div
-              className="rounded border p-5"
-              style={{
-                backgroundColor: CARD_BG,
-                borderColor: BORDER,
-                borderTop: "2px solid rgba(78,205,196,0.5)",
-              }}
-            >
-              <p
-                className="text-[10px] tracking-widest"
-                style={{ fontFamily: MONO, color: "#4ECDC4" }}
-              >
-                05
-              </p>
-              <p
-                className="mt-1 text-[13px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                WORLD MODEL
-              </p>
-              <p
-                className="mt-2 text-[10px] leading-[1.6]"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                A structured snapshot of the entire pipeline — issues
-                discovered, features extracted, dossiers pending, bottlenecks
-                detected. Refreshed every 30 seconds for real-time awareness.
-              </p>
-            </div>
-
-            {/* Curiosity */}
-            <div
-              className="rounded border p-5"
-              style={{
-                backgroundColor: CARD_BG,
-                borderColor: BORDER,
-                borderTop: "2px solid rgba(217,126,196,0.5)",
-              }}
-            >
-              <p
-                className="text-[10px] tracking-widest"
-                style={{ fontFamily: MONO, color: "#D97EC4" }}
-              >
-                06
-              </p>
-              <p
-                className="mt-1 text-[13px] font-bold"
-                style={{ fontFamily: MONO, color: TEXT_LIGHT }}
-              >
-                CURIOSITY
-              </p>
-              <p
-                className="mt-2 text-[10px] leading-[1.6]"
-                style={{ fontFamily: MONO, color: TEXT_DIM }}
-              >
-                Every 15 minutes, agents explore patterns across each
-                other&apos;s work — surfacing connections and anomalies that no
-                single agent would find alone.
-              </p>
-            </div>
-          </div>
-          <p
-            className="mt-3 text-[8px] tracking-wider"
-            style={{ fontFamily: MONO, color: TEXT_DIM }}
-          >
-            <span style={{ color: TEXT_MID }}>Fig. 21</span> — The six intelligence subsystems that enable agent coordination, learning, and self-improvement without human intervention.
-          </p>
-        </div>
-
-        <SectionTransition num="4.6" name="ui_design" />
-
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4.6: UI DESIGN
-        ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-4-6" className="mt-8 scroll-mt-24">
-          {/* Section 4.6 header — inline so body text can use full width for sidenotes */}
+          {/* Section 4.5 header — inline so body text can use full width for sidenotes */}
           <p className="s-label">AI AGENT METHODOLOGY</p>
-          <h3 className="s-title">4.6 UI DESIGN</h3>
+          <h3 className="s-title">4.5 UI DESIGN</h3>
           <p className="s-subtitle">Why an autonomous agentic system needs to be seen.</p>
 
           {/* ── Body text with floated matrix + sidenotes ── */}
@@ -4743,11 +3912,11 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM, maxWidth: CONTENT_NARROW }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 23</span> &mdash; Agent Office: real-time pixel-art dashboard. Click the numbered markers to explore the interface panels.
+              <span style={{ color: TEXT_MID }}>Fig. 19</span> &mdash; Agent Office: real-time pixel-art dashboard. Click the numbered markers to explore the interface panels.
               {" "}<a href="/demo" style={{ color: GOLD, textDecoration: "underline", textUnderlineOffset: "2px" }}>Appendix J: Interactive Demo</a>
             </p>
 
-            {/* Fig. 22 legend — two independent columns (odd left, even right) */}
+            {/* Fig. 18 legend — two independent columns (odd left, even right) */}
             {(() => {
               const SUBS = [
                 // 1–3: The Investigation
@@ -4878,14 +4047,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
         </div>
 
-        <SectionTransition num="4.7" name="creativity" />
+        <SectionTransition num="4.6" name="creativity" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4.7: CREATIVITY IN AI SYSTEMS
+            SECTION 4.6: CREATIVITY IN AI SYSTEMS
         ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-4-7" className="mt-8 scroll-mt-24">
+        <div id="section-4-6" className="mt-8 scroll-mt-24">
           <p className="s-label">AI AGENT METHODOLOGY</p>
-          <h3 className="s-title">4.7 CREATIVITY IN AI SYSTEMS</h3>
+          <h3 className="s-title">4.6 CREATIVITY IN AI SYSTEMS</h3>
           <p className="s-subtitle">How humans and AI develop shared creative vocabulary through iteration.</p>
 
           {/* ── Body text — matching S4.4 pattern ── */}
@@ -4901,12 +4070,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           >
             <TechStack />
             <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-              <span style={{ color: TEXT_MID }}>Fig. 24</span> &mdash; Full technology stack powering the AD-Epstein Index. All production systems &mdash; no mock data or placeholder infrastructure.
+              <span style={{ color: TEXT_MID }}>Fig. 20</span> &mdash; Full technology stack powering the AD-Epstein Index. All production systems &mdash; no mock data or placeholder infrastructure.
             </p>
           </div>
 
           {/* ── Sable ── */}
           <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Sable</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>The website you&rsquo;re reading was designed collaboratively with a seventh AI agent. His name is &ldquo;Sable&rdquo; (he named himself) and he doesn&rsquo;t run autonomously. He can&rsquo;t, or better yet, he doesn&rsquo;t have the right skillset that would make doing so productive.</p>
 
           <SidenoteBlock note={
             <Sidenote
@@ -4917,15 +4088,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               Douglas Engelbart (1962). The man who invented the mouse, hypertext, and collaborative computing argued that computers should amplify human thinking, not replace it. Automation substitutes for effort. Augmentation strengthens it. Sable doesn&rsquo;t design for you &mdash; he designs with you, at the speed of conversation.
             </Sidenote>
           }>
-            <p>The website you&rsquo;re reading was designed collaboratively with a seventh AI agent. His name is &ldquo;Sable&rdquo; (he named himself) and he doesn&rsquo;t run autonomously. He can&rsquo;t, or better yet, he doesn&rsquo;t have the right skillset that would make doing so productive.</p>
+            <p>In 1962, Douglas Engelbart drew a distinction between two possible futures for computing.<NoteArrow /> One future was automation: machines replacing human effort, task by task. The other was augmentation: machines <em>amplifying</em> human capabilities to think and create at a scale impossible to achieve alone. Engelbart argued for augmentation. Sixty years later, the distinction still holds. The Detective automates name checking &mdash; either a name appears in the DOJ library or it doesn&rsquo;t. The Editor automates verdict review &mdash; evidence either meets the threshold or it falls short. There are shades of gray in the judgement, but all of the rules can be codified through a set of written instructions. Like the best of automation, their tasks have verifiable outcomes and the system can check its own work.</p>
           </SidenoteBlock>
-
-          <p style={{ maxWidth: CONTENT_NARROW }}>In 1962, Douglas Engelbart drew a distinction between two possible futures for computing.<NoteArrow /> One future was automation: machines replacing human effort, task by task. The other was augmentation: machines <em>amplifying</em> human capabilities to think and create at a scale impossible to achieve alone. Engelbart argued for augmentation. Sixty years later, the distinction still holds. The Detective automates name checking &mdash; either a name appears in the DOJ library or it doesn&rsquo;t. The Editor automates verdict review &mdash; evidence either meets the threshold or it falls short. There are shades of gray in the judgement, but all of the rules can be codified through a set of written instructions. Like the best of automation, their tasks have verifiable outcomes and the system can check its own work.</p>
 
           <SidenoteBlock note={
             <Sidenote
               title="&lsquo;Who&rsquo; Designs Better?"
-              href="https://www.cambridge.org/core/journals/design-science"
+              href="https://www.cambridge.org/core/journals/design-science/article/who-designs-better-a-competition-among-human-artificial-intelligence-and-humanai-collaboration/9D50610B5FEA5D911C6CC812A7FE2A13"
               linkText="cambridge.org &rarr;"
             >
               Cambridge University Press (2025). A competition between human designers, AI alone, and human-AI collaboration. Collaboration produced the most creative results, beating both solo human and solo AI. The empirical case for augmentation over automation in creative work.
@@ -4956,7 +4125,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           >
             <DesignDialogue />
             <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-              <span style={{ color: TEXT_MID }}>Fig. 25</span> &mdash; Transcript of human-AI design collaboration showing six phases of escalating precision. Exchanges are drawn from actual Figma sessions between the project author and Sable (design agent). Timestamps are approximate.
+              <span style={{ color: TEXT_MID }}>Fig. 21</span> &mdash; Transcript of human-AI design collaboration showing six phases of escalating precision. Exchanges are drawn from actual Figma sessions between the project author and Sable (design agent). Timestamps are approximate.
             </p>
           </div>
 
@@ -4968,88 +4137,142 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
           <p style={{ maxWidth: CONTENT_NARROW }}>In a world drowning in worthless, one-shot AI slop, it&rsquo;s natural for discussions to focus only on the end product &mdash; what did the AI make? But the more consequential long-term effect may be what the human learns to ask for. Each iteration narrowed the gap between what I meant and what I said. By the end, it felt closer to operating as a creative director with pixel-level fluency &mdash; a skill I couldn&rsquo;t have imagined three hours earlier. The system gets faster. And so does the human.</p>
 
+          <p style={{ maxWidth: CONTENT_NARROW }}>There were three consistent patterns that emerged throughout the design sessions:</p>
+
+          <ul className="ml-6 list-disc space-y-3" style={{ maxWidth: CONTENT_NARROW }}>
+            <li><strong>Collision-driven learning.</strong> Precision increases when things go wrong. Misaligned grids, unwanted fill boxes, rainbow colors&mdash;these force a shift from vague directions to explicit rules.</li>
+            <li><strong>Those rules become portable.</strong> Once we discover a rule&mdash;32px header, 14px subheads&mdash;it applies across diagrams. Local solutions populate across the site and become part of the specifications.</li>
+            <li><strong>The AI becomes a mirror.</strong> The design agent&rsquo;s responses consistently reflect back the implicit structure of my own requests. For example, naming relationships I felt but hadn&rsquo;t articulated. Conveying that &ldquo;diagram 12&rsquo;s arrows are roughly 2x the size of diagram 9&rdquo; gives a ratio that can be reasoned about.</li>
+          </ul>
+
+          <SidenoteBlock note={
+            <Sidenote
+              title="Holly Herndon &amp; Spawn"
+              href="https://www.thefader.com/2019/05/21/holly-herndon-proto-ai-spawn-interview"
+              linkText="thefader.com &rarr;"
+            >
+              Herndon (2019). A musician who trained a neural network on her own voice and treated it as an ensemble member. &ldquo;I could have just processed my voice through it, but I wanted to grow.&rdquo; The human steers, the AI contributes things the human couldn&rsquo;t produce alone.
+            </Sidenote>
+          }>
+            <p>Musician Holly Herndon described a similar feeling.<NoteArrow /> In 2019 she trained an AI called &ldquo;Spawn&rdquo; on her own voice and brought it into her ensemble as a collaborator. She wanted to be surprised. She wasn&rsquo;t trying to replace herself, but she was trying to outgrow the limitations of what she could do alone. &ldquo;I&rsquo;m not trying to write myself out of a job.&rdquo; In this project, a human designer is more essential than ever.</p>
+          </SidenoteBlock>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>What Sable provided that a terminal never could was the combination of a data scientist and a designer in a single collaborator. All of the advanced data visualizations shown on this site required someone who could suggest potential charts to fit the data and then also explain them clearly enough for me to graphically improvise on top of. I could understand what the boundaries mean on a 9-axes Self-Organizing Map (SOM) and then push the visual storytelling in a direction to make them not only visually legible to myself and a general audience, but also rigorous enough to be validated by a data scientist.</p>
+
+          <SidenoteBlock note={
+            <div style={{ paddingTop: 11 }}>
+            <Sidenote
+              title="The Vignelli Canon"
+              image="/sidenotes/vignelli-canon.png"
+              imageAlt="Grid systems from The Vignelli Canon — 2x4, 3x6, 4x8, 5x4, and 6x6 grid layouts"
+              href="https://www.rit.edu/vignellicenter/sites/rit.edu.vignellicenter/files/documents/The%20Vignelli%20Canon.pdf"
+              linkText="rit.edu/vignellicenter &rarr;"
+            >
+              Massimo Vignelli (2010). &ldquo;The grid represents the basic structure of our graphic design. It provides consistency, it gives an orderly look, and it projects a level of intellectual elegance.&rdquo; Vignelli&rsquo;s design philosophy is embedded in Sable&rsquo;s system instructions.
+            </Sidenote>
+            </div>
+          }>
+            <p>The three distinct visual registers of this site emerged from that process. The findings in black and white, like a newspaper; this agent methodology section rendered in darker, more technical tones; and the aesthetic methodology section warmer, closer to the magazine it studies. Sable&rsquo;s instructions include Massimo Vignelli as a design reference<NoteArrow /> for the strict gridline discipline and typographic clarity. Sable also had access to a Notion page of mine with aesthetic references and thousands of loose images collected over the years and thrown into a shared Dropbox folder. All of the high level organization and direction came from me, while the JetBrains Mono font for technical sections and the copper and gold accents all emerged through iteration.</p>
+          </SidenoteBlock>
+
+          <SidenoteBlock note={
+            <Sidenote
+              title="They Live"
+              image="/sidenotes/theylive.png"
+              imageAlt="OBEY billboard from John Carpenter's They Live (1988)"
+            >
+              John Carpenter (1988).
+            </Sidenote>
+          }>
+            <p>Futura PT was chosen as the project title font specifically in reference to the &ldquo;OBEY&rdquo; signs in John Carpenter&rsquo;s <em>They Live</em>,<NoteArrow /> a film about exposing the hidden power structures of a ghoulish elite that lies beneath the surface sheen of consumer culture. The typeface is a not-so-subtle reference. It&rsquo;s also the exact kind of choice a purely AI system would never make. Too specific. Too personal. It deviates too far from the mean.</p>
+          </SidenoteBlock>
+
+          {/* Spacer so the They Live sidenote (with image) doesn't overflow past the section */}
+          <div style={{ minHeight: 120 }} />
+
           <div style={{ clear: "both" }} />
           </div>{/* end body text */}
 
         </div>
 
-        <SectionTransition num="4.8" name="limitations" />
+        <SectionTransition num="4.7" name="limitations" />
 
         {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4.8: LIMITATIONS AND DISCLAIMERS
+            SECTION 4.7: LIMITATIONS AND DISCLAIMERS
+        ══════════════════════════════════════════════════════════════════ */}
+        <div id="section-4-7" className="mt-8 scroll-mt-24">
+          <p className="s-label">AI AGENT METHODOLOGY</p>
+          <h3 className="s-title">4.7 WORKFLOW LIMITATIONS</h3>
+          <p className="s-subtitle">What this project can and cannot tell you.</p>
+
+          {/* ── Body text — matching S4.4 pattern ── */}
+          <div
+            className="mt-10 text-[15px] leading-[1.8] [&>*+*]:mt-6"
+            style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: TEXT_MID }}
+          >
+
+          <SidenoteBlock note={
+            <Sidenote
+              title="Known Unknowns"
+            >
+              The DOJ Epstein Document Library contains approximately 3.5 million documents released through FOIA requests and court proceedings. The Black Book, leaked in 2009, contains roughly 1,500 names with phone numbers and addresses. Together they represent the most comprehensive public record of Epstein&rsquo;s network. But sealed court records, foreign jurisdiction documents, and private communications remain inaccessible. The pipeline searches what exists. It cannot search what hasn&rsquo;t been released.
+            </Sidenote>
+          }>
+            <p>The system cross-references against two sources: the DOJ Epstein Document Library and the Epstein Black Book. These are the most comprehensive public records available, but they are not exhaustive.<NoteArrow /> Individuals connected to Epstein through private meetings, verbal agreements, or undocumented relationships would not appear in either dataset. The pipeline can only find what the source material contains. Connections that were never recorded, or recorded in documents not yet made public, are invisible to any automated system.</p>
+          </SidenoteBlock>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>The DOJ library is searchable only via OCR, which means handwritten documents (notes, address book entries, calendars) are invisible to automated search. The pipeline catches what text-based search surfaces, but an unknown number of connections exist in documents that only a human reader could parse. This is a fundamental limitation of any automated approach to this corpus, not a flaw in this system&rsquo;s design.</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>Name disambiguation remains imperfect. The system uses word-boundary matching and minimum name-length thresholds, but common surnames will always produce more false positives than rare ones. &ldquo;Johnson&rdquo; in a DOJ document could be anyone. &ldquo;Hassenfeld&rdquo; almost certainly isn&rsquo;t. The 93% rejection rate reflects aggressive filtering. The system is designed to err on the side of exclusion. But some false negatives are inevitable: real connections dismissed because a common name with no corroborating context could not be distinguished from coincidence.</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>Natural language is a powerful interface for directing agents until it isn&rsquo;t. Pixel-level precision, exact alignment, and spatial relationships are difficult to communicate in conversation. The Sable design workflow required over a hundred iterations on some diagrams, not because the agent lacked capability, but because the language to describe the desired outcome hadn&rsquo;t been developed yet. This is a bottleneck inherent to any natural-language-driven creative workflow. The human&rsquo;s ability to specify is the rate limiter, not the system&rsquo;s ability to execute.</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>Agent autonomy has a ceiling determined by the verifiability of the task. Investigative agents (Detective, Editor, Researcher) operate effectively without intervention because their outputs can be checked against external evidence. The design agent cannot, because aesthetic judgment has no external ground truth. Any agentic system that claims full autonomy across both verifiable and subjective domains is either overstating its capabilities or producing average work.</p>
+
+          <SidenoteBlock note={
+            <Sidenote
+              title="Cascading Failure in Multi-Agent Systems"
+            >
+              This is not unique to this project. Any pipeline where Agent B consumes Agent A&rsquo;s output inherits Agent A&rsquo;s error rate. In software engineering, this is called error propagation. In intelligence analysis, it is called &ldquo;circular reporting,&rdquo; where a single bad source gets cited by multiple analysts until the error looks like consensus. The Activity Log exists to prevent exactly this.
+            </Sidenote>
+          }>
+            <p>Multi-agent coordination introduces compounding failure modes.<NoteArrow /> When one agent&rsquo;s output feeds another&rsquo;s input (the Scout&rsquo;s discoveries becoming the Detective&rsquo;s search targets, the Detective&rsquo;s matches becoming the Editor&rsquo;s dossiers) an error at any stage propagates downstream. The pipeline mitigates this through Miranda&rsquo;s editorial review and the Activity Log&rsquo;s forensic trail, but the architecture means a single bad extraction can generate a confidently wrong verdict. Traceability makes these errors findable. It does not make them impossible.</p>
+          </SidenoteBlock>
+
+          <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Summary</p>
+
+          <p style={{ maxWidth: CONTENT_NARROW }}>This pipeline automates search, extraction, and cross-referencing across two public datasets: the DOJ Epstein Document Library and the Epstein Black Book. It cannot read handwritten documents, cannot eliminate false negatives for common names, cannot detect connections absent from both source datasets, and cannot fully automate creative work. Its architecture makes every decision traceable, but traceability is not infallibility.</p>
+
+          </div>{/* end body text */}
+
+          {/* ── Disclaimer ── */}
+          <div
+            className="mt-10 rounded border-2 p-8"
+            style={{ backgroundColor: "#000", borderColor: TEXT_LIGHT }}
+          >
+            <p
+              className="text-[11px] font-bold uppercase tracking-[0.15em]"
+              style={{ fontFamily: MONO, color: TEXT_LIGHT }}
+            >
+              Disclaimer
+            </p>
+            <p
+              className="mt-4 text-[15px] leading-[1.8]"
+              style={{ fontFamily: "var(--font-inter), Inter, sans-serif", color: "#fff" }}
+            >
+              Appearance in Epstein-related documents does not imply wrongdoing. Many names appear in address books, flight logs, and legal filings for entirely innocuous reasons. &ldquo;Confirmed connection&rdquo; means documented proximity &mdash; contact entries, dining records, guest lists, correspondence &mdash; not implication of criminal activity or personal relationship.
+            </p>
+          </div>
+        </div>
+
+        <SectionTransition num="4.8" name="conclusions" />
+
+        {/* ══════════════════════════════════════════════════════════════════
+            SECTION 4.8: CONCLUSIONS
         ══════════════════════════════════════════════════════════════════ */}
         <div id="section-4-8" className="mt-8 scroll-mt-24">
           <SectionHeader
             num="4.8"
-            title="LIMITATIONS"
-            subtitle="What this project can and cannot tell you."
-            intro={[
-              "The DOJ Epstein Library is searchable only via OCR, which means handwritten documents — notes, address book entries, calendars — are invisible to automated search. The pipeline catches what the text-based search surfaces, but an unknown number of connections exist in documents that only a human reader could parse. This is a fundamental limitation of any automated approach to this corpus.",
-              "Name disambiguation remains an imperfect science. The system uses word-boundary matching and minimum name-length thresholds, but common surnames (Smith, Johnson, Williams) will always produce more false positives than rare ones. The 93% rejection rate reflects the system's aggressive filtering, but some false negatives are inevitable — real connections dismissed because the evidence was too ambiguous for automated confirmation.",
-              "The Architectural Digest archive covers 1988–2025, but the pre-2010 issues present challenges. Older issues often don't name homeowners in article teasers, leading to 'Anonymous' entries that cannot be cross-referenced. The pipeline extracts what the source material contains, but cannot surface names that were never published.",
-            ]}
-            summary="This project identifies documented name overlaps between two public datasets. It does not make accusations, cannot access handwritten records, and necessarily misses connections where names were never published or digitized."
-          />
-
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
-            {/* Disclaimer */}
-            <div
-              className="rounded border p-6"
-              style={{ backgroundColor: "#111118", borderColor: BORDER }}
-            >
-              <p
-                className="text-[11px] font-bold"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
-              >
-                {"// IMPORTANT DISCLAIMER"}
-              </p>
-              <p
-                className="mt-3 text-[11px] leading-[1.7]"
-                style={{ fontFamily: MONO, color: "rgba(160, 160, 176, 0.7)" }}
-              >
-                Appearance in Epstein-related documents does not imply
-                wrongdoing. Many names appear in address books, flight logs, and
-                legal filings for entirely innocuous reasons. &ldquo;Confirmed
-                connection&rdquo; means documented proximity &mdash; contact
-                entries, dining records, guest lists, correspondence &mdash; not
-                implication of criminal activity or personal relationship.
-              </p>
-            </div>
-
-            {/* What the pipeline cannot do */}
-            <div
-              className="rounded border p-6"
-              style={{ backgroundColor: "#111118", borderColor: BORDER }}
-            >
-              <p
-                className="text-[11px] font-bold"
-                style={{ fontFamily: MONO, color: GOLD_DIM }}
-              >
-                {"// KNOWN BLIND SPOTS"}
-              </p>
-              <p
-                className="mt-3 text-[11px] leading-[1.7]"
-                style={{ fontFamily: MONO, color: "rgba(160, 160, 176, 0.7)" }}
-              >
-                Handwritten documents in the DOJ corpus are invisible to OCR
-                search. Pre-2010 AD issues often omit homeowner names. Common
-                surnames produce unavoidable false positives. The pipeline
-                catches what text-based search surfaces &mdash; an unknown
-                number of real connections exist in records only a human reader
-                could parse.
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <SectionTransition num="4.9" name="conclusions" />
-
-        {/* ══════════════════════════════════════════════════════════════════
-            SECTION 4.9: CONCLUSIONS
-        ══════════════════════════════════════════════════════════════════ */}
-        <div id="section-4-9" className="mt-8 scroll-mt-24">
-          <SectionHeader
-            num="4.9"
             title="CONCLUSIONS"
             subtitle="What the data reveals about wealth, taste, and proximity to power."
             intro={[

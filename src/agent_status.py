@@ -1312,12 +1312,15 @@ def generate_status():
     scout_status = "working" if 0 < manifest_stats["total"] < TOTAL_EXPECTED_ISSUES else (
         "done" if manifest_stats["total"] >= TOTAL_EXPECTED_ISSUES else "idle"
     )
+    downloadable_issues = (manifest_stats["total"]
+                           - manifest_stats["skipped"]
+                           - manifest_stats.get("no_pdf", 0))
     courier_status = determine_agent_status(
-        manifest_stats["downloaded"], manifest_stats["total"],
+        manifest_stats["downloaded"], downloadable_issues,
         manifest_stats["total"] > 0
     )
     reader_status = determine_agent_status(
-        extraction_stats["extracted"], manifest_stats["downloaded"],
+        manifest_stats["extracted"], manifest_stats["downloaded"],
         manifest_stats["downloaded"] > 0
     )
     detective_status = determine_agent_status(
@@ -1336,15 +1339,21 @@ def generate_status():
         scout_msg = "Ready to search archive.org"
 
     # Courier message
-    if manifest_stats["downloaded"] > 0:
-        courier_msg = f"Downloaded {manifest_stats['downloaded']} of {manifest_stats['total']} PDFs"
+    no_pdf = manifest_stats.get("no_pdf", 0)
+    if manifest_stats["downloaded"] >= downloadable_issues and downloadable_issues > 0:
+        courier_msg = f"Done — {manifest_stats['downloaded']} PDFs downloaded"
+        if no_pdf > 0:
+            courier_msg += f" ({no_pdf} issues have no available PDF)"
+    elif manifest_stats["downloaded"] > 0:
+        courier_msg = f"Downloaded {manifest_stats['downloaded']} of {downloadable_issues} PDFs"
     else:
         courier_msg = "Waiting for discovery..."
 
-    # Reader message
-    if extraction_stats["extracted"] > 0:
-        courier_done = manifest_stats["downloaded"]
-        reader_msg = f"Extracted {extraction_stats['features']} features from {extraction_stats['extracted']}/{courier_done} issues"
+    # Reader message — use issue status (extracted count) not features-table distinct_issues
+    if manifest_stats["extracted"] >= manifest_stats["downloaded"] and manifest_stats["downloaded"] > 0:
+        reader_msg = f"Done — {extraction_stats['features']} features from {manifest_stats['extracted']} issues"
+    elif manifest_stats["extracted"] > 0:
+        reader_msg = f"Extracted {extraction_stats['features']} features from {manifest_stats['extracted']}/{manifest_stats['downloaded']} issues"
     else:
         reader_msg = "Waiting for downloads..."
 
@@ -1420,7 +1429,7 @@ def generate_status():
                 "message": courier_msg,
                 "color": "#3498db",
                 "deskItems": ["folder", "document"],
-                "progress": {"current": manifest_stats["downloaded"], "total": manifest_stats["total"]}
+                "progress": {"current": manifest_stats["downloaded"], "total": downloadable_issues}
             },
             {
                 "id": "reader",
@@ -1430,7 +1439,7 @@ def generate_status():
                 "message": reader_msg,
                 "color": "#2ecc71",
                 "deskItems": ["book", "pencil"],
-                "progress": {"current": manifest_stats["distinct_issues"], "total": manifest_stats["downloaded"]}
+                "progress": {"current": manifest_stats["extracted"], "total": manifest_stats["downloaded"]}
             },
             {
                 "id": "detective",

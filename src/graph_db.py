@@ -40,6 +40,10 @@ def get_driver():
                 "NEO4J_URI, NEO4J_USERNAME, and NEO4J_PASSWORD must be set in .env"
             )
 
+        # Use +ssc (self-signed cert) on macOS where system CA store
+        # doesn't include Neo4j Aura's intermediate certs
+        if "+s://" in uri and "+ssc://" not in uri:
+            uri = uri.replace("+s://", "+ssc://")
         _driver = GraphDatabase.driver(uri, auth=(username, password))
         # Verify connectivity
         _driver.verify_connectivity()

@@ -5,7 +5,7 @@ import { HeroSection } from "@/components/landing/HeroSection";
 import { KeyFinding } from "@/components/landing/KeyFinding";
 import { SearchableIndex } from "@/components/landing/SearchableIndex";
 import { ConfirmedTimeline } from "@/components/charts/ConfirmedTimeline";
-// import { GraphPreview } from "@/components/graph/GraphPreview"; // Disabled — Neo4j queries slow down page load
+import { GraphPreview } from "@/components/graph/GraphPreview";
 import { DossierExample } from "@/components/landing/DossierExample";
 import { AestheticPivotBridge } from "@/components/landing/AestheticPivotBridge";
 import { BaselineAesthetic } from "@/components/landing/BaselineAesthetic";
@@ -123,39 +123,36 @@ export default async function Home() {
             </div>
 
             <ConfirmedTimeline data={stats.confirmedTimeline} categoryBreakdown={stats.categoryBreakdown} />
+
+            {/* ── Knowledge Graph (4 minor columns) ── */}
+            <div
+              className="mt-12"
+              style={{ maxWidth: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)" }}
+            >
+              <div
+                className="overflow-hidden border"
+                style={{ backgroundColor: "#FAFAFA", borderColor: "#000", borderWidth: "1px", boxShadow: "4px 4px 0 0 #000" }}
+              >
+                <div className="px-3 py-2" style={{ borderBottom: "1px solid #000", backgroundColor: "#EDEDED" }}>
+                  <p
+                    className="text-[9px] font-bold uppercase tracking-[0.12em]"
+                    style={{ fontFamily: "futura-pt, sans-serif", color: "#000" }}
+                  >
+                    How Are They Connected?<br />
+                    <span style={{ fontWeight: 400, color: "#666" }}>Knowledge Graph of Confirmed Connections</span>
+                  </p>
+                </div>
+                <GraphPreview />
+              </div>
+              <p className="n-caption">
+                Fig. 5 &mdash; Interactive knowledge graph of confirmed Epstein
+                connections within the AD homeowner population. Copper rings
+                mark confirmed links. Drag to explore, scroll to zoom.
+              </p>
+            </div>
           </div>
         </section>
       )}
-
-      {/* ── D: How Are They Connected? — DISABLED (Neo4j slows page load) ── */}
-      {/* Re-enable by uncommenting this section and the GraphPreview import above */}
-      {/*
-      <section className="bg-background pb-20 pt-14" id="graph">
-        <div
-          className="mx-auto w-full"
-          style={{
-            maxWidth: "var(--grid-max-width)",
-            paddingLeft: "var(--grid-margin)",
-            paddingRight: "var(--grid-margin)",
-          }}
-        >
-          <p
-            className="text-[11px] font-bold uppercase tracking-[0.15em]"
-            style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
-          >
-            Key Finding 01 (Cont.)
-          </p>
-          <h2
-            className="mt-2 text-[28px] font-black uppercase leading-[0.95] tracking-[0.01em]"
-            style={{ fontFamily: "futura-pt, sans-serif" }}
-          >
-            How Are They Connected?
-          </h2>
-          <Separator className="mt-5 mb-6" />
-          <GraphPreview />
-        </div>
-      </section>
-      */}
 
       {/* ── 1.3 What a Typical AD Homeowner Looks Like ── */}
       <section id="typical-homeowner" className="narrative bg-background pb-20 pt-14">

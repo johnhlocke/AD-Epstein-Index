@@ -259,3 +259,54 @@ CREATE TABLE intermodel_scores (
 
 CREATE INDEX idx_intermodel_feature_id ON intermodel_scores(feature_id);
 CREATE INDEX idx_intermodel_model ON intermodel_scores(model);
+
+-- ============================================================
+-- Wealth Profiles (research_classify.py output)
+-- ============================================================
+
+-- One row per unique homeowner: wealth origin, Forbes score, social/cultural capital
+CREATE TABLE wealth_profiles (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  feature_id BIGINT NOT NULL REFERENCES features(id) ON DELETE CASCADE UNIQUE,
+  homeowner_name TEXT NOT NULL,
+
+  -- Classification
+  classification TEXT DEFAULT 'UNKNOWN'
+    CHECK (classification IN ('SELF_MADE', 'OLD_MONEY', 'MIXED', 'MARRIED_INTO', 'UNKNOWN')),
+  classification_confidence TEXT DEFAULT 'LOW'
+    CHECK (classification_confidence IN ('HIGH', 'MEDIUM', 'LOW')),
+  forbes_score INTEGER CHECK (forbes_score BETWEEN 1 AND 10),
+  forbes_confidence TEXT DEFAULT 'LOW'
+    CHECK (forbes_confidence IN ('HIGH', 'MEDIUM', 'LOW')),
+
+  -- Wealth details
+  wealth_source TEXT DEFAULT 'Unknown',
+  background TEXT DEFAULT 'Unknown',
+  trajectory TEXT DEFAULT 'Unknown',
+  rationale TEXT DEFAULT 'Unknown',
+
+  -- Social/cultural capital
+  education TEXT DEFAULT 'Unknown',
+  museum_boards TEXT DEFAULT 'Unknown',
+  elite_boards TEXT DEFAULT 'Unknown',
+  generational_wealth TEXT DEFAULT 'UNKNOWN'
+    CHECK (generational_wealth IN ('1ST_GEN', '2ND_GEN', '3RD_PLUS', 'UNKNOWN')),
+  cultural_capital_notes TEXT DEFAULT 'Unknown',
+  social_capital_notes TEXT DEFAULT 'Unknown',
+
+  -- Research metadata
+  gemini_model TEXT,
+  research_pass_1 TEXT,
+  research_pass_2 TEXT,
+  research_pass_3 TEXT,
+  research_pass_4 TEXT,
+  passes_succeeded INTEGER DEFAULT 0,
+
+  -- Timestamps
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE INDEX idx_wp_feature_id ON wealth_profiles(feature_id);
+CREATE INDEX idx_wp_classification ON wealth_profiles(classification);
+CREATE INDEX idx_wp_homeowner_name ON wealth_profiles(homeowner_name);

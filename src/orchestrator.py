@@ -114,7 +114,7 @@ async def write_status(agents):
         agent_id = agent_data.get("id")
         if agent_id in live_agents:
             live = live_agents[agent_id]
-            if live["active"]:
+            if live["active"] and agent_data.get("status") != "done":
                 agent_data["status"] = "working"
                 agent_data["liveTask"] = live["message"]
             # Overlay personality speech bubble if available
