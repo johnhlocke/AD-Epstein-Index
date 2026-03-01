@@ -207,6 +207,20 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     }))
     .filter((c) => c.baselinePct > 0 || c.epsteinPct > 0);
 
+  // Date range from issues (earliest and latest month/year)
+  let earliestYear = Infinity, earliestMonth = 1;
+  let latestYear = 0, latestMonth = 1;
+  for (const i of allIssues) {
+    const y = i.year as number;
+    const m = (i.month as number) ?? 1;
+    if (y < earliestYear || (y === earliestYear && m < earliestMonth)) {
+      earliestYear = y; earliestMonth = m;
+    }
+    if (y > latestYear || (y === latestYear && m > latestMonth)) {
+      latestYear = y; latestMonth = m;
+    }
+  }
+
   return {
     issues: {
       total: allIssues.length,
@@ -215,6 +229,10 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
       discovered: statusCounts["discovered"] ?? 0,
       skipped: statusCounts["skipped_pre1988"] ?? 0,
       target: 456,
+      dateRange: {
+        earliestYear, earliestMonth,
+        latestYear, latestMonth,
+      },
     },
     features: {
       total: featuresCount ?? allFeatures.length,

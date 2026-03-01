@@ -273,6 +273,13 @@ def update_detective_verdict(feature_id, verdict):
     if verdict not in ("YES", "NO"):
         raise ValueError(f"Invalid detective verdict: {verdict!r} — must be YES or NO")
     sb = get_supabase()
+
+    # PROTECT: if an editor override exists on the cross-reference, don't let
+    # the pipeline flip the feature verdict back. Editor overrides are final.
+    xref = sb.table("cross_references").select("editor_override_verdict").eq("feature_id", feature_id).execute()
+    if xref.data and xref.data[0].get("editor_override_verdict"):
+        return  # silently skip — editor decision takes precedence
+
     sb.table("features").update({
         "detective_verdict": verdict,
         "detective_checked_at": datetime.now(timezone.utc).isoformat(),
@@ -376,15 +383,27 @@ def upsert_dossier(feature_id, data):
     sb = get_supabase()
 
     # Check if dossier exists for this feature
-    existing = sb.table("dossiers").select("id").eq("feature_id", feature_id).execute()
+    existing = sb.table("dossiers").select("id, editor_verdict, editor_reasoning").eq("feature_id", feature_id).execute()
 
     # Ensure feature_id is in the data
     data["feature_id"] = feature_id
     data["updated_at"] = "now()"
 
     if existing.data:
-        # Update existing
         dossier_id = existing.data[0]["id"]
+
+        # PROTECT manual editor decisions: if a dossier has been manually
+        # reviewed (editor_reasoning starts with "Manual override"), never
+        # let the pipeline overwrite the verdict or reasoning.
+        existing_reasoning = existing.data[0].get("editor_reasoning") or ""
+        if existing_reasoning.startswith("Manual override"):
+            # Strip verdict/reasoning fields — keep manual decision intact
+            for protected in ("editor_verdict", "editor_reasoning",
+                              "connection_strength", "strength_rationale",
+                              "key_findings"):
+                data.pop(protected, None)
+
+        # Update existing
         result = sb.table("dossiers").update(data).eq("id", dossier_id).execute()
         return result.data[0] if result.data else None
     else:
@@ -536,13 +555,23 @@ def upsert_cross_reference(feature_id, data):
     """
     sb = get_supabase()
 
-    existing = sb.table("cross_references").select("id").eq("feature_id", feature_id).execute()
+    existing = sb.table("cross_references").select("id, editor_override_verdict").eq("feature_id", feature_id).execute()
 
     data["feature_id"] = feature_id
     data["updated_at"] = datetime.now(timezone.utc).isoformat()
 
     if existing.data:
         xref_id = existing.data[0]["id"]
+
+        # PROTECT editor overrides: never let pipeline clobber manual decisions
+        if existing.data[0].get("editor_override_verdict"):
+            # Preserve all editor_override_* fields — strip them from incoming data
+            data.pop("editor_override_verdict", None)
+            data.pop("editor_override_reason", None)
+            data.pop("editor_override_at", None)
+            # Also preserve binary_verdict so it stays consistent with override
+            data.pop("binary_verdict", None)
+
         result = sb.table("cross_references").update(data).eq("id", xref_id).execute()
         return result.data[0] if result.data else None
     else:

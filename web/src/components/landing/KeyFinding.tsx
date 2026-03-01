@@ -44,7 +44,11 @@ export function KeyFinding({ stats }: KeyFindingProps) {
                 className="text-[9px] font-bold uppercase tracking-[0.12em]"
                 style={{ fontFamily: "futura-pt, sans-serif", color: "#000" }}
               >
-                Investigation Funnel &mdash; Live Data
+                Investigation Funnel &mdash; Live Data from{" "}
+                {new Date(stats.issues.dateRange.earliestYear, stats.issues.dateRange.earliestMonth - 1).toLocaleString("en-US", { month: "long" })}{" "}
+                {stats.issues.dateRange.earliestYear} through{" "}
+                {new Date(stats.issues.dateRange.latestYear, stats.issues.dateRange.latestMonth - 1).toLocaleString("en-US", { month: "long" })}{" "}
+                {stats.issues.dateRange.latestYear}
               </p>
             </div>
             <VerdictSankey

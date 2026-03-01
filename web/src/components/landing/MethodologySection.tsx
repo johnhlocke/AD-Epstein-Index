@@ -37,6 +37,10 @@ const CONTENT_NARROW = "var(--content-narrow)";    // 4-of-6 grid columns for pr
 
 // ── Figure box — consistent border, title bar, and shadow for each figure ─────
 function FigBox({ title, subtitle, children, className, style }: { title: string; subtitle?: string; children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+  // Header fill matches the figure background variant:
+  // deep purple (CARD_BG) → lighter purple tint; near-black (#111118) → slightly lighter black
+  const isPurple = style?.backgroundColor === CARD_BG;
+  const headerBg = isPurple ? "rgba(40, 24, 66, 0.9)" : "rgba(22, 22, 32, 0.9)";
   return (
     <div
       className={className}
@@ -49,7 +53,7 @@ function FigBox({ title, subtitle, children, className, style }: { title: string
         className="px-3 py-1.5"
         style={{
           fontFamily: MONO,
-          backgroundColor: "rgba(184, 115, 51, 0.08)",
+          backgroundColor: headerBg,
           borderBottom: `1px solid ${BORDER}`,
         }}
       >
@@ -310,15 +314,17 @@ function SidenoteBlock({
   children,
   note,
   className = "",
+  noteStyle,
 }: {
   children: React.ReactNode;
   note?: React.ReactNode;
   className?: string;
+  noteStyle?: React.CSSProperties;
 }) {
   return (
     <div className={`s-note-row ${className}`}>
       <div style={{ maxWidth: "var(--content-narrow)" }}>{children}</div>
-      {note && <div className="s-note-margin hidden md:block">{note}</div>}
+      {note && <div className="s-note-margin hidden md:block" style={noteStyle}>{note}</div>}
     </div>
   );
 }
@@ -1666,7 +1672,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     className="float-left mb-4 mr-6 hidden md:block"
                     style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
                   >
-                    <FigBox title="Six-Stage Pipeline" subtitle="This shows the six stages from discovery to publication, with every step externalized and auditable." style={{ backgroundColor: CARD_BG }}>
+                    <FigBox title="Six-Stage Pipeline" subtitle="Six stages from discovery to publication, with every step externalized and auditable. Cross-referencing 3,440 home features against DOJ records requires a pipeline where every decision can be traced back to its source." style={{ backgroundColor: CARD_BG }}>
                     <div className="flex flex-col" style={{ height: 476 }}>
                       {nodes.map((node, i) => (
                         <div
@@ -1795,7 +1801,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     className="float-left mb-4 mr-6 hidden md:block"
                     style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
                   >
-                    <FigBox title="Zuckerman Subgraph" subtitle="This shows how one AD homeowner connects to Epstein through multiple evidence types." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
+                    <FigBox title="Zuckerman Subgraph" subtitle="One AD homeowner's connections to Epstein through multiple evidence types. The graph makes it possible to see that a single person can appear in both the Black Book and DOJ documents, connected through shared designers and locations." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                       <div className="px-2 py-2">
                         <svg viewBox="0 0 280 320" className="w-full" style={{ maxHeight: 320 }}>
                           {/* ── Edges with variable weight + endpoint dots at perimeters ── */}
@@ -1997,7 +2003,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   className="float-left mb-4 mr-6 hidden md:block"
                   style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
                 >
-                  <FigBox title="Coppola Rejection Tree" subtitle="This shows three DOJ hits for three different people, all rejected without human intervention." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
+                  <FigBox title="Coppola Rejection Tree" subtitle="Three DOJ hits for three different people, all rejected without human intervention. Common surnames generate hundreds of false positives across the DOJ library, so the system must distinguish between namesakes automatically." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                     <div className="px-3 py-3">
                       <p className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
                         AD Feature, Sep 1995:<br />
@@ -2109,7 +2115,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 className="float-left mb-4 mr-6 hidden md:block"
                 style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
               >
-                <FigBox title="Three-Column Pipeline" subtitle="This shows how agents, editor, and human oversight operate in parallel, not sequence." style={{ backgroundColor: "#111118" }}>
+                <FigBox title="Three-Column Pipeline" subtitle="Agents, editor, and human oversight operate in parallel, not sequence. The project processes 37 years of magazine archives, so the pipeline must run continuously without bottlenecking on any single stage." style={{ backgroundColor: CARD_BG }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/fig4-pipeline-v6.svg"
@@ -2237,7 +2243,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mb-4 mr-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Monolithic Architecture" subtitle="This shows why a single model can't maintain state across thousands of records." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Monolithic Architecture" subtitle="A single model can't maintain state across thousands of records. A monolithic prompt would lose track of which names have been checked, which verdicts have been issued, and which edge cases require human review." style={{ backgroundColor: CARD_BG }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/monolithic-diagram.svg?v=7"
@@ -2251,7 +2257,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               >
                 <span style={{ color: TEXT_MID }}>Fig. 4.5</span> &mdash; Test 01: Monolithic single-prompt architecture. One model, one call, no intermediate state, no error recovery.
               </p>
-              <FigBox title="Decentralized Mesh" subtitle="This shows how peer-to-peer agents risk contradictory updates and lost audit trails." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Decentralized Mesh" subtitle="Peer-to-peer agents risk contradictory updates and lost audit trails. When one agent confirms a name while another is still investigating it, the database can end up with conflicting verdicts and no way to resolve them." className="mt-6" style={{ backgroundColor: CARD_BG }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/decentralized-diagram.svg?v=7"
@@ -2265,7 +2271,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               >
                 <span style={{ color: TEXT_MID }}>Fig. 4.6</span> &mdash; Test 02: Decentralized multi-agent mesh. Peer-to-peer communication, shared state, no central authority.
               </p>
-              <FigBox title="Hub-and-Spoke Architecture" subtitle="This shows how central coordination eliminates conflicting writes and preserves accountability." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Hub-and-Spoke Architecture" subtitle="Central coordination eliminates conflicting writes and preserves accountability. This is the architecture used by our system because investigative work requires a single editorial authority to maintain verdict consistency across thousands of records." className="mt-6" style={{ backgroundColor: CARD_BG }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/hub-spoke-diagram.svg?v=4"
@@ -2338,7 +2344,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mb-4 mr-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Communication Protocol" subtitle="This shows the entire inter-agent API: two dataclasses and six fields." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Communication Protocol" subtitle="This shows the entire inter-agent API: two dataclasses and six fields. Simplicity is deliberate because every additional field is a surface for bugs in a system where a misrouted verdict could falsely link someone to Epstein." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                 {/* File tab bar */}
                 <div
                   className="flex items-center gap-2 px-4 py-2"
@@ -2546,7 +2552,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Miranda, the Editor" subtitle="This shows how every task, verdict, and database write passes through one authority." style={{ backgroundColor: CARD_BG }}>
+              <FigBox title="Miranda, the Editor" subtitle="Every task, verdict, and database write passes through one authority. Miranda is the only agent that writes to the production database, so no confirmed connection can be published without her review." style={{ backgroundColor: CARD_BG }}>
               <div
                 className="flex flex-col items-center p-6 pb-8"
               >
@@ -2587,7 +2593,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               </p>
 
               {/* ── Fig. 4.10: 6 agent cards — 2×3 grid under Miranda ── */}
-              <FigBox title="Specialist Agents" subtitle="This shows the six bounded roles with distinct behavioral priors and expertise." style={{ backgroundColor: CARD_BG }}>
+              <FigBox title="Specialist Agents" subtitle="Six bounded roles with distinct behavioral priors and expertise. Each agent is a specialist: Scout finds issues, Detective cross-references names, Researcher builds dossiers, and none can operate outside their domain." style={{ backgroundColor: CARD_BG }}>
               <div className="grid grid-cols-2 gap-2 p-2">
                 {subAgents.map((agent) => (
                   <div
@@ -2745,7 +2751,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="In-Character Debugging" subtitle="This shows how persona-driven conversation surfaces policy ambiguity faster than rulebook review." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="In-Character Debugging" subtitle="In this example, a persona-driven conversation surfaces policy ambiguity faster than rulebook review. Asking the Detective in character why he rejected a name reveals reasoning gaps that would be invisible in a log file." style={{ backgroundColor: "#111118" }}>
               {(() => {
                 const MIRANDA_BUB = { bg: "rgba(155, 120, 200, 0.18)", border: "rgba(155, 120, 200, 0.35)" };
                 const HUMAN_BUB = { bg: "rgba(120, 175, 235, 0.18)", border: "rgba(120, 175, 235, 0.35)" };
@@ -2871,7 +2877,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-6 hidden md:block"
               style={{ width: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)" }}
             >
-              <FigBox title="The Agent Office" subtitle="This shows real-time visibility into every agent's state, task, and output." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="The Agent Office" subtitle="Real-time visibility into every agent's state, task, and output. When the pipeline runs overnight, this dashboard is the only way to know if an agent is stuck, looping, or silently producing bad data." style={{ backgroundColor: "#111118" }}>
               <video
                 autoPlay
                 muted
@@ -2974,7 +2980,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-6 hidden md:block"
               style={{ width: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)" }}
             >
-              <FigBox title="Investigation Funnel" subtitle="This shows the 93% rejection rate: broad intake, aggressive filtering, auditable output." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Investigation Funnel" subtitle="A 93% rejection rate: broad intake, aggressive filtering, auditable output. The high rejection rate is by design because falsely confirming a connection to Epstein carries far more harm than missing one." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                 {stats ? (
                   <VerdictSankey
                     featuresTotal={stats.features.total}
@@ -3210,7 +3216,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Verdict Pipeline" subtitle="This shows the three human intervention points between name extraction and publication." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Verdict Pipeline" subtitle="This shows the three human intervention points between name extraction and publication. No name reaches the public website without passing through automated triage, editorial review, and manual audit." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                 <div className="flex">
                   {/* Left: vertical pipeline */}
                   <div className="flex flex-1 flex-col items-center px-3 py-3">
@@ -3336,7 +3342,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Mottola Email" subtitle="This shows a direct email to Epstein's personal address, documenting nine years of contact." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Mottola Email" subtitle="A direct email to Epstein's personal address, documenting nine years of contact. This is what a confirmed connection looks like: a named individual in a DOJ document with clear, direct interaction." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/sidenotes/mottola-email.jpg"
@@ -3395,7 +3401,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Goldsmith Email" subtitle="This shows how adversarial context serves as negative evidence: dislike is not proximity." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Goldsmith Email" subtitle="Adversarial context serves as negative evidence: dislike is not proximity. Appearing in a DOJ document is not enough; the system must evaluate whether the context demonstrates actual social connection or something else entirely." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/sidenotes/goldsmith-email.jpg"
@@ -3457,7 +3463,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Ertegun Thank-You" subtitle="This shows a forwarded dinner note the automated pipeline missed but manual audit caught." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Ertegun Thank-You" subtitle="A forwarded dinner note the automated pipeline missed but manual audit caught. The automated system initially rejected this name, but a human auditor reading the full DOJ document found the connection buried in a forwarded email chain." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/sidenotes/ertegun-dinner.jpg"
@@ -3792,7 +3798,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mb-4 mr-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <FigBox title="Human-AI Autonomy Matrix" subtitle="This shows that high automation and high human control are not mutually exclusive." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Human-AI Autonomy Matrix" subtitle="High automation and high human control are not mutually exclusive. The project automates discovery, extraction, and cross-referencing while keeping every verdict decision under human authority." style={{ backgroundColor: "#111118" }}>
               <ShneidermanMatrix />
               </FigBox>
               <p className="mt-2 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM, lineHeight: 1.6 }}>
@@ -3801,7 +3807,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             </div>
             {/* Mobile: non-floated matrix */}
             <div className="md:hidden" style={{ maxWidth: 300 }}>
-              <FigBox title="Human-AI Autonomy Matrix" subtitle="This shows that high automation and high human control are not mutually exclusive." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Human-AI Autonomy Matrix" subtitle="High automation and high human control are not mutually exclusive. The project automates discovery, extraction, and cross-referencing while keeping every verdict decision under human authority." style={{ backgroundColor: "#111118" }}>
               <ShneidermanMatrix />
               </FigBox>
             </div>
@@ -3893,7 +3899,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             </p>
 
             <div style={{ maxWidth: CONTENT_NARROW }}>
-              <FigBox title="Agent Office Walkthrough" subtitle="Click the numbered markers to explore each interface panel." style={{ backgroundColor: "#111118" }}>
+              <FigBox title="Agent Office Walkthrough" subtitle="Click the numbered markers to explore each interface panel. This is the actual production dashboard used to monitor the seven agents as they process the AD archive." style={{ backgroundColor: "#111118" }}>
               <AgentOfficeImage />
               </FigBox>
             </div>
@@ -3993,18 +3999,18 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                       {item.desc}
                     </p>
                     {item.num === 4 && (() => {
-                      const sprite = (src: string, label: string, h = 54) => (
-                        <div key={label} className="flex shrink-0 flex-col items-center">
+                      const sprite = (src: string, label: string) => (
+                        <div key={label} className="flex min-w-0 flex-1 flex-col items-center">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={src} alt={`Scout agent — ${label}`} style={{ height: h, width: "auto", imageRendering: "pixelated" }} />
-                          <p className="mt-1 text-[8px] font-bold uppercase tracking-[0.1em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
+                          <img src={src} alt={`Scout agent — ${label}`} className="w-full max-w-[54px]" style={{ height: "auto", imageRendering: "pixelated" }} />
+                          <p className="mt-1 text-[clamp(5px,1.2vw,8px)] font-bold uppercase tracking-[0.1em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
                             {label}
                           </p>
                         </div>
                       );
                       let sepIdx = 0;
                       const sep = (text: string) => (
-                        <span key={`sep-${sepIdx++}`} className="flex shrink-0 items-center self-center text-[10px] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM, marginTop: -12 }}>
+                        <span key={`sep-${sepIdx++}`} className="flex shrink-0 items-center self-center text-[clamp(6px,1.2vw,10px)] font-bold" style={{ fontFamily: MONO, color: TEXT_DIM, marginTop: -12 }}>
                           {text}
                         </span>
                       );
@@ -4020,7 +4026,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                           {sep("or")}
                           {sprite("/sidenotes/scout-mad.png", "Failure")}
                           {sep("\u2192")}
-                          {sprite("/sidenotes/scout-done.png", "Done!", 58)}
+                          {sprite("/sidenotes/scout-done.png", "Done!")}
                         </div>
                       );
                     })()}
@@ -4071,7 +4077,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="float-left mr-6 mb-6 hidden md:block"
             style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
           >
-            <FigBox title="Technology Stack" subtitle="This shows the production infrastructure. No mock data or placeholder systems." style={{ backgroundColor: "#111118" }}>
+            <FigBox title="Technology Stack" subtitle="This shows the production infrastructure. Every tool listed here is running in production, processing real AD archive data and real DOJ documents." style={{ backgroundColor: "#111118" }}>
             <TechStack />
             </FigBox>
             <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
@@ -4128,7 +4134,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="float-left mr-6 mb-6 hidden md:block"
             style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
           >
-            <FigBox title="Design Dialogue" subtitle="This shows how human-AI design precision escalates from vague direction to sub-pixel specification." style={{ backgroundColor: "#111118" }}>
+            <FigBox title="Design Dialogue" subtitle="Human-AI design precision escalates from vague direction to sub-pixel specification. The transcript is from this project's own Figma sessions, demonstrating how iterative feedback loops calibrate the human's ability to direct AI output." style={{ backgroundColor: "#111118" }}>
             <DesignDialogue />
             </FigBox>
             <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
@@ -4225,10 +4231,41 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               The DOJ Epstein Document Library contains approximately 3.5 million documents released through FOIA requests and court proceedings. The Black Book, leaked in 2009, contains roughly 1,500 names with phone numbers and addresses. Together they represent the most comprehensive public record of Epstein&rsquo;s network. But sealed court records, foreign jurisdiction documents, and private communications remain inaccessible. The pipeline searches what exists. It cannot search what hasn&rsquo;t been released.
             </Sidenote>
           }>
-            <p>The system cross-references against two sources: the DOJ Epstein Document Library and the Epstein Black Book. These are the most comprehensive public records available, but they are not exhaustive.<NoteArrow /> Individuals connected to Epstein through private meetings, verbal agreements, or undocumented relationships would not appear in either dataset. The pipeline can only find what the source material contains. Connections that were never recorded, or recorded in documents not yet made public, are invisible to any automated system.</p>
+            <p>The system cross-references against two sources: the DOJ Epstein Document Library and the Epstein Black Book. These are the most comprehensive public records available, but they are not exhaustive.<NoteArrow /> Individuals connected to Epstein through private meetings, verbal agreements, or undocumented relationships would not appear in either dataset. The pipeline can only find what the source material contains. Connections that were never recorded, or recorded in documents not yet made public,<NoteArrow /> are invisible to any automated system.</p>
           </SidenoteBlock>
 
-          <p style={{ maxWidth: CONTENT_NARROW }}>The DOJ library is searchable only via OCR, which means handwritten documents (notes, address book entries, calendars) are invisible to automated search. The pipeline catches what text-based search surfaces, but an unknown number of connections exist in documents that only a human reader could parse. This is a fundamental limitation of any automated approach to this corpus.</p>
+          {/* ── Fig. 4.22: Redacted FBI Document — floated left, 2 minor columns ── */}
+          <div
+            className="float-left mr-6 mb-4 hidden md:block"
+            style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+          >
+            <FigBox title="Redacted FBI Document" subtitle="Heavily redacted pages from the Epstein files indicate that names of associates are still being withheld from public release." style={{ backgroundColor: "#111118" }}>
+              <a href="https://www.justice.gov/d9/2025-03/EFTA01683606-EFTA01683611.pdf" target="_blank" rel="noopener noreferrer">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src="/redacted-epstein.png"
+                  alt="Heavily redacted FBI CHS Reporting Document from the Epstein files, with nearly all content blacked out"
+                  className="w-full"
+                />
+              </a>
+            </FigBox>
+            <p className="mt-2 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
+              <span style={{ color: TEXT_MID }}>Fig. 4.22</span> &mdash; FBI CHS Reporting Document, page 2 of 6. Source:{" "}
+              <a href="https://www.justice.gov/d9/2025-03/EFTA01683606-EFTA01683611.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>EFTA01683606 &rarr;</a>
+            </p>
+          </div>
+
+          <SidenoteBlock noteStyle={{ top: 40 }} note={
+            <Sidenote
+              title="&ldquo;Slap in the Face&rdquo;"
+              href="https://www.aljazeera.com/news/2025/12/21/slap-in-the-face-epstein-victims-slam-release-of-heavily-redacted-files"
+              linkText="Al Jazeera, Dec 2025"
+            >
+              In December 2025, Congress mandated the release of all Epstein files. What arrived was tens of thousands of pages, many heavily redacted, with a 119-page Grand Jury document entirely blacked out and at least 16 files disappearing from the DOJ webpage after initial posting. Victim Marina Lacerda: &ldquo;All of us are infuriated by this. It&rsquo;s another slap in the face.&rdquo;
+            </Sidenote>
+          }>
+            <p>The DOJ library is searchable only via OCR, which means handwritten documents (notes, address book entries, calendars) are invisible to automated search. The pipeline catches what text-based search surfaces, but an unknown number of connections exist in documents that only a human reader could parse. This is a fundamental limitation of any automated approach to this corpus.</p>
+          </SidenoteBlock>
 
           <p style={{ maxWidth: CONTENT_NARROW }}>Name disambiguation remains imperfect. The system uses word-boundary matching and minimum name-length thresholds, but common surnames will always produce more false positives than rare ones. &ldquo;Johnson&rdquo; in a DOJ document could be anyone. &ldquo;Hassenfeld&rdquo; almost certainly isn&rsquo;t. The 93% rejection rate reflects aggressive filtering. The system is designed to err on the side of exclusion. But some false negatives are inevitable: real connections dismissed because a common name with no corroborating context could not be distinguished from coincidence.</p>
 

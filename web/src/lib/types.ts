@@ -114,6 +114,12 @@ export interface StatsResponse {
     discovered: number;
     skipped: number;
     target: number;
+    dateRange: {
+      earliestYear: number;
+      earliestMonth: number;
+      latestYear: number;
+      latestMonth: number;
+    };
   };
   features: {
     total: number;
