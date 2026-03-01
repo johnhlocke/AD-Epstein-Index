@@ -181,9 +181,6 @@ class Agent(ABC):
                 if self._stop_requested:
                     break
 
-                if self.name == "researcher":
-                    self.log(f">>> Cycle start (cycle #{self._cycles}, stop={self._stop_requested})", level="WARN")
-
                 self._active = True
                 try:
                     # Check inbox for tasks from Editor
@@ -274,8 +271,6 @@ class Agent(ABC):
                     else:
                         # No work — use idle time intelligently (if enabled)
                         # Break out immediately if a task arrives in the inbox.
-                        if self.name == "researcher":
-                            self.log(f">>> No work, entering idle (IDLE_LLM_ENABLED={IDLE_LLM_ENABLED})", level="WARN")
                         if IDLE_LLM_ENABLED:
                             _IDLE_TIMEOUT = 30  # seconds per call
                             _idle_fns = [
@@ -308,16 +303,12 @@ class Agent(ABC):
                 finally:
                     self._active = False
 
-                # Sleep between cycles (check stop flag and inbox periodically)
-                if self.name == "researcher":
-                    self.log(f">>> Entering sleep (interval={self.interval}s)", level="WARN")
+                # Sleep between cycles
                 try:
                     await asyncio.sleep(self.interval)
-                except (asyncio.CancelledError, Exception) as e:
-                    # Don't let a sleep interruption kill the agent loop
+                except (asyncio.CancelledError, Exception):
                     if self._stop_requested:
                         break
-                    self.log(f"Sleep interrupted ({type(e).__name__}), continuing...", level="WARN")
                     continue
 
             # Log why the loop exited (debugging aid)

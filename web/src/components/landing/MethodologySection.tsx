@@ -35,6 +35,38 @@ const CAT_COLORS_DIM = [CAT_AMBER_DIM, CAT_COPPER_DIM, CAT_TERRA_DIM] as const;
 const catColorIdx = (num: number) => num >= 8 ? 2 : num >= 4 ? 1 : 0;
 const CONTENT_NARROW = "var(--content-narrow)";    // 4-of-6 grid columns for prose
 
+// ── Figure box — consistent border, title bar, and shadow for each figure ─────
+function FigBox({ title, subtitle, children, className, style }: { title: string; subtitle?: string; children: React.ReactNode; className?: string; style?: React.CSSProperties }) {
+  return (
+    <div
+      className={className}
+      style={{
+        ...style,
+        border: "1px solid rgba(160, 160, 176, 0.25)",
+      }}
+    >
+      <div
+        className="px-3 py-1.5"
+        style={{
+          fontFamily: MONO,
+          backgroundColor: "rgba(184, 115, 51, 0.08)",
+          borderBottom: `1px solid ${BORDER}`,
+        }}
+      >
+        <span className="text-[8px] font-bold tracking-[0.08em]" style={{ color: TEXT_LIGHT }}>
+          {title.toUpperCase()}
+        </span>
+        {subtitle && (
+          <p className="mt-0.5 text-[7px] leading-[1.5]" style={{ color: TEXT_DIM }}>
+            {subtitle}
+          </p>
+        )}
+      </div>
+      {children}
+    </div>
+  );
+}
+
 // ── Grid-aware divider — full-width hairline with tick marks at gutter centers ─
 function GridDivider({ className = "", startTick = false, endTick = false }: { className?: string; startTick?: boolean; endTick?: boolean }) {
   const TICK = { position: "absolute" as const, width: "0.5px", height: "7px", backgroundColor: TEXT_DIM };
@@ -456,10 +488,7 @@ function ShneidermanMatrix() {
   return (
     <div>
       <div
-        className="rounded"
         style={{
-          border: `1px solid ${BORDER}`,
-          backgroundColor: "#111118",
           display: "grid",
           gridTemplateColumns: "28px 1fr 1fr",
           gridTemplateRows: "28px 1fr 1fr",
@@ -530,10 +559,6 @@ function ShneidermanMatrix() {
         ))}
       </div>
 
-      {/* Caption */}
-      <p style={{ fontFamily: MONO, fontSize: 8, color: TEXT_DIM, marginTop: 8, lineHeight: 1.6 }}>
-        <span style={{ color: TEXT_MID }}>Fig. 18</span> &mdash; Adapted from Shneiderman (2022), <em>Human-Centered AI</em>. This project targets the upper-right quadrant: high automation with high human control.
-      </p>
     </div>
   );
 }
@@ -659,7 +684,7 @@ const DIALOGUE_PHASES: DialoguePhase[] = [
     precision: "Relative terms",
     annotation: "The user encounters the Figma-to-web rendering gap. Text that looked fine in Figma is illegible at localhost resolution.",
     curated: [
-      { speaker: "user", text: "Re-export Fig. 5. The text is not legible on localhost. Make all of the text double the size.", time: "15:03" },
+      { speaker: "user", text: "Re-export Fig. 4.5. The text is not legible on localhost. Make all of the text double the size.", time: "15:03" },
       { speaker: "sable", text: "Doubling all text layers now. The issue is that Figma\u2019s canvas renders at 1x but the export gets downscaled by the browser.", time: "15:04" },
       { speaker: "user", text: "Try to export again, give it a different filename so it will force refresh.", time: "15:11" },
     ],
@@ -1442,7 +1467,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             },
             {
               num: "4.7",
-              title: "Workflow Limitations",
+              title: "Limitations",
               body: "No system built on language models is immune to failure. Surname collisions, OCR limitations in handwritten documents, and calibrating autonomy remain open problems. Approximately 20% of confirmed cases are routed for manual review.",
             },
             {
@@ -1612,7 +1637,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 Walkthrough
               </p>
 
-              {/* ── Fig. 1: Floated pipeline chevron diagram (cols 1-2) ── */}
+              {/* ── Fig. 4.1: Floated pipeline chevron diagram (cols 1-2) ── */}
               {(() => {
                 const SHADES = [
                   "#1a1835", "#21203f", "#292649",
@@ -1639,8 +1664,9 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 return (
                   <div
                     className="float-left mb-4 mr-6 hidden md:block"
-                    style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)", height: 500 }}
+                    style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
                   >
+                    <FigBox title="Six-Stage Pipeline" subtitle="This shows the six stages from discovery to publication, with every step externalized and auditable." style={{ backgroundColor: CARD_BG }}>
                     <div className="flex flex-col" style={{ height: 476 }}>
                       {nodes.map((node, i) => (
                         <div
@@ -1680,11 +1706,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                         </div>
                       ))}
                     </div>
+                    </FigBox>
                     <p
                       className="mt-2 text-[8px] tracking-wider"
                       style={{ fontFamily: MONO, color: TEXT_DIM }}
                     >
-                      <span style={{ color: TEXT_MID }}>Fig. 1</span> — Six-stage pipeline.
+                      <span style={{ color: TEXT_MID }}>Fig. 4.1</span> &mdash; Six-stage pipeline.
                     </p>
                   </div>
                 );
@@ -1758,7 +1785,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </p>
                 </div>
               </div>
-              {/* ── Fig. 2: Simplified Zuckerman subgraph (floated left, 2 cols) ── */}
+              {/* ── Fig. 4.2: Simplified Zuckerman subgraph (floated left, 2 cols) ── */}
               {(() => {
                 const Dot = ({ cx, cy }: { cx: number; cy: number }) => (
                   <circle cx={cx} cy={cy} r="2.5" fill={TEXT_DIM} opacity="0.6" />
@@ -1768,18 +1795,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     className="float-left mb-4 mr-6 hidden md:block"
                     style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
                   >
-                    <div
-                      className="overflow-hidden rounded"
-                      style={{
-                        border: `1px solid ${BORDER}`,
-                        backgroundColor: "#111118",
-                      }}
-                    >
-                      <div className="px-3 py-1.5" style={{ backgroundColor: "rgba(184, 115, 51, 0.1)" }}>
-                        <span className="text-[8px] font-bold tracking-[0.08em]" style={{ fontFamily: MONO, color: COPPER }}>
-                          KNOWLEDGE GRAPH &mdash; SUBGRAPH
-                        </span>
-                      </div>
+                    <FigBox title="Zuckerman Subgraph" subtitle="This shows how one AD homeowner connects to Epstein through multiple evidence types." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                       <div className="px-2 py-2">
                         <svg viewBox="0 0 280 320" className="w-full" style={{ maxHeight: 320 }}>
                           {/* ── Edges with variable weight + endpoint dots at perimeters ── */}
@@ -1858,12 +1874,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                           <text x="170" y="300" fill={TEXT_DIM} fontSize="5.5" fontFamily="JetBrains Mono, monospace">indirect / inferred</text>
                         </svg>
                       </div>
-                    </div>
+                    </FigBox>
                     <p
                       className="mt-1 text-[8px] tracking-wider"
                       style={{ fontFamily: MONO, color: TEXT_DIM }}
                     >
-                      <span style={{ color: TEXT_MID }}>Fig. 2</span> — Zuckerman subgraph.
+                      <span style={{ color: TEXT_MID }}>Fig. 4.2</span> &mdash; Zuckerman subgraph.
                       {" "}<a href="https://www.wheretheylive.world/fullgraph" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>Full graph &rarr;</a>
                     </p>
                   </div>
@@ -1975,24 +1991,13 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 </p>
               </SidenoteBlock>
 
-              {/* ── Fig. 3: Coppola rejection tree (floated left, 2 cols — same as Fig. 2) ── */}
+              {/* ── Fig. 4.3: Coppola rejection tree (floated left, 2 cols — same as Fig. 4.2) ── */}
               <div className="relative">
                 <div
                   className="float-left mb-4 mr-6 hidden md:block"
                   style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
                 >
-                  <div
-                    className="overflow-hidden rounded"
-                    style={{
-                      border: `1px solid ${BORDER}`,
-                      backgroundColor: "#111118",
-                    }}
-                  >
-                    <div className="px-3 py-1.5" style={{ backgroundColor: "rgba(204, 64, 64, 0.1)" }}>
-                      <span className="text-[8px] font-bold tracking-[0.08em]" style={{ fontFamily: MONO, color: "#CC4040" }}>
-                        DETECTIVE &mdash; FALSE POSITIVE REJECTION
-                      </span>
-                    </div>
+                  <FigBox title="Coppola Rejection Tree" subtitle="This shows three DOJ hits for three different people, all rejected without human intervention." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                     <div className="px-3 py-3">
                       <p className="text-[10px]" style={{ fontFamily: MONO, color: TEXT_DIM }}>
                         AD Feature, Sep 1995:<br />
@@ -2046,12 +2051,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                         <a href="https://www.wheretheylive.world/dossier/200" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>View dossier &rarr;</a>
                       </p>
                     </div>
-                  </div>
+                  </FigBox>
                   <p
                     className="mt-1 text-[8px] tracking-wider"
                     style={{ fontFamily: MONO, color: TEXT_DIM }}
                   >
-                    <span style={{ color: TEXT_MID }}>Fig. 3</span> — False positive rejection: surname collision resolved without human intervention.
+                    <span style={{ color: TEXT_MID }}>Fig. 4.3</span> &mdash; False positive rejection: surname collision resolved without human intervention.
                   </p>
                 </div>
                 <p style={{ maxWidth: CONTENT_NARROW }}>
@@ -2099,23 +2104,24 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   produces detailed evidence for those conclusions.
                 </p>
               </SidenoteBlock>
-              {/* ── Fig. 4: Three-column pipeline (floated left, 2 cols) ── */}
+              {/* ── Fig. 4.4: Three-column pipeline (floated left, 2 cols) ── */}
               <div
                 className="float-left mb-4 mr-6 hidden md:block"
                 style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
               >
+                <FigBox title="Three-Column Pipeline" subtitle="This shows how agents, editor, and human oversight operate in parallel, not sequence." style={{ backgroundColor: "#111118" }}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img
                   src="/fig4-pipeline-v6.svg"
                   alt="Three-column pipeline diagram — Agents (Scout, Courier, Reader, Detective, Researcher, Designer) feed into Miranda (Editor) who coordinates all six stages. Human in the Loop column shows investigation policy, verdict overrides, dossier review, and design collaboration touchpoints."
-                  className="w-full rounded"
-                  style={{ backgroundColor: "#111118" }}
+                  className="w-full"
                 />
+                </FigBox>
                 <p
                   className="mt-2 text-[8px] tracking-wider"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
-                  <span style={{ color: TEXT_MID }}>Fig. 4</span> — Three-column pipeline: agents, editor, and human-in-the-loop oversight.
+                  <span style={{ color: TEXT_MID }}>Fig. 4.4</span> &mdash; Three-column pipeline: agents, editor, and human-in-the-loop oversight.
                 </p>
               </div>
               <SidenoteBlock note={
@@ -2226,49 +2232,52 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           >
             <p style={{ maxWidth: CONTENT_NARROW }}>As a non-software engineer with limited free time and some experience with ChatGPT, your natural first instinct when tackling a problem like this is the simplest. Provide one giant prompt and then sit back and wait for a single end-to-end execution to do everything while you sit back: <em>&ldquo;Find every AD issue since 1988. Here are the DOJ Epstein files. Cross-reference every name, investigate every lead, and return the confirmed connections.&rdquo;</em></p>
 
-            {/* ── Fig. 5: Monolithic diagram (floated left, 2 minor cols — same as S1 Fig. 1) ── */}
+            {/* ── Fig. 4.5–4.7: Architecture test diagrams (floated left, 2 minor cols) ── */}
             <div
               className="float-left mb-4 mr-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
+              <FigBox title="Monolithic Architecture" subtitle="This shows why a single model can't maintain state across thousands of records." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/monolithic-diagram.svg?v=7"
                 alt="Monolithic single-prompt architecture — one model, one call, six sequential steps, no intermediate state saved, no error recovery"
-                className="w-full rounded"
-                style={{ border: `1px solid ${BORDER}` }}
+                className="w-full"
               />
+              </FigBox>
               <p
                 className="mt-2 text-[8px] tracking-wider"
                 style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                <span style={{ color: TEXT_MID }}>Fig. 5</span> — Test 01: Monolithic single-prompt architecture. One model, one call, no intermediate state, no error recovery.
+                <span style={{ color: TEXT_MID }}>Fig. 4.5</span> &mdash; Test 01: Monolithic single-prompt architecture. One model, one call, no intermediate state, no error recovery.
               </p>
+              <FigBox title="Decentralized Mesh" subtitle="This shows how peer-to-peer agents risk contradictory updates and lost audit trails." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/decentralized-diagram.svg?v=7"
                 alt="Decentralized multi-agent architecture — six agents communicating peer-to-peer with shared state, no central authority"
-                className="mt-8 w-full rounded"
-                style={{ border: `1px solid ${BORDER}` }}
+                className="w-full"
               />
+              </FigBox>
               <p
                 className="mt-2 text-[8px] tracking-wider"
                 style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                <span style={{ color: TEXT_MID }}>Fig. 6</span> — Test 02: Decentralized multi-agent mesh. Peer-to-peer communication, shared state, no central authority.
+                <span style={{ color: TEXT_MID }}>Fig. 4.6</span> &mdash; Test 02: Decentralized multi-agent mesh. Peer-to-peer communication, shared state, no central authority.
               </p>
+              <FigBox title="Hub-and-Spoke Architecture" subtitle="This shows how central coordination eliminates conflicting writes and preserves accountability." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/hub-spoke-diagram.svg?v=4"
                 alt="Hub-and-spoke architecture — Miranda as central editor hub with six specialist agents as spokes, connected via async task queues"
-                className="mt-8 w-full rounded"
-                style={{ border: `1px solid ${BORDER}` }}
+                className="w-full"
               />
+              </FigBox>
               <p
                 className="mt-2 text-[8px] tracking-wider"
                 style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                <span style={{ color: TEXT_MID }}>Fig. 7</span> — Test 03: Hub-and-spoke architecture. Central editor coordinates six specialist agents via async task queues.
+                <span style={{ color: TEXT_MID }}>Fig. 4.7</span> &mdash; Test 03: Hub-and-spoke architecture. Central editor coordinates six specialist agents via async task queues.
               </p>
             </div>
 
@@ -2324,18 +2333,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
             <p style={{ maxWidth: CONTENT_NARROW }}>The communication mechanism is deliberately simple. Each agent has an inbox, and an outbox. The editor pushes a task, for example: &ldquo;cross-reference these twelve names&rdquo; into the Detective&rsquo;s inbox. The Detective works through them in sequential order, pushes the results into his outbox. The editor collects the results, validates them, writes the verdicts to the database, and then pushes a new tasks: &ldquo;investigate this confirmed lead&rdquo; into the Researcher&rsquo;s inbox. The message-passing is one-to-one. Agents never talk to each other directly. They only talk to the Editor, and she decides what happens next.</p>
 
-            {/* ── Fig. 8: Dataclass code block (floated left, 2 minor cols) ── */}
+            {/* ── Fig. 4.8: Dataclass code block (floated left, 2 minor cols) ── */}
             <div
               className="float-left mb-4 mr-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <div
-                className="overflow-hidden rounded-lg"
-                style={{
-                  border: `1px solid ${BORDER}`,
-                  backgroundColor: "#0d0d14",
-                }}
-              >
+              <FigBox title="Communication Protocol" subtitle="This shows the entire inter-agent API: two dataclasses and six fields." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                 {/* File tab bar */}
                 <div
                   className="flex items-center gap-2 px-4 py-2"
@@ -2394,12 +2397,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     <span style={{ color: "#546E7A" }}>{"Who did the work"}</span>
                   </code>
                 </pre>
-              </div>
+              </FigBox>
               <p
                 className="mt-1.5 text-[8px] tracking-wider"
                 style={{ fontFamily: MONO, color: TEXT_DIM }}
               >
-                <span style={{ color: TEXT_MID }}>Fig. 8</span> — The entire inter-agent communication protocol. Two dataclasses, six fields.
+                <span style={{ color: TEXT_MID }}>Fig. 4.8</span> &mdash; The entire inter-agent communication protocol. Two dataclasses, six fields.
               </p>
             </div>
 
@@ -2538,18 +2541,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
 
             <p style={{ maxWidth: CONTENT_NARROW }}>This is where personality stops being cosmetic. Silas being anthropomorphized as a typical &ldquo;terse, sardonic, false positives offend him existentially&rdquo; kind-of-guy is actually not just an added sprinkling of decoration on top of a neutral process. The persona becomes behavioral priors encoded as part of his system prompt&mdash;his instructions. In ambiguous cases, those priors change how the agent allocates its attention, what it treats as sufficient evidence, and how readily it escalates for further review, or rejects a match.</p>
 
-            {/* ── Fig. 9: Miranda card — floated left in columns 1-2 ── */}
+            {/* ── Fig. 4.9: Miranda card — floated left in columns 1-2 ── */}
             <div
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
+              <FigBox title="Miranda, the Editor" subtitle="This shows how every task, verdict, and database write passes through one authority." style={{ backgroundColor: CARD_BG }}>
               <div
-                className="flex flex-col items-center rounded border p-6 pb-8"
-                style={{
-                  backgroundColor: CARD_BG,
-                  borderColor: BORDER,
-                  borderTop: `2px solid ${COPPER}`,
-                }}
+                className="flex flex-col items-center p-6 pb-8"
               >
                 <video
                   autoPlay
@@ -2582,12 +2581,14 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   &ldquo;Details of your incompetence do not interest me.&rdquo;
                 </p>
               </div>
+              </FigBox>
               <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 9</span> — Miranda, the Editor: every task, verdict, and database write passes through her review.
+                <span style={{ color: TEXT_MID }}>Fig. 4.9</span> &mdash; Miranda, the Editor: every task, verdict, and database write passes through her review.
               </p>
 
-              {/* ── Fig. 10: 6 agent cards — 2×3 grid under Miranda ── */}
-              <div className="mt-6 grid grid-cols-2 gap-2">
+              {/* ── Fig. 4.10: 6 agent cards — 2×3 grid under Miranda ── */}
+              <FigBox title="Specialist Agents" subtitle="This shows the six bounded roles with distinct behavioral priors and expertise." style={{ backgroundColor: CARD_BG }}>
+              <div className="grid grid-cols-2 gap-2 p-2">
                 {subAgents.map((agent) => (
                   <div
                     key={agent.name}
@@ -2648,8 +2649,9 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </div>
                 ))}
               </div>
+              </FigBox>
               <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 10</span> — The six specialist agents, each with a dedicated language model, archetype, and behavioral constraints encoded through personality.
+                <span style={{ color: TEXT_MID }}>Fig. 4.10</span> &mdash; The six specialist agents, each with a dedicated language model, archetype, and behavioral constraints encoded through personality.
               </p>
             </div>
 
@@ -2738,11 +2740,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <li><strong>In-character interaction as a developer tool.</strong> The in-character conversations (&ldquo;talking to Miranda as Miranda&rdquo;) can be useful for debugging and iteration, even when separated from the autonomous execution path.</li>
             </ul>
 
-            {/* ── Fig. 11: Miranda Chatbox — floated left, 2 minor columns ── */}
+            {/* ── Fig. 4.11: Miranda Chatbox — floated left, 2 minor columns ── */}
             <div
               className="float-left mr-6 mb-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
+              <FigBox title="In-Character Debugging" subtitle="This shows how persona-driven conversation surfaces policy ambiguity faster than rulebook review." style={{ backgroundColor: "#111118" }}>
               {(() => {
                 const MIRANDA_BUB = { bg: "rgba(155, 120, 200, 0.18)", border: "rgba(155, 120, 200, 0.35)" };
                 const HUMAN_BUB = { bg: "rgba(120, 175, 235, 0.18)", border: "rgba(120, 175, 235, 0.35)" };
@@ -2761,8 +2764,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 ];
                 return (
                   <div
-                    className="overflow-hidden rounded border p-4"
-                    style={{ backgroundColor: "#111118", borderColor: BORDER }}
+                    className="overflow-hidden p-4"
                   >
                     <div className="flex flex-col gap-2.5">
                       {msgs.map((m, i) => {
@@ -2808,8 +2810,9 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   </div>
                 );
               })()}
+              </FigBox>
               <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 11</span> &mdash; Debugging verdict policy through in-character conversation with the Editor agent.
+                <span style={{ color: TEXT_MID }}>Fig. 4.11</span> &mdash; Debugging verdict policy through in-character conversation with the Editor agent.
               </p>
             </div>
 
@@ -2868,23 +2871,21 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-6 hidden md:block"
               style={{ width: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)" }}
             >
+              <FigBox title="The Agent Office" subtitle="This shows real-time visibility into every agent's state, task, and output." style={{ backgroundColor: "#111118" }}>
               <video
                 autoPlay
                 muted
                 loop
                 playsInline
                 controls
-                className="w-full rounded border"
-                style={{
-                  borderColor: BORDER,
-                  backgroundColor: "rgba(17, 17, 24, 0.8)",
-                }}
+                className="w-full"
               >
                 <source
                   src="https://znbjqoehvgmkolxewluv.supabase.co/storage/v1/object/public/site-assets/agent-office.mp4"
                   type="video/mp4"
                 />
               </video>
+              </FigBox>
               <a
                 href="https://www.wheretheylive.world/demo"
                 target="_blank"
@@ -2904,7 +2905,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                   className="mt-3 text-[8px] tracking-wider"
                   style={{ fontFamily: MONO, color: TEXT_DIM }}
                 >
-                  <span style={{ color: TEXT_MID }}>Fig. 12</span> &mdash; The Agent Office: a real-time pixel-art dashboard<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> showing autonomous AI coordination as it happens.
+                  <span style={{ color: TEXT_MID }}>Fig. 4.12</span> &mdash; The Agent Office: a real-time pixel-art dashboard<span className="hidden md:inline" style={{ color: COPPER, fontSize: "11px" }}>{" "}&#9656;</span> showing autonomous AI coordination as it happens.
                   {" "}<a href="/demo" style={{ color: GOLD, textDecoration: "underline", textUnderlineOffset: "2px" }}>Appendix J: Interactive Demo</a>
                 </p>
                 <div
@@ -2973,15 +2974,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mr-6 mb-6 hidden md:block"
               style={{ width: "calc(4 * (100% - 5 * 24px) / 6 + 3 * 24px)" }}
             >
-              <div
-                className="overflow-hidden rounded border"
-                style={{ backgroundColor: "#111118", borderColor: BORDER }}
-              >
-                <div className="px-3 py-2" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <p className="text-[9px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                    {"// INVESTIGATION FUNNEL — LIVE DATA"}
-                  </p>
-                </div>
+              <FigBox title="Investigation Funnel" subtitle="This shows the 93% rejection rate: broad intake, aggressive filtering, auditable output." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                 {stats ? (
                   <VerdictSankey
                     featuresTotal={stats.features.total}
@@ -3000,9 +2993,9 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     </p>
                   </div>
                 )}
-              </div>
+              </FigBox>
               <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 13</span> &mdash; Investigation funnel showing how features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
+                <span style={{ color: TEXT_MID }}>Fig. 4.13</span> &mdash; Investigation funnel showing how features are filtered through cross-referencing, detective triage, researcher dossiers, and editorial review.
               </p>
             </div>
 
@@ -3212,17 +3205,12 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               Three Case Studies
             </p>
 
-            {/* ── Fig. 14: Verdict Flow — floated left, 2 minor columns, with human sidebar ── */}
+            {/* ── Fig. 4.14: Verdict Flow — floated left, 2 minor columns, with human sidebar ── */}
             <div
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
-              <div className="overflow-hidden rounded border" style={{ backgroundColor: "#111118", borderColor: BORDER }}>
-                <div className="px-2 py-1.5" style={{ borderBottom: `1px solid ${BORDER}` }}>
-                  <p className="text-[8px] font-bold tracking-[0.12em]" style={{ fontFamily: MONO, color: TEXT_MID }}>
-                    {"// VERDICT PIPELINE"}
-                  </p>
-                </div>
+              <FigBox title="Verdict Pipeline" subtitle="This shows the three human intervention points between name extraction and publication." className="overflow-hidden" style={{ backgroundColor: "#111118" }}>
                 <div className="flex">
                   {/* Left: vertical pipeline */}
                   <div className="flex flex-1 flex-col items-center px-3 py-3">
@@ -3316,9 +3304,9 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                     </div>
                   </div>
                 </div>
-              </div>
+              </FigBox>
               <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 14</span> &mdash; Verdict pipeline. The Researcher assigns connection strength (HIGH/MEDIUM/LOW/COINCIDENCE). The Editor consumes that strength, evaluates identity resolution, evidence sufficiency, and policy compliance, then writes the terminal verdict (CONFIRMED/REJECTED/PENDING_REVIEW). Human review intervenes at three points.
+                <span style={{ color: TEXT_MID }}>Fig. 4.14</span> &mdash; Verdict pipeline. The Researcher assigns connection strength (HIGH/MEDIUM/LOW/COINCIDENCE). The Editor consumes that strength, evaluates identity resolution, evidence sufficiency, and policy compliance, then writes the terminal verdict (CONFIRMED/REJECTED/PENDING_REVIEW). Human review intervenes at three points.
               </p>
             </div>
 
@@ -3343,20 +3331,22 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <span className="text-[8px]" style={{ color: TEXT_DIM }}>&rarr;</span>
               <span className="rounded-sm px-1.5 py-0.5 text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, backgroundColor: GREEN_BG, color: GREEN }}>PUBLISHED</span>
             </div>
-            {/* ── Fig. 15: Tommy Mottola DOJ email — floated left, 2 minor columns ── */}
+            {/* ── Fig. 4.15: Tommy Mottola DOJ email — floated left, 2 minor columns ── */}
             <div
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
+              <FigBox title="Mottola Email" subtitle="This shows a direct email to Epstein's personal address, documenting nine years of contact." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/sidenotes/mottola-email.jpg"
                 alt="DOJ Epstein Library document EFTA00767523: email from Tommy Mottola to jeevacation@gmail.com (Jeffrey Epstein), subject 'Fwd: 170 EEA Photo', December 6, 2009"
-                className="w-full rounded border"
-                style={{ borderColor: BORDER, filter: "contrast(1.1)" }}
+                className="w-full"
+                style={{ filter: "contrast(1.1)" }}
               />
+              </FigBox>
               <p className="mt-2 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 15</span> &mdash; DOJ Epstein Library: email from Tommy Mottola directly to Epstein&rsquo;s personal address, forwarding property photos. December 2009. <a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA00767523.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>EFTA00767523 &rarr;</a>
+                <span style={{ color: TEXT_MID }}>Fig. 4.15</span> &mdash; DOJ Epstein Library: email from Tommy Mottola directly to Epstein&rsquo;s personal address, forwarding property photos. December 2009. <a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA00767523.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>EFTA00767523 &rarr;</a>
               </p>
             </div>
             <div className="relative">
@@ -3400,20 +3390,22 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <span className="text-[8px]" style={{ color: TEXT_DIM }}>&rarr;</span>
               <span className="rounded-sm border border-dashed px-1.5 py-0.5 text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, borderColor: COPPER, color: COPPER, backgroundColor: "rgba(184, 115, 51, 0.06)" }}>RUBRIC UPDATED</span>
             </div>
-            {/* ── Fig. 16: Goldsmith email — floated left, 2 minor columns ── */}
+            {/* ── Fig. 4.16: Goldsmith email — floated left, 2 minor columns ── */}
             <div
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
+              <FigBox title="Goldsmith Email" subtitle="This shows how adversarial context serves as negative evidence: dislike is not proximity." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/sidenotes/goldsmith-email.jpg"
                 alt="Email from Mark Lloyd to Jeffrey Epstein (jeevacation@gmail.com), Oct 23 2015: 'hurricane will hit isabel goldsmith resort and bye bye' — Epstein's associate replies hoping the hurricane deposits 'its owner far out to sea'"
-                className="w-full rounded border"
-                style={{ borderColor: BORDER, filter: "contrast(1.1)" }}
+                className="w-full"
+                style={{ filter: "contrast(1.1)" }}
               />
+              </FigBox>
               <p className="mt-2 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 16</span> &mdash; DOJ Epstein Library: email showing adversarial context. Epstein&rsquo;s associate expresses hostility toward Goldsmith, not social connection. <a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA00842645.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>EFTA00842645 &rarr;</a>
+                <span style={{ color: TEXT_MID }}>Fig. 4.16</span> &mdash; DOJ Epstein Library: email showing adversarial context. Epstein&rsquo;s associate expresses hostility toward Goldsmith, not social connection. <a href="https://www.justice.gov/epstein/files/DataSet%209/EFTA00842645.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>EFTA00842645 &rarr;</a>
               </p>
             </div>
             <div className="relative">
@@ -3460,20 +3452,22 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               <span className="text-[8px]" style={{ color: TEXT_DIM }}>&rarr;</span>
               <span className="rounded-sm px-1.5 py-0.5 text-[8px] font-bold tracking-wider" style={{ fontFamily: MONO, backgroundColor: GREEN_BG, color: GREEN }}>PUBLISHED</span>
             </div>
-            {/* ── Fig. 17: Ertegun dinner thank-you — floated left, 2 minor columns ── */}
+            {/* ── Fig. 4.17: Ertegun dinner thank-you — floated left, 2 minor columns ── */}
             <div
               className="float-left mr-6 mb-4 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
+              <FigBox title="Ertegun Thank-You" subtitle="This shows a forwarded dinner note the automated pipeline missed but manual audit caught." style={{ backgroundColor: "#111118" }}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src="/sidenotes/ertegun-dinner.jpg"
                 alt="DOJ Epstein Library document EFTA02430092: Peggy Siegal forwarding dinner thank-you notes to Epstein's email, including note #11 from Mica Ertegun thanking Peggy for the wonderful evening at the Carlyle"
-                className="w-full rounded border"
-                style={{ borderColor: BORDER, filter: "contrast(1.1)" }}
+                className="w-full"
+                style={{ filter: "contrast(1.1)" }}
               />
+              </FigBox>
               <p className="mt-2 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-                <span style={{ color: TEXT_MID }}>Fig. 17</span> &mdash; DOJ Epstein Library: Peggy Siegal forwarding dinner thank-you notes to Epstein&rsquo;s email. Note #11 from Mica Ertegun: &ldquo;Thank you for including me at the wonderful evening at the Carlyle.&rdquo; <a href="https://www.justice.gov/epstein/files/DataSet%2011/EFTA02430092.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>EFTA02430092 &rarr;</a>
+                <span style={{ color: TEXT_MID }}>Fig. 4.17</span> &mdash; DOJ Epstein Library: Peggy Siegal forwarding dinner thank-you notes to Epstein&rsquo;s email. Note #11 from Mica Ertegun: &ldquo;Thank you for including me at the wonderful evening at the Carlyle.&rdquo; <a href="https://www.justice.gov/epstein/files/DataSet%2011/EFTA02430092.pdf" target="_blank" rel="noopener noreferrer" style={{ color: "rgba(184, 115, 51, 0.6)" }}>EFTA02430092 &rarr;</a>
               </p>
             </div>
             <div className="relative">
@@ -3798,11 +3792,18 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="float-left mb-4 mr-6 hidden md:block"
               style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
             >
+              <FigBox title="Human-AI Autonomy Matrix" subtitle="This shows that high automation and high human control are not mutually exclusive." style={{ backgroundColor: "#111118" }}>
               <ShneidermanMatrix />
+              </FigBox>
+              <p className="mt-2 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM, lineHeight: 1.6 }}>
+                <span style={{ color: TEXT_MID }}>Fig. 4.18</span> &mdash; Adapted from Shneiderman (2022), <em>Human-Centered AI</em>. This project targets the upper-right quadrant: high automation with high human control.
+              </p>
             </div>
             {/* Mobile: non-floated matrix */}
             <div className="md:hidden" style={{ maxWidth: 300 }}>
+              <FigBox title="Human-AI Autonomy Matrix" subtitle="This shows that high automation and high human control are not mutually exclusive." style={{ backgroundColor: "#111118" }}>
               <ShneidermanMatrix />
+              </FigBox>
             </div>
 
             {/* Para 6: Shneiderman's contribution */}
@@ -3892,7 +3893,9 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             </p>
 
             <div style={{ maxWidth: CONTENT_NARROW }}>
+              <FigBox title="Agent Office Walkthrough" subtitle="Click the numbered markers to explore each interface panel." style={{ backgroundColor: "#111118" }}>
               <AgentOfficeImage />
+              </FigBox>
             </div>
             <a
               href="https://www.wheretheylive.world/demo"
@@ -3912,11 +3915,11 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               className="mt-3 text-[8px] tracking-wider"
               style={{ fontFamily: MONO, color: TEXT_DIM, maxWidth: CONTENT_NARROW }}
             >
-              <span style={{ color: TEXT_MID }}>Fig. 19</span> &mdash; Agent Office: real-time pixel-art dashboard. Click the numbered markers to explore the interface panels.
+              <span style={{ color: TEXT_MID }}>Fig. 4.19</span> &mdash; Agent Office: real-time pixel-art dashboard. Click the numbered markers to explore the interface panels.
               {" "}<a href="/demo" style={{ color: GOLD, textDecoration: "underline", textUnderlineOffset: "2px" }}>Appendix J: Interactive Demo</a>
             </p>
 
-            {/* Fig. 18 legend — two independent columns (odd left, even right) */}
+            {/* Fig. 4.18 legend — two independent columns (odd left, even right) */}
             {(() => {
               const SUBS = [
                 // 1–3: The Investigation
@@ -4068,9 +4071,11 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="float-left mr-6 mb-6 hidden md:block"
             style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
           >
+            <FigBox title="Technology Stack" subtitle="This shows the production infrastructure. No mock data or placeholder systems." style={{ backgroundColor: "#111118" }}>
             <TechStack />
+            </FigBox>
             <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-              <span style={{ color: TEXT_MID }}>Fig. 20</span> &mdash; Full technology stack powering the AD-Epstein Index. All production systems &mdash; no mock data or placeholder infrastructure.
+              <span style={{ color: TEXT_MID }}>Fig. 4.20</span> &mdash; Full technology stack powering the AD-Epstein Index. All production systems &mdash; no mock data or placeholder infrastructure.
             </p>
           </div>
 
@@ -4123,15 +4128,17 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             className="float-left mr-6 mb-6 hidden md:block"
             style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
           >
+            <FigBox title="Design Dialogue" subtitle="This shows how human-AI design precision escalates from vague direction to sub-pixel specification." style={{ backgroundColor: "#111118" }}>
             <DesignDialogue />
+            </FigBox>
             <p className="mt-3 text-[8px] tracking-wider" style={{ fontFamily: MONO, color: TEXT_DIM }}>
-              <span style={{ color: TEXT_MID }}>Fig. 21</span> &mdash; Transcript of human-AI design collaboration showing six phases of escalating precision. Exchanges are drawn from actual Figma sessions between the project author and Sable (design agent). Timestamps are approximate.
+              <span style={{ color: TEXT_MID }}>Fig. 4.21</span> &mdash; Transcript of human-AI design collaboration showing six phases of escalating precision. Exchanges are drawn from actual Figma sessions between the project author and Sable (design agent). Timestamps are approximate.
             </p>
           </div>
 
           <p style={{ maxWidth: CONTENT_NARROW }}>The gap between language and precision turns out to be where the most interesting things happen. The methodology sections above have documented what the system does: how agents extract, investigate, and present data. But the design process behind all of the diagrams, figures, and visual elements on this page reveals something that the methodology alone cannot capture: how the human-AI feedback loop itself evolves over the course of a single working session.</p>
 
-          <p style={{ maxWidth: CONTENT_NARROW }}>The transcript in Figure 25 is drawn from actual sessions between me and the AI agent around the design of the diagram shown in Figure 06. At 2:22 PM, I wrote &ldquo;use a similar layout and aesthetic.&rdquo; By 5:23 PM &mdash; three hours and roughly 50 exchanges later &mdash; I was writing &ldquo;15px lineweights, 60% opacity, 80px columns centered in the 470px frame.&rdquo; Same person. Same project. Entirely different language.</p>
+          <p style={{ maxWidth: CONTENT_NARROW }}>The transcript in Fig. 4.21 is drawn from actual sessions between me and the AI agent around the design of the diagram shown in Fig. 4.7. At 2:22 PM, I wrote &ldquo;use a similar layout and aesthetic.&rdquo; By 5:23 PM &mdash; three hours and roughly 50 exchanges later &mdash; I was writing &ldquo;15px lineweights, 60% opacity, 80px columns centered in the 470px frame.&rdquo; Same person. Same project. Entirely different language.</p>
 
           <p style={{ maxWidth: CONTENT_NARROW }}>I didn&rsquo;t plan that progression, and I didn&rsquo;t notice it happening. But looking back over the transcripts, it&rsquo;s the most important thing in them. The feedback loop didn&rsquo;t just produce better diagrams. It taught me a new vocabulary for design, one I couldn&rsquo;t have articulated at the start, not because the words didn&rsquo;t exist, but because I hadn&rsquo;t learned to see the diagram that way yet. I couldn&rsquo;t ask for specific lineweights until I&rsquo;d seen what the default ones looked like and understood why they were wrong.</p>
 
@@ -4202,7 +4209,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
         ══════════════════════════════════════════════════════════════════ */}
         <div id="section-4-7" className="mt-8 scroll-mt-24">
           <p className="s-label">AI AGENT METHODOLOGY</p>
-          <h3 className="s-title">4.7 WORKFLOW LIMITATIONS</h3>
+          <h3 className="s-title">4.7 LIMITATIONS</h3>
           <p className="s-subtitle">What this project can and cannot tell you.</p>
 
           {/* ── Body text — matching S4.4 pattern ── */}
@@ -4221,11 +4228,11 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
             <p>The system cross-references against two sources: the DOJ Epstein Document Library and the Epstein Black Book. These are the most comprehensive public records available, but they are not exhaustive.<NoteArrow /> Individuals connected to Epstein through private meetings, verbal agreements, or undocumented relationships would not appear in either dataset. The pipeline can only find what the source material contains. Connections that were never recorded, or recorded in documents not yet made public, are invisible to any automated system.</p>
           </SidenoteBlock>
 
-          <p style={{ maxWidth: CONTENT_NARROW }}>The DOJ library is searchable only via OCR, which means handwritten documents (notes, address book entries, calendars) are invisible to automated search. The pipeline catches what text-based search surfaces, but an unknown number of connections exist in documents that only a human reader could parse. This is a fundamental limitation of any automated approach to this corpus, not a flaw in this system&rsquo;s design.</p>
+          <p style={{ maxWidth: CONTENT_NARROW }}>The DOJ library is searchable only via OCR, which means handwritten documents (notes, address book entries, calendars) are invisible to automated search. The pipeline catches what text-based search surfaces, but an unknown number of connections exist in documents that only a human reader could parse. This is a fundamental limitation of any automated approach to this corpus.</p>
 
           <p style={{ maxWidth: CONTENT_NARROW }}>Name disambiguation remains imperfect. The system uses word-boundary matching and minimum name-length thresholds, but common surnames will always produce more false positives than rare ones. &ldquo;Johnson&rdquo; in a DOJ document could be anyone. &ldquo;Hassenfeld&rdquo; almost certainly isn&rsquo;t. The 93% rejection rate reflects aggressive filtering. The system is designed to err on the side of exclusion. But some false negatives are inevitable: real connections dismissed because a common name with no corroborating context could not be distinguished from coincidence.</p>
 
-          <p style={{ maxWidth: CONTENT_NARROW }}>Natural language is a powerful interface for directing agents until it isn&rsquo;t. Pixel-level precision, exact alignment, and spatial relationships are difficult to communicate in conversation. The Sable design workflow required over a hundred iterations on some diagrams, not because the agent lacked capability, but because the language to describe the desired outcome hadn&rsquo;t been developed yet. This is a bottleneck inherent to any natural-language-driven creative workflow. The human&rsquo;s ability to specify is the rate limiter, not the system&rsquo;s ability to execute.</p>
+          <p style={{ maxWidth: CONTENT_NARROW }}>Natural language is a powerful interface for directing agents until it isn&rsquo;t. Pixel-level precision, exact alignment, and spatial relationships are difficult to communicate in conversation. The Sable design workflow required over a hundred iterations on some diagrams. This had nothing to do with the agent&rsquo;s capability, but because the language to describe the desired outcome hadn&rsquo;t been developed yet. This is a bottleneck inherent to any natural-language-driven creative workflow. The human&rsquo;s ability to specify is the rate limiter.</p>
 
           <p style={{ maxWidth: CONTENT_NARROW }}>Agent autonomy has a ceiling determined by the verifiability of the task. Investigative agents (Detective, Editor, Researcher) operate effectively without intervention because their outputs can be checked against external evidence. The design agent cannot, because aesthetic judgment has no external ground truth. Any agentic system that claims full autonomy across both verifiable and subjective domains is either overstating its capabilities or producing average work.</p>
 
@@ -4236,7 +4243,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
               This is not unique to this project. Any pipeline where Agent B consumes Agent A&rsquo;s output inherits Agent A&rsquo;s error rate. In software engineering, this is called error propagation. In intelligence analysis, it is called &ldquo;circular reporting,&rdquo; where a single bad source gets cited by multiple analysts until the error looks like consensus. The Activity Log exists to prevent exactly this.
             </Sidenote>
           }>
-            <p>Multi-agent coordination introduces compounding failure modes.<NoteArrow /> When one agent&rsquo;s output feeds another&rsquo;s input (the Scout&rsquo;s discoveries becoming the Detective&rsquo;s search targets, the Detective&rsquo;s matches becoming the Editor&rsquo;s dossiers) an error at any stage propagates downstream. The pipeline mitigates this through Miranda&rsquo;s editorial review and the Activity Log&rsquo;s forensic trail, but the architecture means a single bad extraction can generate a confidently wrong verdict. Traceability makes these errors findable. It does not make them impossible.</p>
+            <p>Multi-agent coordination introduces compounding failure modes.<NoteArrow /> When one agent&rsquo;s output feeds another&rsquo;s input (the Scout&rsquo;s discoveries becoming the Detective&rsquo;s search targets, the Detective&rsquo;s matches becoming the Editor&rsquo;s dossiers) an error at any stage propagates downstream. The pipeline mitigates this through Miranda&rsquo;s editorial review and the Activity Log&rsquo;s forensic trail, but the architecture means a single bad extraction can generate a confidently wrong verdict. Traceability makes these errors findable.</p>
           </SidenoteBlock>
 
           <p className="s-subhead" style={{ maxWidth: CONTENT_NARROW }}>Summary</p>
@@ -4274,7 +4281,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
           <SectionHeader
             num="4.8"
             title="CONCLUSIONS"
-            subtitle="What the data reveals about wealth, taste, and proximity to power."
+            subtitle="This section presents what the data reveals about wealth, taste, and proximity to power."
             intro={[
               "The AD-Epstein Index demonstrates that the overlap between Architectural Digest's featured population and Jeffrey Epstein's documented social network is structurally significant. Of the approximately 2,180 featured residences cataloged across 37 years of the magazine, 33 belong to individuals whose names appear in Epstein's contact records, DOJ documents, or both — confirmed through a multi-stage verification process with a 93% rejection rate for false positives.",
               "The confirmed individuals are not randomly distributed across the magazine's history or aesthetic spectrum. They cluster in specific decades, specific geographies, and specific design traditions. The six-dimension aesthetic taxonomy reveals a pronounced signature: classical European grandeur, old masters and antiques, maximalist layering, and formal symmetry are dramatically overrepresented among Epstein-connected homeowners relative to the general AD population. Minimalism and industrial modernism are virtually absent.",

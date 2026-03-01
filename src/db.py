@@ -302,6 +302,52 @@ def get_features_needing_detective(issue_id=None):
     return result.data
 
 
+def get_features_missing_crossref():
+    """Get named features that have no row in cross_references table.
+
+    These are features extracted after the detective's initial pass.
+    Returns list of {id, homeowner_name, issue_id}.
+    Uses pagination to handle tables with >1000 rows.
+    """
+    sb = get_supabase()
+    # Paginate all named, non-Anonymous features
+    all_feats = []
+    offset = 0
+    while True:
+        batch = (
+            sb.table("features")
+            .select("id, homeowner_name, issue_id")
+            .neq("homeowner_name", "")
+            .not_.is_("homeowner_name", "null")
+            .neq("homeowner_name", "null")
+            .neq("homeowner_name", "None")
+            .neq("homeowner_name", "Anonymous")
+            .range(offset, offset + 999)
+            .execute()
+        )
+        all_feats.extend(batch.data)
+        if len(batch.data) < 1000:
+            break
+        offset += 1000
+    # Paginate all cross-reference feature_ids
+    xref_ids = set()
+    offset = 0
+    while True:
+        batch = (
+            sb.table("cross_references")
+            .select("feature_id")
+            .range(offset, offset + 999)
+            .execute()
+        )
+        xref_ids.update(r["feature_id"] for r in batch.data)
+        if len(batch.data) < 1000:
+            break
+        offset += 1000
+    # Return features missing from cross_references
+    missing = [f for f in all_feats if f["id"] not in xref_ids]
+    return missing
+
+
 @with_retry()
 def delete_features_for_issue(issue_id):
     """Delete all features for a given issue. Returns count of deleted rows."""

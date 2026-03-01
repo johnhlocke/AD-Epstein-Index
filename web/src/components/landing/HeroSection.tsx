@@ -286,7 +286,7 @@ export function HeroSection({ stats, mosaic }: HeroSectionProps) {
               <TocSub label="Investigation Methodology" num="4.4" href="#section-4-4" />
               <TocSub label="UI Design" num="4.5" href="#section-4-5" />
               <TocSub label="Creativity in AI Systems" num="4.6" href="#section-4-6" />
-              <TocSub label="Workflow Limitations" num="4.7" href="#section-4-7" />
+              <TocSub label="Limitations" num="4.7" href="#section-4-7" />
               <TocSub label="Conclusions" num="4.8" href="#section-4-8" />
             </TocSection>
 

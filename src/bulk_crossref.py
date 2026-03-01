@@ -33,7 +33,8 @@ from cross_reference import (
     contextual_glance, verdict_to_binary, split_names, SKIP_NAMES,
 )
 from db import (
-    get_features_needing_detective, upsert_cross_reference, get_supabase,
+    get_features_needing_detective, get_features_missing_crossref,
+    upsert_cross_reference, get_supabase,
 )
 
 
@@ -58,6 +59,9 @@ async def bulk_crossref(args):
     if args.name:
         # Single name mode — create a fake feature record
         unchecked = [{"id": 0, "homeowner_name": args.name, "issue_id": None}]
+    elif args.missing_xref:
+        unchecked = get_features_missing_crossref()
+        print(f"Found {len(unchecked)} features missing cross-references")
     else:
         unchecked = get_features_needing_detective()
         print(f"Found {len(unchecked)} unchecked features")
@@ -215,18 +219,21 @@ async def bulk_crossref(args):
                     try:
                         xref_data = {
                             "homeowner_name": name,
-                            "bb_match": best_bb_matches is not None,
-                            "bb_match_type": _bb_match_type(best_bb_matches),
-                            "bb_context": json.dumps(best_bb_matches)[:2000] if best_bb_matches else None,
+                            "black_book_status": "match" if best_bb_matches else "no_match",
+                            "black_book_matches": json.dumps(best_bb_matches)[:2000] if best_bb_matches else None,
                             "doj_status": best_doj_verdict,
-                            "doj_total_results": best_doj_result.get("total_results", 0) if best_doj_result else 0,
-                            "doj_confidence": best_doj_result.get("confidence", "none") if best_doj_result else "none",
-                            "doj_snippets": json.dumps(best_doj_result.get("snippets", []))[:2000] if best_doj_result else None,
+                            "doj_results": json.dumps({
+                                "total_results": best_doj_result.get("total_results", 0) if best_doj_result else 0,
+                                "confidence": best_doj_result.get("confidence", "none") if best_doj_result else "none",
+                                "snippets": best_doj_result.get("snippets", []) if best_doj_result else [],
+                            })[:2000] if best_doj_result else None,
                             "combined_verdict": combined,
                             "confidence_score": best_verdict_info.get("confidence_score", 0),
-                            "rationale": best_verdict_info.get("rationale", "")[:500],
+                            "verdict_rationale": best_verdict_info.get("rationale", "")[:500],
                             "binary_verdict": binary_verdict,
-                            "checked_at": datetime.utcnow().isoformat(),
+                            "false_positive_indicators": json.dumps(best_verdict_info.get("false_positive_indicators", [])),
+                            "individuals_searched": json.dumps(individuals),
+                            "checked_at": datetime.now(timezone.utc).isoformat(),
                         }
                         upsert_cross_reference(fid, xref_data)
 
@@ -295,6 +302,7 @@ def _bb_match_type(bb_matches):
 def main():
     parser = argparse.ArgumentParser(description="Bulk cross-reference unchecked features")
     parser.add_argument("--bb-only", action="store_true", help="Black Book only (no DOJ browser)")
+    parser.add_argument("--missing-xref", action="store_true", help="Check features with no cross_references row (post-detective extraction gap)")
     parser.add_argument("--limit", type=int, help="Limit number of names to check")
     parser.add_argument("--dry-run", action="store_true", help="Show what would be checked")
     parser.add_argument("--name", type=str, help="Check a single name")

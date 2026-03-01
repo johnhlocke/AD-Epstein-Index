@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { useMounted } from "@/lib/use-mounted";
 import type { GraphData, GraphNode } from "@/lib/graph-types";
@@ -41,6 +42,7 @@ interface FGLink {
  */
 export function GraphPreview() {
   const mounted = useMounted();
+  const router = useRouter();
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const graphRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -116,10 +118,10 @@ export function GraphPreview() {
   const handleNodeCanvas = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const confidence = getConfidenceLevel(node);
-      const isEpstein =
-        node.nodeType === "epstein_source" || confidence !== null;
+      const isSource = node.nodeType === "doj_source" || node.nodeType === "bb_source" || node.nodeType === "epstein_source";
+      const isEpstein = isSource || confidence !== null;
       const baseSize = nodeSize(node.degree ?? 0, node.pagerank);
-      const size = isEpstein ? baseSize : baseSize * 0.5;
+      const size = isSource ? Math.max(baseSize, 20) : isEpstein ? baseSize : baseSize * 0.5;
       const x = node.x ?? 0;
       const y = node.y ?? 0;
       const color = nodeColors[node.nodeType] ?? "#888";
@@ -179,9 +181,9 @@ export function GraphPreview() {
 
       ctx.restore();
 
-      // Labels for hub nodes — dark text on light bg
+      // Labels for hub nodes and source nodes — dark text on light bg
       const showLabel =
-        isHovered || (node.degree ?? 0) >= LABEL_DEGREE_THRESHOLD;
+        isHovered || isSource || (node.degree ?? 0) >= LABEL_DEGREE_THRESHOLD;
 
       if (showLabel) {
         const fontSize = Math.max(10 / globalScale, 1.8);
@@ -198,10 +200,10 @@ export function GraphPreview() {
   const handlePointerArea = useCallback(
     (node: FGNode, color: string, ctx: CanvasRenderingContext2D) => {
       const confidence = getConfidenceLevel(node);
-      const isEpstein =
-        node.nodeType === "epstein_source" || confidence !== null;
+      const isSource = node.nodeType === "doj_source" || node.nodeType === "bb_source" || node.nodeType === "epstein_source";
+      const isEpstein = isSource || confidence !== null;
       const baseSize = nodeSize(node.degree ?? 0, node.pagerank);
-      const size = isEpstein ? baseSize : baseSize * 0.5;
+      const size = isSource ? Math.max(baseSize, 20) : isEpstein ? baseSize : baseSize * 0.5;
       ctx.beginPath();
       ctx.arc(node.x ?? 0, node.y ?? 0, size + 8, 0, 2 * Math.PI);
       ctx.fillStyle = color;
@@ -214,6 +216,12 @@ export function GraphPreview() {
   const handleNodeHover = useCallback((node: FGNode | null) => {
     hoveredNodeRef.current = node;
 
+    // Cursor: pointer for clickable nodes
+    const container = containerRef.current;
+    if (container) {
+      container.style.cursor = node?.dossierId ? "pointer" : "default";
+    }
+
     const tip = tooltipRef.current;
     if (tip) {
       if (node && graphRef.current?.graph2ScreenCoords) {
@@ -224,6 +232,9 @@ export function GraphPreview() {
         tip.style.display = "block";
         tip.style.left = `${coords.x + 14}px`;
         tip.style.top = `${coords.y - 56}px`;
+        const dossierHint = node.dossierId
+          ? `<div style="margin-top:4px;font-size:9px;color:#B87333">Click to view dossier</div>`
+          : "";
         tip.innerHTML = `
           <div style="display:flex;align-items:center;gap:8px">
             <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:${nodeColors[node.nodeType]}"></span>
@@ -233,6 +244,7 @@ export function GraphPreview() {
             <span>${node.nodeType.replace("_", " ")}</span>
             ${node.degree != null ? `<span>${node.degree} connections</span>` : ""}
           </div>
+          ${dossierHint}
         `;
       } else {
         tip.style.display = "none";
@@ -242,10 +254,22 @@ export function GraphPreview() {
     graphRef.current?.refresh?.();
   }, []);
 
+  // Click handler — navigate to dossier if available
+  const handleNodeClick = useCallback((node: FGNode) => {
+    if (node.dossierId) {
+      router.push(`/dossier/${node.dossierId}`);
+    }
+  }, [router]);
+
   const handleLinkColor = useCallback((link: FGLink) => {
+    // Differentiate APPEARS_IN by source type
+    if (link.relType === "APPEARS_IN") {
+      const target = typeof link.target === "object" ? link.target : null;
+      if (target?.nodeType === "doj_source") return nodeColors.doj_source + "CC";
+      if (target?.nodeType === "bb_source") return nodeColors.bb_source + "CC";
+      return linkColors.APPEARS_IN + "CC";
+    }
     const base = linkColors[link.relType ?? ""] ?? "#DDDDDD";
-    // Epstein links get more opacity, structural links stay subtle
-    if (link.relType === "APPEARS_IN") return base + "CC";
     return base + "66";
   }, []);
 
@@ -285,6 +309,7 @@ export function GraphPreview() {
             nodeCanvasObject={handleNodeCanvas}
             nodePointerAreaPaint={handlePointerArea}
             onNodeHover={handleNodeHover}
+            onNodeClick={handleNodeClick}
             onRenderFramePre={handleRenderFramePre}
             linkColor={handleLinkColor}
             linkWidth={handleLinkWidth}
@@ -318,7 +343,8 @@ export function GraphPreview() {
                   ["person", "Person"],
                   ["designer", "Designer"],
                   ["location", "Location"],
-                  ["epstein_source", "Epstein Source"],
+                  ["bb_source", "Black Book"],
+                  ["doj_source", "DOJ Library"],
                 ] as const
               ).map(([type, label]) => (
                 <div
@@ -340,7 +366,7 @@ export function GraphPreview() {
                     border: `1.5px solid ${uncertaintyColor}`,
                   }}
                 />
-                <span>Epstein Connection</span>
+                <span>Confirmed Connection</span>
               </div>
             </div>
           </div>

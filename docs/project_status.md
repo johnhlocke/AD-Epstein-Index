@@ -62,8 +62,9 @@ This file should be automatically updated when necessary to answer three key que
 | Investigation policy: BB=confirmed, no fame dismissal | Phase 2 | Done |
 | Fix Detective BB match verdict bug | Tooling | Done |
 | Build cross-reference engine | Phase 2 | Done |
-| Batch cross-reference all extracted names | Phase 2 | In Progress |
-| Build dossiers on Epstein-linked leads | Phase 2 | In Progress |
+| Batch cross-reference all extracted names | Phase 2 | Done |
+| Build dossiers on Epstein-linked leads | Phase 2 | Done |
+| Full pipeline audit (all gaps resolved) | Phase 2 | Done |
 | Build interactive website | Phase 3 | Done |
 | Neo4j knowledge graph (graph_db + sync_graph) | Phase 3.5 | Done |
 | Connection Explorer web page (force-graph viz) | Phase 3.5 | Done |
@@ -198,6 +199,10 @@ This file should be automatically updated when necessary to answer three key que
 | Researcher queue pagination fix (1000-row cap) | Tooling | Done |
 | Anonymous features → detective_verdict NO (657) | Database | Done |
 | Dossier false negative audit (Couturier, Walters, Bensley, Redford, Askari) | Phase 2 | Done |
+| Pipeline audit: all gaps resolved (14 dossiers, 0 unresolved items) | Phase 2 | Done |
+| Supabase pagination fix in bulk_crossref + db.py | Tooling | Done |
+| Neo4j dossier_id on Person nodes | Phase 3.5 | Done |
+| Graph preview: clickable dossier links + source node labels | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -357,7 +362,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 1,396 issues, **3,615 features**, 2,958 cross-references (1,314 YES), 1,417 dossiers, **206 confirmed connections**
+- **Final stats**: 1,396 issues, **3,472 features**, 2,877+ cross-references (1,277 YES), 1,408 dossiers, **225 confirmed connections**
 - Scoring v2.3: aesthetic_summary field, structural overwrite on rescore, expanded subject_category (Art/Media/Design), --offset flag, checkpoint refresh
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
@@ -375,7 +380,8 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
   - **Googleable Parent Rule** formalized: parents with web presence → Forbes 7 max; same-industry → Forbes 6 max; Wikipedia-level parent → MIXED
   - Formal methodology: `docs/wealth-classification-methodology.md`
 - **Dossier false negative audit COMPLETE**: Deep audit of all 1,209 rejected dossiers found 5 false negatives — Robert Couturier (#350, #1240), Barbara Walters (#1345), Bill Bensley (#731), Robert Redford (#986), Emma Roig Askari (#684). All confirmed. Pipeline timing bug identified (triage before DOJ results) and documented.
-- **Pipeline health**: Editor FK error loop fixed (was starving Elena of work). Detective correctly shows done. 206 confirmed dossiers, 1,417 total.
+- **Pipeline audit COMPLETE (Feb 28)**: All gaps resolved. 225 confirmed dossiers, 1,408 total. 0 unresolved needs_review, 0 DOJ pending, 0 named features without xrefs, 0 YES features without dossiers. 14 new dossiers created (1590–1603). Evan Yurman confirmed (Peggy Siegal guest list + Guggenheim cochair). Supabase pagination bug discovered and fixed.
+- **Pipeline health**: Editor FK error loop fixed (was starving Elena of work). Detective correctly shows done.
 - Opus Vision scoring: COMPLETE (3,772/3,772 at v2.3)
 - Test-retest validation COMPLETE: 3 runs × 100 features, 91.1% exact agreement, 100% within ±1, ICC 0.949–0.991 ("Excellent"), $34.89
 - Inter-model reliability COMPLETE: 100 features × Sonnet + Haiku, Opus-Sonnet ICC 0.805, 96.8% within ±1, $4.35

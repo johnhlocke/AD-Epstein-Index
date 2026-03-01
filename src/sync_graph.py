@@ -175,9 +175,11 @@ def build_feature_batch(features, issues, xrefs, dossiers):
             if doj_status and doj_status not in ("no_match", "pending", "searched"):
                 doj_match = True
 
+        dossier_id = None
         if dossier:
             connection_strength = dossier.get("connection_strength")
             editor_verdict = dossier.get("editor_verdict")
+            dossier_id = dossier.get("id")
 
         # Parse aesthetic_profile JSONB
         raw_profile = f.get("aesthetic_profile") or {}
@@ -225,6 +227,7 @@ def build_feature_batch(features, issues, xrefs, dossiers):
             "bb_match_type": bb_match_type,
             "bb_confidence": bb_confidence,
             "doj_match": doj_match,
+            "dossier_id": dossier_id,
             "feature_id": f["id"],
             # Aesthetic taxonomy dimensions
             "envelope": raw_profile.get("envelope"),
@@ -254,6 +257,7 @@ def sync_batch(batch):
         p.detective_verdict = row.detective_verdict,
         p.connection_strength = row.connection_strength,
         p.editor_verdict = row.editor_verdict,
+        p.dossier_id = row.dossier_id,
         p.feature_count = 1
     ON MATCH SET
         p.feature_count = p.feature_count + 1,
@@ -271,6 +275,10 @@ def sync_batch(batch):
         p.editor_verdict = CASE
             WHEN row.editor_verdict IS NOT NULL THEN row.editor_verdict
             ELSE p.editor_verdict
+        END,
+        p.dossier_id = CASE
+            WHEN row.dossier_id IS NOT NULL THEN row.dossier_id
+            ELSE p.dossier_id
         END
 
     // Issue node + FEATURED_IN

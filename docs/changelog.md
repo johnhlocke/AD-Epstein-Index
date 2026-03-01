@@ -6,6 +6,37 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-02-28 (Session 55)
+
+### Added — Pipeline Audit & New Confirmed Connection
+
+- **Full pipeline audit** — Methodical gap-by-gap resolution of all unresolved pipeline items. 14 new dossiers created (13 REJECTED, 1 CONFIRMED). All gaps zeroed out.
+- **Evan Yurman CONFIRMED** (dossier 1603, feature 6747) — Two independent DOJ documents: Peggy Siegal birthday party guest list emailed to Epstein (2013) + Guggenheim Young Collectors Party where Yurman was Honorary Cochair and Epstein RSVPed Yes (2015). AD Sept 2019, Hudson Valley home.
+- **`db.py:get_features_missing_crossref()`** — New paginated function to find named features missing cross-reference rows. Uses `.range()` loops to avoid Supabase 1000-row limit.
+- **`bulk_crossref.py --missing-xref`** — New flag targeting features without cross_references rows (post-detective extraction gap)
+
+### Fixed
+
+- **bulk_crossref.py column mapping** — Script was writing nonexistent columns (`bb_match`, `bb_context`, `doj_snippets`, `rationale`). Fixed to use actual schema columns (`black_book_status`, `black_book_matches`, `doj_results`, `verdict_rationale`, `false_positive_indicators`, `individuals_searched`)
+- **Supabase pagination bug (GAP 1 false alarm)** — Audit queries comparing features vs cross-references both hit 1000-row limit, producing non-overlapping ID ranges. With proper pagination: ALL named features have cross-references. Zero gaps.
+- **Agent debug logging removed** — Removed researcher-specific WARN-level cycle/sleep debug statements from `src/agents/base.py`
+
+### Changed
+
+- **Neo4j sync: dossier_id on Person nodes** — `sync_graph.py` now writes `dossier_id` property to Person nodes, enabling direct dossier navigation from the graph
+- **Graph preview improvements** — Source nodes (DOJ, BB) rendered larger with permanent labels. Clickable nodes with dossier links (pointer cursor + "Click to view dossier" tooltip). Router-based navigation to dossier pages.
+- **MethodologySection FigBox component** — Reusable figure container with title bar, border, and consistent styling for all methodology figures
+- **HeroSection TOC** — "Workflow Limitations" renamed to "Limitations" (Section 4.7)
+
+### Database
+
+- **225 confirmed dossiers** (was 222). 1,408 total dossiers. 14 new dossiers (1590–1603).
+- **211 needs_review cross-references** resolved — all given `editor_override_verdict` (1 YES / 210 NO)
+- **12 DOJ-pending cross-references** updated to `doj_status=searched`
+- **0 unresolved items** remaining (needs_review, DOJ pending, YES without dossier, named without xref)
+
+---
+
 ## 2026-02-27 (Session 54)
 
 ### Added — Wealth Classification Methodology & Pipeline Fixes

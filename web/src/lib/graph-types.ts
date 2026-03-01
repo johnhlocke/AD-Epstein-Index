@@ -10,7 +10,9 @@ export interface GraphNode {
     | "style"
     | "issue"
     | "author"
-    | "epstein_source";
+    | "epstein_source"
+    | "doj_source"
+    | "bb_source";
   detectiveVerdict?: string | null;
   connectionStrength?: string | null;
   editorVerdict?: string | null;
@@ -27,6 +29,8 @@ export interface GraphNode {
   // Issue-specific
   month?: number | null;
   year?: number | null;
+  // Dossier link
+  dossierId?: number | null;
 }
 
 export interface GraphLink {
@@ -97,7 +101,7 @@ export const uncertaintyConfig: Record<
 
 // ── Colors ──────────────────────────────────────────────────
 
-/** Node type colors — near-monochrome with copper as sole accent */
+/** Node type colors — near-monochrome with copper/red accents for Epstein sources */
 export const nodeColors: Record<GraphNode["nodeType"], string> = {
   person: "#AAAAAA", // Light gray — background
   designer: "#999999", // Medium gray — background
@@ -105,7 +109,9 @@ export const nodeColors: Record<GraphNode["nodeType"], string> = {
   style: "#CCCCCC", // Very light — structural
   issue: "#CCCCCC", // Very light — structural
   author: "#BBBBBB", // Light — structural
-  epstein_source: "#B87333", // Copper — THE accent, the story
+  epstein_source: "#B87333", // Copper — fallback
+  bb_source: "#B87333", // Copper — Black Book (contact list)
+  doj_source: "#9B2226", // Deep red — DOJ Library (legal records)
 };
 
 /** Link colors by relationship type — gray for structural, red for Epstein */

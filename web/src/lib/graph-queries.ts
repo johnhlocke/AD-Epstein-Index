@@ -7,8 +7,8 @@ import type { GraphData, GraphNode, GraphLink } from "./graph-types";
  */
 function mapNode(record: Record<string, unknown>): GraphNode {
   const labels = record.labels as string[];
-  const nodeType = mapLabelToType(labels?.[0] ?? "Person");
   const props = record.props as Record<string, unknown>;
+  const nodeType = mapLabelToType(labels?.[0] ?? "Person", props.name as string | undefined);
 
   return {
     id: `${nodeType}:${props.name ?? props.key ?? record.nodeId}`,
@@ -30,12 +30,19 @@ function mapNode(record: Record<string, unknown>): GraphNode {
     country: (props.country as string) ?? null,
     month: props.month != null ? toNumber(props.month) : null,
     year: props.year != null ? toNumber(props.year) : null,
+    dossierId: props.dossier_id != null ? toNumber(props.dossier_id) : null,
   };
 }
 
 function mapLabelToType(
-  label: string
+  label: string,
+  name?: string
 ): GraphNode["nodeType"] {
+  if (label === "EpsteinSource") {
+    if (name === "DOJ Library") return "doj_source";
+    if (name === "Black Book") return "bb_source";
+    return "epstein_source";
+  }
   const map: Record<string, GraphNode["nodeType"]> = {
     Person: "person",
     Designer: "designer",
@@ -43,7 +50,6 @@ function mapLabelToType(
     Style: "style",
     Issue: "issue",
     Author: "author",
-    EpsteinSource: "epstein_source",
   };
   return map[label] ?? "person";
 }
@@ -123,10 +129,19 @@ async function runGraphQuery(
       }
     }
 
+    // Filter out nodes with no useful label (e.g. issues titled "Unknown")
+    for (const [id, node] of nodeMap) {
+      if (node.label === "Unknown") nodeMap.delete(id);
+    }
+    const validIds = new Set(nodeMap.keys());
+    const filteredLinks = links.filter(
+      (l) => validIds.has(l.source) && validIds.has(l.target)
+    );
+
     // Compute degree for each node
     const nodes = Array.from(nodeMap.values());
     const degreeMap = new Map<string, number>();
-    for (const link of links) {
+    for (const link of filteredLinks) {
       degreeMap.set(link.source, (degreeMap.get(link.source) ?? 0) + 1);
       degreeMap.set(link.target, (degreeMap.get(link.target) ?? 0) + 1);
     }
@@ -134,7 +149,7 @@ async function runGraphQuery(
       node.degree = degreeMap.get(node.id) ?? 0;
     }
 
-    return { nodes, links };
+    return { nodes, links: filteredLinks };
   } finally {
     await session.close();
   }
@@ -231,15 +246,41 @@ export async function getFullGraph(): Promise<GraphData> {
   );
 }
 
-/** 6b. Confirmed-only network: persons with CONFIRMED editor verdict + their connections */
+/** 6b. Confirmed-only network: confirmed persons + shared designers/locations + Epstein sources */
 export async function getConfirmedNetwork(): Promise<GraphData> {
   return runGraphQuery(
-    `MATCH (p:Person)
+    `// Get all confirmed people
+     MATCH (p:Person)
      WHERE p.editor_verdict = 'CONFIRMED'
-     WITH p
-     MATCH path = (p)-[]-(connected)
-     RETURN path
-     LIMIT 500`
+     WITH collect(p) AS confirmed
+
+     // Shared designers between confirmed people
+     UNWIND confirmed AS p1
+     OPTIONAL MATCH (p1)-[:HIRED]->(d:Designer)<-[:HIRED]-(p2:Person)
+     WHERE p2 IN confirmed AND p1 <> p2
+     WITH confirmed, collect(DISTINCT d) AS sharedDesigners
+
+     // Shared locations between confirmed people
+     UNWIND confirmed AS p1
+     OPTIONAL MATCH (p1)-[:LIVES_IN]->(loc:Location)<-[:LIVES_IN]-(p2:Person)
+     WHERE p2 IN confirmed AND p1 <> p2
+     WITH confirmed, sharedDesigners, collect(DISTINCT loc) AS sharedLocations
+
+     // Now return paths for: person→designer, person→location, person→source
+     UNWIND confirmed AS p
+
+     // Epstein source connections
+     OPTIONAL MATCH srcPath = (p)-[:APPEARS_IN]->(es:EpsteinSource)
+
+     // Designer connections (only shared designers)
+     OPTIONAL MATCH desPath = (p)-[:HIRED]->(d:Designer)
+     WHERE d IN sharedDesigners
+
+     // Location connections (only shared locations)
+     OPTIONAL MATCH locPath = (p)-[:LIVES_IN]->(loc:Location)
+     WHERE loc IN sharedLocations
+
+     RETURN p, srcPath, desPath, locPath`
   );
 }
 
