@@ -6,6 +6,35 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-01 (Session 56)
+
+### Added — Stale Cross-Reference Audit (GAP 5) & Nick Candy Confirmed
+
+- **`src/fix_stale_xrefs.py`** — New script to detect and re-check stale cross-references: features renamed from "Anonymous" to real names AFTER cross-referencing. Finds xref/feature name mismatches, re-runs BB + DOJ search under correct names, updates cross_references table. Supports `--dry-run`, `--bb-only`, `--feature-ids` flags. Paginated Supabase queries throughout.
+- **Nick Candy CONFIRMED** (dossier 279, feature 5937) — Hidden behind "Anonymous" label. BB `full_name` structured entry (name, address, phone, email) + DOJ emails directly referencing Ghislaine Maxwell correspondence (EFTA00576931, EFTA00576933). Previously REJECTED with meaningless Anonymous search results.
+- **4 new policy precedents**: BB full_name + Ghislaine Maxwell email = confirmed (Nick Candy). Group VC email chain including known Epstein associate ≠ confirmed (Matt Cohler / Boris Nikolic). Shared Deutsche Bank advisor ≠ personal connection (Drew Kanders / Rosemary Vrablic). LinkedIn auto-notifications sent to Epstein ≠ connection (Matt Cohler).
+
+### Fixed
+
+- **59 stale cross-references re-checked** — All features renamed post-cross-referencing now have correct BB + DOJ results under their real names. 28 YES (BB/DOJ signal), 31 NO. Only Nick Candy genuinely confirmed; 27 others overridden to NO with editor rationale.
+- **10 missing editor overrides** — Isabel Goldsmith (3 features), Sara Story (4 features), Scott Snyder, Timothy Stevenson, Princess Ira von Fürstenberg all had xref binary_verdict=YES but detective_verdict=NO with no editor override documenting the resolution. Overrides added.
+- **2 stale dossier subject_names corrected** — Lee F. Mindel (dossier 278, was "Anonymous"), Paul Attanasio (dossier 239, was "Paul Armando and Karin Blake")
+
+### Changed
+
+- **Connection Explorer default preset** — Changed from "full" to "confirmed" on mount (shows DOJ/BB source nodes by default)
+- **Header nav** — Two-line centered format (section number above, label below). "WHERE THEY LIVE" logo uses smooth scroll-to-top instead of page navigation.
+- **`GraphPreset` type** — Added "confirmed" preset option
+
+### Database
+
+- **224 confirmed dossiers** (was 225 — recount corrected). 1,454 total dossiers (+23 new REJECTED).
+- **59 cross-references updated** with correct names and fresh BB + DOJ results
+- **34 editor overrides added** (27 stale xref YES→NO + 7 needs_review cleared)
+- **10 missing editor overrides backfilled** for previously-resolved features
+
+---
+
 ## 2026-02-28 (Session 55)
 
 ### Added — Pipeline Audit & New Confirmed Connection

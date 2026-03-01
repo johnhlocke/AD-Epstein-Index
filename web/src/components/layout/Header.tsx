@@ -4,13 +4,13 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: "/#finding-01", label: "1. Their Names" },
-  { href: "/#finding-02", label: "2. Their Aesthetic" },
-  { href: "/#finding-03", label: "3. Conclusion" },
-  { href: "/#agent-methodology", label: "4. Agent Methodology" },
-  { href: "/#aesthetic-methodology", label: "5. Aesthetic Methodology" },
-  { href: "/#appendix", label: "6. Appendix" },
-  { href: "/#contact", label: "7. Contact" },
+  { href: "/#finding-01", num: "1.", label: "Their Names" },
+  { href: "/#finding-02", num: "2.", label: "Their Aesthetic" },
+  { href: "/#finding-03", num: "3.", label: "Conclusion" },
+  { href: "/#agent-methodology", num: "4.", label: "Agent Methodology" },
+  { href: "/#aesthetic-methodology", num: "5.", label: "Aesthetic Methodology" },
+  { href: "/#appendix", num: "6.", label: "Appendix" },
+  { href: "/#contact", num: "7.", label: "Contact" },
 ];
 
 export function Header() {
@@ -20,8 +20,9 @@ export function Header() {
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 shadow-[0_1px_3px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-14 items-center" style={{ maxWidth: "var(--grid-max-width)", paddingRight: "var(--grid-margin)" }}>
         {/* WHERE THEY LIVE — sits in the left margin, right border aligns with content edge */}
-        <Link
-          href="/"
+        <a
+          href="#"
+          onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}
           className="flex shrink-0 items-center border-r border-black whitespace-pre font-black uppercase leading-[1.1] text-foreground transition-colors hover:text-[#B87333]"
           style={{
             fontFamily: "futura-pt, sans-serif",
@@ -34,11 +35,11 @@ export function Header() {
           }}
         >
           {"Where\nThey\nLive"}
-        </Link>
+        </a>
 
-        {/* Nav items — fill the content area */}
+        {/* Nav items — fill the content area, two-line centered */}
         <nav
-          className="flex flex-1 items-center justify-between whitespace-nowrap font-bold"
+          className="flex flex-1 items-center justify-between font-bold"
           style={{
             fontFamily: "JetBrains Mono, monospace",
             fontSize: "clamp(7px, 0.95vw, 13px)",
@@ -50,13 +51,14 @@ export function Header() {
             <Link
               key={item.href}
               href={item.href}
-              className={`transition-colors hover:text-foreground ${
+              className={`flex flex-col items-center text-center leading-tight transition-colors hover:text-foreground ${
                 pathname === item.href
                   ? "text-foreground font-medium"
                   : "text-muted-foreground"
               }`}
             >
-              {item.label}
+              <span>{item.num}</span>
+              <span>{item.label}</span>
             </Link>
           ))}
         </nav>

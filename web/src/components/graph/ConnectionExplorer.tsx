@@ -56,7 +56,7 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activePreset, setActivePreset] = useState<GraphPreset>("full");
+  const [activePreset, setActivePreset] = useState<GraphPreset>("confirmed");
 
   // ── Data fetching ──────────────────────────────────────────
 
@@ -94,10 +94,10 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
     []
   );
 
-  // Load full graph on mount
+  // Load confirmed network on mount (shows DOJ/BB source nodes)
   useEffect(() => {
     if (mounted) {
-      fetchGraph("full");
+      fetchGraph("confirmed");
     }
   }, [mounted, fetchGraph]);
 

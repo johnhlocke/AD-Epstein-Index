@@ -51,6 +51,7 @@ export type GraphPreset =
   | "shared-designers"
   | "hubs"
   | "epstein"
+  | "confirmed"
   | "full"
   | "search";
 
