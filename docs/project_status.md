@@ -209,7 +209,9 @@ This file should be automatically updated when necessary to answer three key que
 | Header nav two-line centered redesign | Phase 3 | Done |
 | Fresh-eyes pre-publication audit (verdict corrections + new confirmations) | Phase 2 | Done |
 | Pipeline override protection (3-layer guardrail in db.py) | Tooling | Done |
-| Woody Allen, Kemble/Curry, Peter Marino, Edgar Bronfman Jr. confirmed | Phase 2 | Done |
+| Woody Allen, Kemble/Curry, Peter Marino, Edgar Bronfman Jr., Les Wexner confirmed | Phase 2 | Done |
+| Les Wexner townhouse (9 East 71st St) identified and confirmed | Phase 2 | Done |
+| 30 stale feature verdicts synced with dossier outcomes | Phase 2 | Done |
 | Clive Davis, Steve Wynn, Travolta policy corrections (REJECTED) | Phase 2 | Done |
 | 5 same-person conflict resolutions (Douglas, Walters, Irving, Kluge, Koch) | Phase 2 | Done |
 | Investigation Funnel date range display | Phase 3 | Done |
@@ -372,7 +374,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 470 issues, **3,440 features**, 2,858 cross-references, 1,431 dossiers, **232 confirmed dossiers (~170 unique people)**
+- **Final stats**: 470 issues, **3,440 features**, 2,859 cross-references, 1,434 dossiers, **233 confirmed dossiers (~173 unique people)**
 - Scoring v2.3: aesthetic_summary field, structural overwrite on rescore, expanded subject_category (Art/Media/Design), --offset flag, checkpoint refresh
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.
@@ -391,7 +393,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
   - Formal methodology: `docs/wealth-classification-methodology.md`
 - **Dossier false negative audit COMPLETE**: Deep audit of all 1,209 rejected dossiers found 5 false negatives — Robert Couturier (#350, #1240), Barbara Walters (#1345), Bill Bensley (#731), Robert Redford (#986), Emma Roig Askari (#684). All confirmed. Pipeline timing bug identified (triage before DOJ results) and documented.
 - **Pipeline audit COMPLETE (Feb 28 + Mar 1)**: All gaps resolved including stale xref audit (GAP 5). Nick Candy confirmed (BB + Ghislaine Maxwell email). Evan Yurman confirmed (Peggy Siegal guest list + Guggenheim cochair). 23 new REJECTED dossiers from stale xref triage.
-- **Fresh-eyes audit COMPLETE (Mar 1)**: Comprehensive pre-publication review. Clive Davis, Travolta, Steve Wynn → REJECTED (policy corrections). David Geffen, Woody Allen, Celerie Kemble/Boykin Curry, Peter Marino, Edgar Bronfman Jr. → CONFIRMED (missed evidence recovered). 5 same-person conflicts resolved. 5 stale YES/Anonymous features fixed. 2 COINCIDENCE contradictions resolved. Pipeline override protection added to `db.py` (3-layer guardrail prevents automated pipeline from overwriting manual editor decisions). OCR corruption in Black Book identified as systemic risk (Bronfman "Bron/man" bug).
+- **Fresh-eyes audit COMPLETE (Mar 1)**: Comprehensive pre-publication review. Clive Davis, Travolta, Steve Wynn → REJECTED (policy corrections). David Geffen, Woody Allen, Celerie Kemble/Boykin Curry, Peter Marino, Edgar Bronfman Jr., Les Wexner → CONFIRMED (missed evidence recovered). 5 same-person conflicts resolved. 30 stale YES feature verdicts fixed (synced with REJECTED dossiers). 2 COINCIDENCE contradictions resolved. Mary McFadden feature renamed from Anonymous. Pipeline override protection added to `db.py` (3-layer guardrail prevents automated pipeline from overwriting manual editor decisions). OCR corruption in Black Book identified as systemic risk (Bronfman "Bron/man" bug). Les Wexner's townhouse (9 East 71st St — THE Epstein property) found labeled as Anonymous with no dossier.
 - **Pipeline health**: Editor FK error loop fixed (was starving Elena of work). Detective correctly shows done.
 - Opus Vision scoring: COMPLETE (3,772/3,772 at v2.3)
 - Test-retest validation COMPLETE: 3 runs × 100 features, 91.1% exact agreement, 100% within ±1, ICC 0.949–0.991 ("Excellent"), $34.89

@@ -6,7 +6,7 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
-## 2026-03-01 (Session 57)
+## 2026-03-01 (Session 57 + 58)
 
 ### Added — Fresh-Eyes Audit, New Confirmations, Pipeline Override Protection
 
@@ -14,6 +14,7 @@ Format: entries are grouped by date, with the most recent at the top.
 - **Celerie Kemble & Boykin Curry CONFIRMED** (dossiers #1038, #1652, features 9354, 9696) — Six independent DOJ evidence streams: direct personal email with Ghislaine Maxwell ("Gmax"), structured contact database entry (same format as Nina Griscom/HIGH), biographical profiles, Peggy Siegal invites sent to Epstein, guest lists. Original auto-triage failed to identify "Gmax" as Maxwell.
 - **Peter Marino CONFIRMED** (dossiers #970, #300, #1167, features 9241, 6459, 9311) — All 3 features are his own homes (NYC, Hamptons, Aspen). Epstein flight logs: 2 flights Sept 2000 (TEB→St. Thomas→Palm Beach). DOJ email from Richard Kahn recruiting Marino's firm. Flight logs are scanned/handwritten, not text-searchable.
 - **Edgar Bronfman Jr. CONFIRMED** (dossier #341, feature 6534) — Black Book page 8: "Bronfman, Jr., Edgar" with Lexa Partners LLC, 390 Park Ave, 2 phone numbers. BB match missed because OCR mangled "Bronfman" into "Bron/man". Systemic OCR false-negative identified.
+- **Les Wexner CONFIRMED** (dossier #1653, feature 8029) — THE Epstein townhouse at 9 East 71st Street, Dec 1995 "ON A GRAND SCALE." Feature was labeled "Anonymous" with no cross-reference or dossier — completely invisible in the dataset. Wexner gave this property to Epstein. Designer: John Stefanidis. Architect: Thierry Despont.
 - **Pipeline override protection** — Three-layer guardrail in `src/db.py`: `upsert_cross_reference()` preserves editor_override fields, `upsert_dossier()` protects "Manual override" dossiers, `update_detective_verdict()` skips features with editor overrides. Pipeline cannot clobber manual confirmations.
 
 ### Fixed
@@ -27,16 +28,20 @@ Format: entries are grouped by date, with the most recent at the top.
 - **2 COINCIDENCE contradictions fixed** — Bergen/Malle dossier #312: COINCIDENCE→MEDIUM. Rothschild dossier #98: COINCIDENCE→HIGH.
 - **5 stale YES/Anonymous features fixed** — Features 5659, 7365, 9202, 6076, 6083 had YES verdicts but REJECTED dossiers. Flipped to NO.
 - **8 stale-reasoning dossiers updated** — CONFIRMED dossiers with auto-rejection text replaced with proper evidence-based reasoning.
+- **30 stale feature verdicts fixed** — Features had detective_verdict=YES but REJECTED dossiers from Feb 28 bulk override. 28 REJECTED + 1 Cher + 1 from override=no_match all flipped to NO. 9 with CONFIRMED dossiers correctly kept as YES.
+- **Mary McFadden feature 8317** — Renamed from "Anonymous" to "Mary McFadden" (matches confirmed dossier #1473).
 
 ### Changed
 
-- **CLAUDE.md stats updated** — 3,440 features, 470 issues, 232 confirmed dossiers (~170 unique people)
+- **CLAUDE.md stats updated** — 3,440 features, 470 issues, 233 confirmed dossiers (~173 unique people), 1,434 total dossiers
 - **MethodologySection feature count** — Hardcoded 3,775→3,440
 - **Investigation Funnel date range** — Now shows "Live Data from [earliest] through [latest]" dynamically
+- **Connection Explorer confirmed network query** — Simplified to show ALL designer/location connections for confirmed people (not just shared ones), making the graph more informative
 
 ### Database
 
-- **232 confirmed dossiers** (was 224 at session start). Net: +Geffen, +Koch, +Kluge, +Allen, +Kemble×2, +Marino×3, +Bronfman, +McFadden. −Davis×2, −Travolta, −Wynn×2.
+- **233 confirmed dossiers** (was 224 at session start). Net: +Geffen, +Koch, +Kluge, +Allen, +Kemble×2, +Marino×3, +Bronfman, +McFadden, +Wexner. −Davis×2, −Travolta, −Wynn×2.
+- **30 stale YES→NO fixes** — Feature verdicts synced with REJECTED dossier outcomes from Feb 28 override session. Confirmed count unchanged.
 - **New policy precedents**: (1) Epstein discussing someone with third parties ≠ confirmed (Wynn). (2) Editor override when public docs exceed DOJ search coverage (Allen). (3) OCR corruption in BB can cause false negatives (Bronfman). (4) Flight log = direct interaction, stronger than guest list (Marino).
 
 ---

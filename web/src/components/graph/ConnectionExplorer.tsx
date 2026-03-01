@@ -144,7 +144,10 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
 
   const handleNodeCanvas = useCallback(
     (node: FGNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const size = nodeSize(node.degree ?? 0, node.pagerank);
+      const rawSize = nodeSize(node.degree ?? 0, node.pagerank);
+      // Dampen size by zoom — nodes shrink when zooming in, grow when zooming out
+      const zoomDamp = Math.pow(globalScale, 0.5);
+      const size = rawSize / zoomDamp;
       const x = node.x ?? 0;
       const y = node.y ?? 0;
       const color = nodeColors[node.nodeType] ?? "#888";
@@ -164,7 +167,7 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
 
         // Outer uncertainty ring
         ctx.beginPath();
-        ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
+        ctx.arc(x, y, size + 4 / zoomDamp, 0, 2 * Math.PI);
         ctx.strokeStyle = uncertaintyColor;
         ctx.lineWidth = uc.ringWidth / globalScale;
         ctx.globalAlpha = uc.ringOpacity;
@@ -173,7 +176,7 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
         // Uncertainty fill (solid for high confidence, fading to transparent)
         if (uc.fillOpacity > 0.05) {
           ctx.beginPath();
-          ctx.arc(x, y, size + 3, 0, 2 * Math.PI);
+          ctx.arc(x, y, size + 3 / zoomDamp, 0, 2 * Math.PI);
           ctx.fillStyle = uncertaintyColor;
           ctx.globalAlpha = uc.fillOpacity * 0.3;
           ctx.fill();
@@ -185,7 +188,7 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
       // ── 2. Selection ring ──
       if (isSelected) {
         ctx.beginPath();
-        ctx.arc(x, y, size + 6, 0, 2 * Math.PI);
+        ctx.arc(x, y, size + 6 / zoomDamp, 0, 2 * Math.PI);
         ctx.strokeStyle = "#FFF";
         ctx.lineWidth = 2 / globalScale;
         ctx.stroke();
@@ -194,7 +197,7 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
       // ── 3. Hover highlight ──
       if (isHovered && !isSelected) {
         ctx.beginPath();
-        ctx.arc(x, y, size + 5, 0, 2 * Math.PI);
+        ctx.arc(x, y, size + 5 / zoomDamp, 0, 2 * Math.PI);
         ctx.strokeStyle = "rgba(255,255,255,0.35)";
         ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
@@ -236,23 +239,24 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
 
         // Text shadow for readability against dark bg
         ctx.fillStyle = "rgba(0,0,0,0.85)";
-        ctx.fillText(node.label, x + 0.5, y + size + 4 + 0.5);
+        ctx.fillText(node.label, x + 0.5, y + size + 4 / zoomDamp + 0.5);
 
         ctx.fillStyle =
           isSelected || isHovered
             ? "rgba(255,255,255,0.95)"
             : "rgba(255,255,255,0.65)";
-        ctx.fillText(node.label, x, y + size + 4);
+        ctx.fillText(node.label, x, y + size + 4 / zoomDamp);
       }
     },
     [selectedNode, hoveredNode]
   );
 
   const handlePointerArea = useCallback(
-    (node: FGNode, color: string, ctx: CanvasRenderingContext2D) => {
-      const size = nodeSize(node.degree ?? 0, node.pagerank);
+    (node: FGNode, color: string, ctx: CanvasRenderingContext2D, globalScale: number) => {
+      const rawSize = nodeSize(node.degree ?? 0, node.pagerank);
+      const size = rawSize / Math.pow(globalScale, 0.5);
       ctx.beginPath();
-      ctx.arc(node.x ?? 0, node.y ?? 0, size + 8, 0, 2 * Math.PI);
+      ctx.arc(node.x ?? 0, node.y ?? 0, size + 8 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
       ctx.fillStyle = color;
       ctx.fill();
     },

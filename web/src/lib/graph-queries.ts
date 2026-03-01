@@ -249,36 +249,18 @@ export async function getFullGraph(): Promise<GraphData> {
 /** 6b. Confirmed-only network: confirmed persons + shared designers/locations + Epstein sources */
 export async function getConfirmedNetwork(): Promise<GraphData> {
   return runGraphQuery(
-    `// Get all confirmed people
+    `// Get all confirmed people and ALL their connections
      MATCH (p:Person)
      WHERE p.editor_verdict = 'CONFIRMED'
-     WITH collect(p) AS confirmed
-
-     // Shared designers between confirmed people
-     UNWIND confirmed AS p1
-     OPTIONAL MATCH (p1)-[:HIRED]->(d:Designer)<-[:HIRED]-(p2:Person)
-     WHERE p2 IN confirmed AND p1 <> p2
-     WITH confirmed, collect(DISTINCT d) AS sharedDesigners
-
-     // Shared locations between confirmed people
-     UNWIND confirmed AS p1
-     OPTIONAL MATCH (p1)-[:LIVES_IN]->(loc:Location)<-[:LIVES_IN]-(p2:Person)
-     WHERE p2 IN confirmed AND p1 <> p2
-     WITH confirmed, sharedDesigners, collect(DISTINCT loc) AS sharedLocations
-
-     // Now return paths for: person→designer, person→location, person→source
-     UNWIND confirmed AS p
 
      // Epstein source connections
      OPTIONAL MATCH srcPath = (p)-[:APPEARS_IN]->(es:EpsteinSource)
 
-     // Designer connections (only shared designers)
+     // All designer connections (not just shared)
      OPTIONAL MATCH desPath = (p)-[:HIRED]->(d:Designer)
-     WHERE d IN sharedDesigners
 
-     // Location connections (only shared locations)
+     // All location connections (not just shared)
      OPTIONAL MATCH locPath = (p)-[:LIVES_IN]->(loc:Location)
-     WHERE loc IN sharedLocations
 
      RETURN p, srcPath, desPath, locPath`
   );

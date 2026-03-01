@@ -122,11 +122,11 @@ export const linkColors: Record<string, string> = {
   LIVES_IN: "#D0D0D0", // Gray — structural
   HAS_STYLE: "#DCDCDC", // Gray — structural
   PROFILED_BY: "#D5D5D5", // Gray — structural
-  APPEARS_IN: "#9B2226", // Red — Epstein connection, the signal
+  APPEARS_IN: "#CB5856", // Red — Epstein connection, the signal
 };
 
-/** Uncertainty ring color (copper/amber) */
-export const uncertaintyColor = "#B87333";
+/** Uncertainty ring color (deep red) */
+export const uncertaintyColor = "#981E28";
 
 /** Graph background */
 export const graphBg = "#FAFAFA";

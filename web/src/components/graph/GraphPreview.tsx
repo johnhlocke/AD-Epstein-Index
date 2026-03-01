@@ -83,6 +83,14 @@ export function GraphPreview() {
     })();
   }, [mounted]);
 
+  // Increase charge repulsion so nodes spread out more
+  useEffect(() => {
+    if (graphRef.current) {
+      graphRef.current.d3Force("charge")?.strength(-120);
+      graphRef.current.d3Force("link")?.distance(60);
+    }
+  }, [graphData]);
+
   // Fit to view after settle
   useEffect(() => {
     if (graphData.nodes.length > 0 && graphRef.current) {
@@ -121,7 +129,9 @@ export function GraphPreview() {
       const isSource = node.nodeType === "doj_source" || node.nodeType === "bb_source" || node.nodeType === "epstein_source";
       const isEpstein = isSource || confidence !== null;
       const baseSize = nodeSize(node.degree ?? 0, node.pagerank);
-      const size = isSource ? Math.max(baseSize, 20) : isEpstein ? baseSize : baseSize * 0.5;
+      const rawSize = isSource ? Math.max(baseSize, 20) : isEpstein ? baseSize : baseSize * 0.5;
+      // Dampen size by zoom — nodes shrink when zooming in, grow when zooming out
+      const size = rawSize / Math.pow(globalScale, 0.5);
       const x = node.x ?? 0;
       const y = node.y ?? 0;
       const color = nodeColors[node.nodeType] ?? "#888";
@@ -135,7 +145,7 @@ export function GraphPreview() {
 
         // Ring
         ctx.beginPath();
-        ctx.arc(x, y, size + 4, 0, 2 * Math.PI);
+        ctx.arc(x, y, size + 4 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
         ctx.strokeStyle = uncertaintyColor;
         ctx.lineWidth = uc.ringWidth / globalScale;
         ctx.globalAlpha = uc.ringOpacity;
@@ -144,7 +154,7 @@ export function GraphPreview() {
         // Subtle fill
         if (uc.fillOpacity > 0.03) {
           ctx.beginPath();
-          ctx.arc(x, y, size + 3, 0, 2 * Math.PI);
+          ctx.arc(x, y, size + 3 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
           ctx.fillStyle = uncertaintyColor;
           ctx.globalAlpha = uc.fillOpacity;
           ctx.fill();
@@ -155,7 +165,7 @@ export function GraphPreview() {
       if (isHovered) {
         ctx.globalAlpha = 1;
         ctx.beginPath();
-        ctx.arc(x, y, size + 5, 0, 2 * Math.PI);
+        ctx.arc(x, y, size + 5 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
         ctx.strokeStyle = "#333";
         ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
@@ -181,9 +191,9 @@ export function GraphPreview() {
 
       ctx.restore();
 
-      // Labels for hub nodes and source nodes — dark text on light bg
+      // Labels — hide when zoomed out to prevent overlap, always show on hover
       const showLabel =
-        isHovered || isSource || (node.degree ?? 0) >= LABEL_DEGREE_THRESHOLD;
+        isHovered || (globalScale > 0.6 && (isSource || (node.degree ?? 0) >= LABEL_DEGREE_THRESHOLD));
 
       if (showLabel) {
         const fontSize = Math.max(10 / globalScale, 1.8);
@@ -191,21 +201,22 @@ export function GraphPreview() {
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = isHovered ? "#1A1A1A" : "#555555";
-        ctx.fillText(node.label, x, y + size + 3);
+        ctx.fillText(node.label, x, y + size + 3 / Math.pow(globalScale, 0.5));
       }
     },
     []
   );
 
   const handlePointerArea = useCallback(
-    (node: FGNode, color: string, ctx: CanvasRenderingContext2D) => {
+    (node: FGNode, color: string, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const confidence = getConfidenceLevel(node);
       const isSource = node.nodeType === "doj_source" || node.nodeType === "bb_source" || node.nodeType === "epstein_source";
       const isEpstein = isSource || confidence !== null;
       const baseSize = nodeSize(node.degree ?? 0, node.pagerank);
-      const size = isSource ? Math.max(baseSize, 20) : isEpstein ? baseSize : baseSize * 0.5;
+      const rawSize = isSource ? Math.max(baseSize, 20) : isEpstein ? baseSize : baseSize * 0.5;
+      const size = rawSize / Math.pow(globalScale, 0.5);
       ctx.beginPath();
-      ctx.arc(node.x ?? 0, node.y ?? 0, size + 8, 0, 2 * Math.PI);
+      ctx.arc(node.x ?? 0, node.y ?? 0, size + 8 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
       ctx.fillStyle = color;
       ctx.fill();
     },
@@ -262,13 +273,7 @@ export function GraphPreview() {
   }, [router]);
 
   const handleLinkColor = useCallback((link: FGLink) => {
-    // Differentiate APPEARS_IN by source type
-    if (link.relType === "APPEARS_IN") {
-      const target = typeof link.target === "object" ? link.target : null;
-      if (target?.nodeType === "doj_source") return nodeColors.doj_source + "CC";
-      if (target?.nodeType === "bb_source") return nodeColors.bb_source + "CC";
-      return linkColors.APPEARS_IN + "CC";
-    }
+    if (link.relType === "APPEARS_IN") return linkColors.APPEARS_IN + "CC";
     const base = linkColors[link.relType ?? ""] ?? "#DDDDDD";
     return base + "66";
   }, []);

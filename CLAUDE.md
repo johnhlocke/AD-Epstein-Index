@@ -5,7 +5,7 @@ A research project that cross-references every homeowner featured in Architectur
 
 **Live site:** https://www.wheretheylive.world
 
-**Current stats:** 3,440 features, 470 issues, 232 confirmed dossiers (~170 unique people), 1,431 total dossiers
+**Current stats:** 3,440 features, 470 issues, 233 confirmed dossiers (~173 unique people), 1,434 total dossiers
 
 ## Project Phases
 
