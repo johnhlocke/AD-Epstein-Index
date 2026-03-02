@@ -59,6 +59,12 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .from("cross_references")
     .select("id", { count: "exact", head: true });
 
+  // Count Anonymous features directly (source of truth — not derived by subtraction)
+  const { count: anonymousCount } = await sb
+    .from("features")
+    .select("id", { count: "exact", head: true })
+    .eq("homeowner_name", "Anonymous");
+
   const allIssues = issues ?? [];
 
   // Issue counts
@@ -156,6 +162,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
         ? allIssues.find((i) => i.id === feature.issue_id)
         : null;
       return {
+        dossierId: d.id as number,
         personName: (d.subject_name as string) ?? "Unknown",
         year: issue?.year ?? 0,
         month: issue?.month ?? null,
@@ -236,6 +243,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     },
     features: {
       total: featuresCount ?? allFeatures.length,
+      anonymous: anonymousCount ?? 0,
       withHomeowner: allFeatures.filter((f) => f.homeowner_name).length,
       uniqueHomeowners: new Set(allFeatures.map((f) => f.homeowner_name).filter(Boolean)).size,
       byYear,
@@ -418,7 +426,7 @@ export async function getFeatures(
     // Step 3: Fetch full feature data for just this page
     const { data: pageData } = await sb
       .from("features")
-      .select("*, issues!inner(month, year), dossiers(id)")
+      .select("*, issues!inner(month, year), dossiers(id, editor_verdict)")
       .in("id", pageIds);
 
     // Re-sort to match our sorted order

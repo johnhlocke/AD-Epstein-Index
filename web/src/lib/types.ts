@@ -77,6 +77,7 @@ export interface Dossier {
   editor_reasoning: string | null;
   editor_reviewed_at: string | null;
   investigated_at: string | null;
+  sibling_dossiers: SiblingDossier[];
   created_at: string;
   updated_at: string | null;
 }
@@ -96,6 +97,13 @@ export interface DossierImage {
 export interface FeatureWithIssue extends Feature {
   issue_month: number | null;
   issue_year: number;
+}
+
+/** Sibling dossier — same person, different home (stored in dossier JSONB) */
+export interface SiblingDossier {
+  dossier_id: number;
+  location: string | null;
+  issue_date: string | null;
 }
 
 /** Enriched dossier with feature + issue context */
@@ -123,6 +131,7 @@ export interface StatsResponse {
   };
   features: {
     total: number;
+    anonymous: number;
     withHomeowner: number;
     uniqueHomeowners: number;
     byYear: { year: number; count: number }[];
@@ -139,6 +148,7 @@ export interface StatsResponse {
     strengthCounts: Record<string, number>;
   };
   confirmedTimeline: {
+    dossierId: number;
     personName: string;
     year: number;
     month: number | null;

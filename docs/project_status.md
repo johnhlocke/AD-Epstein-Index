@@ -215,6 +215,8 @@ This file should be automatically updated when necessary to answer three key que
 | Clive Davis, Steve Wynn, Travolta policy corrections (REJECTED) | Phase 2 | Done |
 | 5 same-person conflict resolutions (Douglas, Walters, Irving, Kluge, Koch) | Phase 2 | Done |
 | Investigation Funnel date range display | Phase 3 | Done |
+| Fig. 7 timeline redesign (frequency line, hatched fill, legal callouts) | Phase 3 | Done |
+| Clickable dossier dots in timeline chart | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 

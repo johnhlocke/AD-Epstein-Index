@@ -6,6 +6,27 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-02 (Session 59)
+
+### Changed — Fig. 7 Timeline Chart Redesign
+
+- **Fig. 7 scatter chart overhaul** — Complete visual redesign of the confirmed timeline chart:
+  - Dots changed from colored/variable-size to uniform gray (#999999, r=4, 0.45 opacity) — recedes behind the trend line
+  - Red frequency line overlay (#C0392B, 3px) showing annual count of Epstein features via Catmull-Rom SVG path
+  - Hatched area fill (45° diagonal red stripes, 5px spacing, 0.75 opacity) between the line and x-axis
+  - Four editorial callout annotations with vertical lines connecting to the frequency line: "2005: Epstein Arrested", "2009: Epstein Released", "2010: Seigal Rehabilitation", "2019: 2nd Arrest, Epstein Dies"
+  - Callout positions use linear interpolation against annual counts for precise alignment with the curve
+  - Removed: vertical year grid lines, red shaded zones, top/right border lines
+  - Chart title updated: subtitle now reads "AD Epstein Features Per Year Closely Follow His Legal Timeline"
+  - Caption updated to describe the legal timeline narrative arc
+  - Chart height increased to 460px with extra Y-axis space above January for callout text
+- **Clickable dossier dots** — Each scatter dot now opens the corresponding dossier page in a new tab via `window.open()`
+- **Dossier ID in timeline data** — Added `dossierId` field to `confirmedTimeline` query (queries.ts), `StatsResponse` type (types.ts), and `TimelineEntry` interface
+- **Tooltip enhancement** — Hover tooltip now shows "Click to view dossier" hint in copper
+- **Recharts tooltip z-index** — `wrapperStyle={{ zIndex: 20 }}` ensures tooltip renders above the SVG overlay (z-index: 10)
+
+---
+
 ## 2026-03-01 (Session 57 + 58)
 
 ### Added — Fresh-Eyes Audit, New Confirmations, Pipeline Override Protection
