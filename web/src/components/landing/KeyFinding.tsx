@@ -53,6 +53,7 @@ export function KeyFinding({ stats }: KeyFindingProps) {
             </div>
             <VerdictSankey
               featuresTotal={stats.features.total}
+              anonymous={stats.features.anonymous}
               crossRefsTotal={stats.crossReferences.total}
               dossiersTotal={stats.dossiers.total}
               confirmed={stats.dossiers.confirmed}

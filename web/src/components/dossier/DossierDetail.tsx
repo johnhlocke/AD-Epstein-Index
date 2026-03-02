@@ -25,6 +25,14 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
     ? `${issue.month ? MONTH_NAMES[issue.month] + " " : ""}${issue.year}`
     : "Unknown issue";
 
+  const keyFindings = Array.isArray(dossier.key_findings)
+    ? dossier.key_findings as string[]
+    : [];
+
+  const siblings = Array.isArray(dossier.sibling_dossiers)
+    ? dossier.sibling_dossiers
+    : [];
+
   return (
     <SectionContainer width="narrow" className="py-12">
       <Link
@@ -34,6 +42,7 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
         &larr; Back to Index
       </Link>
 
+      {/* 1. Header */}
       <div className="mt-6 flex items-start justify-between gap-4">
         <div>
           <h1 className="font-serif text-4xl font-bold">{dossier.subject_name}</h1>
@@ -44,7 +53,7 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
         <VerdictBadge verdict={dossier.editor_verdict} size="lg" />
       </div>
 
-      {/* Quick stats */}
+      {/* 2. Quick stats */}
       <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
         {dossier.connection_strength && (
           <Card className="!h-[108px] !py-0 overflow-hidden gap-0">
@@ -76,7 +85,7 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
         )}
       </div>
 
-      {/* Editor review */}
+      {/* 3. Editor's Review */}
       {dossier.editor_reasoning && (
         <>
           <Separator className="my-8" />
@@ -94,7 +103,64 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
         </>
       )}
 
-      {/* Aesthetic profile */}
+      {/* 4. Key Findings — non-collapsible */}
+      {keyFindings.length > 0 && (
+        <>
+          <Separator className="my-8" />
+          <h2 className="mb-4 font-serif text-2xl font-bold">Key Findings</h2>
+          <div className="rounded-lg border border-border bg-muted/50 p-6">
+            <ul className="space-y-3">
+              {keyFindings.map((finding: string, i: number) => (
+                <li key={i} className="flex gap-3 text-sm leading-relaxed">
+                  <span className="mt-0.5 shrink-0 text-muted-foreground">&bull;</span>
+                  <span>{finding}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        </>
+      )}
+
+      {/* 5. Evidence (Epstein Connections) — collapsible */}
+      {dossier.epstein_connections && (
+        <>
+          <Separator className="my-8" />
+          <h2 className="mb-4 font-serif text-2xl font-bold">Evidence</h2>
+          <div className="space-y-4">
+            <EvidenceSection
+              title="Epstein Connections"
+              data={dossier.epstein_connections}
+              defaultOpen
+            />
+          </div>
+        </>
+      )}
+
+      {/* 6. Additional AD Featured Homes */}
+      <Separator className="my-8" />
+      <h2 className="mb-4 font-serif text-2xl font-bold">Additional AD Featured Homes</h2>
+      {siblings.length > 0 ? (
+        <div className="grid gap-3 sm:grid-cols-2">
+          {siblings.map((s) => (
+            <Link
+              key={s.dossier_id}
+              href={`/dossier/${s.dossier_id}`}
+              className="rounded-lg border border-border p-4 transition-colors hover:bg-muted/50"
+            >
+              <p className="font-semibold">{s.location || "Location unknown"}</p>
+              {s.issue_date && (
+                <p className="mt-1 text-sm text-muted-foreground">
+                  <em>Architectural Digest</em>, {s.issue_date}
+                </p>
+              )}
+            </Link>
+          ))}
+        </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">None.</p>
+      )}
+
+      {/* 7. Aesthetic Profile */}
       {feature && (
         <>
           <Separator className="my-8" />
@@ -102,27 +168,20 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
         </>
       )}
 
-      {/* Evidence sections */}
+      {/* 8. Analysis sections — collapsible */}
       <Separator className="my-8" />
-      <h2 className="mb-4 font-serif text-2xl font-bold">Evidence</h2>
+      <h2 className="mb-4 font-serif text-2xl font-bold">Analysis</h2>
       <div className="space-y-4">
         <EvidenceSection
           title="AD Appearance"
           data={dossier.ad_appearance}
           defaultOpen
         />
-        <EvidenceSection
-          title="Epstein Connections"
-          data={dossier.epstein_connections}
-          defaultOpen
-        />
         <EvidenceSection title="Home Analysis" data={dossier.home_analysis} />
         <EvidenceSection title="Pattern Analysis" data={dossier.pattern_analysis} />
-        <EvidenceSection title="Key Findings" data={dossier.key_findings} />
-        <EvidenceSection title="Visual Analysis" data={dossier.visual_analysis} />
       </div>
 
-      {/* Article images */}
+      {/* 9. Article images */}
       {dossier.images.length > 0 && (
         <>
           <Separator className="my-8" />
@@ -150,7 +209,7 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
         </>
       )}
 
-      {/* Strength rationale */}
+      {/* 10. Connection Assessment */}
       {dossier.strength_rationale && (
         <>
           <Separator className="my-8" />

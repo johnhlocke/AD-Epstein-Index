@@ -583,7 +583,7 @@ function ShneidermanMatrix() {
  */
 interface MethodologyProps {
   stats?: {
-    features: { total: number };
+    features: { total: number; anonymous: number };
     crossReferences: { total: number };
     dossiers: {
       total: number;
@@ -2984,6 +2984,7 @@ export function AgentMethodologySection({ stats }: MethodologyProps) {
                 {stats ? (
                   <VerdictSankey
                     featuresTotal={stats.features.total}
+                    anonymous={stats.features.anonymous}
                     crossRefsTotal={stats.crossReferences.total}
                     dossiersTotal={stats.dossiers.total}
                     confirmed={stats.dossiers.confirmed}

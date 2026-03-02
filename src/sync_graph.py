@@ -171,15 +171,43 @@ def build_feature_batch(features, issues, xrefs, dossiers):
             if bb_status and bb_status not in ("no_match", "pending"):
                 bb_match_type = bb_status
                 bb_confidence = float(xref.get("confidence_score") or 0)
-            doj_status = xref.get("doj_status", "")
-            if doj_status and doj_status not in ("no_match", "pending", "searched"):
+            doj_results = xref.get("doj_results")
+            if isinstance(doj_results, str):
+                try:
+                    doj_results = json.loads(doj_results) if doj_results else {}
+                except (json.JSONDecodeError, TypeError):
+                    doj_results = {}
+            doj_results = doj_results or {}
+            doj_total = doj_results.get("total_results", 0)
+            if doj_total and doj_total > 0:
                 doj_match = True
 
         dossier_id = None
+        doj_evidence_count = 0
+        doj_evidence_summary = None
+        doj_document_url = None
+
         if dossier:
             connection_strength = dossier.get("connection_strength")
             editor_verdict = dossier.get("editor_verdict")
             dossier_id = dossier.get("id")
+
+            # Extract DOJ evidence from epstein_connections JSONB
+            ec = dossier.get("epstein_connections")
+            if isinstance(ec, str):
+                try:
+                    ec = json.loads(ec) if ec else []
+                except (json.JSONDecodeError, TypeError):
+                    ec = []
+            if isinstance(ec, list):
+                doj_entries = [e for e in ec if isinstance(e, dict) and e.get("source") == "doj_library"]
+                doj_evidence_count = len(doj_entries)
+                if doj_entries:
+                    first = doj_entries[0]
+                    doj_evidence_summary = (first.get("evidence") or "")[:500] or None
+                    urls = first.get("document_urls")
+                    if isinstance(urls, list) and urls:
+                        doj_document_url = urls[0]
 
         # Parse aesthetic_profile JSONB
         raw_profile = f.get("aesthetic_profile") or {}
@@ -227,6 +255,9 @@ def build_feature_batch(features, issues, xrefs, dossiers):
             "bb_match_type": bb_match_type,
             "bb_confidence": bb_confidence,
             "doj_match": doj_match,
+            "doj_evidence_count": doj_evidence_count,
+            "doj_evidence_summary": doj_evidence_summary,
+            "doj_document_url": doj_document_url,
             "dossier_id": dossier_id,
             "feature_id": f["id"],
             # Aesthetic taxonomy dimensions
@@ -323,10 +354,22 @@ def sync_batch(batch):
                       ai.confidence = row.bb_confidence
     )
 
-    // DOJ connection (conditional)
+    // DOJ connection (conditional) — with evidence metadata
     FOREACH (_ IN CASE WHEN row.doj_match THEN [1] ELSE [] END |
         MERGE (doj:EpsteinSource {name: 'DOJ Library'})
-        MERGE (p)-[:APPEARS_IN]->(doj)
+        MERGE (p)-[doj_rel:APPEARS_IN]->(doj)
+        ON CREATE SET doj_rel.evidence_count = row.doj_evidence_count,
+                      doj_rel.evidence_summary = row.doj_evidence_summary,
+                      doj_rel.document_url = row.doj_document_url
+        ON MATCH SET  doj_rel.evidence_count = CASE
+                          WHEN row.doj_evidence_count > coalesce(doj_rel.evidence_count, 0)
+                          THEN row.doj_evidence_count ELSE doj_rel.evidence_count END,
+                      doj_rel.evidence_summary = CASE
+                          WHEN doj_rel.evidence_summary IS NULL AND row.doj_evidence_summary IS NOT NULL
+                          THEN row.doj_evidence_summary ELSE doj_rel.evidence_summary END,
+                      doj_rel.document_url = CASE
+                          WHEN doj_rel.document_url IS NULL AND row.doj_document_url IS NOT NULL
+                          THEN row.doj_document_url ELSE doj_rel.document_url END
     )
 
     // Aesthetic taxonomy — dimensional Style nodes

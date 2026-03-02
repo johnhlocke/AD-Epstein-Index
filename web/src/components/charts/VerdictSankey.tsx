@@ -96,6 +96,7 @@ const LIGHT_LINK_COLORS: Record<string, LinkEnd> = {
 
 interface VerdictSankeyProps {
   featuresTotal: number;
+  anonymous: number;
   crossRefsTotal: number;
   dossiersTotal: number;
   confirmed: number;
@@ -353,6 +354,7 @@ const TIER_ORDER = [
 
 export function VerdictSankey({
   featuresTotal,
+  anonymous,
   crossRefsTotal,
   dossiersTotal,
   confirmed,
@@ -370,8 +372,9 @@ export function VerdictSankey({
 
   if (!mounted) return null;
 
-  const anonymous = featuresTotal - crossRefsTotal;
-  const dismissed = crossRefsTotal - dossiersTotal;
+  // Named homeowners = total features minus anonymous (source of truth from Supabase)
+  const namedFeatures = featuresTotal - anonymous;
+  const dismissed = namedFeatures - dossiersTotal;
 
   // Build nodes and links for a 5-stage funnel:
   // Stage 0: AD FEATURES SINCE 1988 → ANONYMOUS + HOMEOWNER NAMES (Reader + Courier)
@@ -389,10 +392,10 @@ export function VerdictSankey({
   nodes.push({ name: "ANONYMOUS" });              // idx 1
   links.push({ source: 0, target: 1, value: Math.max(anonymous, 1) });
 
-  // Node 2: cross-referenced names
+  // Node 2: named homeowners (features minus anonymous — source of truth from Supabase)
   const xrefIdx = nodes.length;
   nodes.push({ name: "HOMEOWNER NAMES" }); // idx 2
-  links.push({ source: 0, target: xrefIdx, value: Math.max(crossRefsTotal, 1) });
+  links.push({ source: 0, target: xrefIdx, value: Math.max(namedFeatures, 1) });
 
   // Node 3: dismissed
   const dismissedIdx = nodes.length;
@@ -441,8 +444,8 @@ export function VerdictSankey({
   // are terminal nodes, keeping them at the same column depth.
 
   const data = { nodes, links };
-  const rejectionRate = crossRefsTotal > 0
-    ? Math.round(((crossRefsTotal - confirmed) / crossRefsTotal) * 100)
+  const rejectionRate = namedFeatures > 0
+    ? Math.round(((namedFeatures - confirmed) / namedFeatures) * 100)
     : 0;
 
   const annotDim = variant === "light" ? "rgba(90, 90, 100, 0.5)" : "rgba(90, 90, 100, 0.55)";
@@ -457,7 +460,7 @@ export function VerdictSankey({
           className="text-[9px] tracking-wider"
           style={{ fontFamily: annotFont, color: annotDim }}
         >
-          {featuresTotal.toLocaleString()} features &rarr; {crossRefsTotal.toLocaleString()} names cross-referenced
+          {featuresTotal.toLocaleString()} features &rarr; {namedFeatures.toLocaleString()} named homeowners
         </p>
         <p
           className="text-[9px] tracking-wider"

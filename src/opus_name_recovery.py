@@ -6,7 +6,7 @@ Two outcomes per feature:
   - Name found → written to JSONL for manual review
   - No name found → marked anonymous, auto-applied with --apply
 
-Usage:
+Usage (NULL name resolution):
     python3 src/opus_name_recovery.py --dry-run          # Candidate count + cost estimate
     python3 src/opus_name_recovery.py --limit 10         # Test on 10 features
     python3 src/opus_name_recovery.py                    # Process all NULL features
@@ -14,6 +14,12 @@ Usage:
     python3 src/opus_name_recovery.py --apply            # Apply anonymous to DB
     python3 src/opus_name_recovery.py --apply --names    # Also apply found names (after review)
     python3 src/opus_name_recovery.py --model claude-opus-4-6  # Use Opus instead of Sonnet
+
+Usage (xref-anonymous verification — 66 features with junk cross-references):
+    python3 src/opus_name_recovery.py --verify-xref-anonymous --dry-run
+    python3 src/opus_name_recovery.py --verify-xref-anonymous
+    python3 src/opus_name_recovery.py --verify-xref-anonymous --stats
+    python3 src/opus_name_recovery.py --verify-xref-anonymous --apply --names
 """
 
 import argparse
@@ -43,6 +49,7 @@ client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
 
 DEFAULT_MODEL = "claude-opus-4-6"
 OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "null_name_resolution")
+VERIFY_OUTPUT_DIR = os.path.join(os.path.dirname(__file__), "..", "data", "anon_verification")
 HEADERS = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36"}
 AD_ARCHIVE_BLOB = "https://architecturaldigest.blob.core.windows.net/architecturaldigest{date}thumbnails/Pages/0x600/{page}.jpg"
 MAX_IMAGES = 20
@@ -188,6 +195,58 @@ def fetch_null_candidates():
     return deduped
 
 
+def fetch_xref_anonymous_candidates():
+    """Get Anonymous features that have cross-reference records (need verification).
+
+    These 66 features were never run through the original name recovery pipeline.
+    They have xrefs because the pipeline searched "Anonymous" as a name — junk data.
+    Some xrefs contain real-looking names that may or may not be correct.
+    """
+    # Get all feature_ids from cross_references
+    xref_fids = set()
+    offset = 0
+    while True:
+        batch = sb.from_("cross_references").select("feature_id").range(offset, offset + 999).execute()
+        for x in batch.data:
+            xref_fids.add(x["feature_id"])
+        if len(batch.data) < 1000:
+            break
+        offset += 1000
+
+    # Get Anonymous features
+    anon_feats = []
+    offset = 0
+    while True:
+        batch = sb.from_("features").select(
+            "id, homeowner_name, article_title, designer_name, issue_id, page_number"
+        ).eq("homeowner_name", "Anonymous").range(offset, offset + 999).execute()
+        anon_feats.extend(batch.data)
+        if len(batch.data) < 1000:
+            break
+        offset += 1000
+
+    # Intersect: Anonymous features that have xrefs
+    candidates = [f for f in anon_feats if f["id"] in xref_fids]
+
+    # Enrich with issue metadata + xref name/verdict
+    for f in candidates:
+        iss = sb.from_("issues").select("id, year, month, source_url").eq("id", f["issue_id"]).execute()
+        if iss.data:
+            f["_year"] = iss.data[0].get("year")
+            f["_month"] = iss.data[0].get("month")
+            f["_source_url"] = iss.data[0].get("source_url")
+
+        xref = sb.from_("cross_references").select(
+            "homeowner_name, combined_verdict, binary_verdict"
+        ).eq("feature_id", f["id"]).execute()
+        if xref.data:
+            f["_xref_name"] = xref.data[0].get("homeowner_name", "")
+            f["_xref_verdict"] = xref.data[0].get("combined_verdict", "")
+            f["_xref_binary"] = xref.data[0].get("binary_verdict", "")
+
+    return candidates
+
+
 # ═══════════════════════════════════════════════════════════
 # Image fetching (with Azure Blob fallback)
 # ═══════════════════════════════════════════════════════════
@@ -314,14 +373,15 @@ def get_images_for_feature(feat):
 # JSONL output
 # ═══════════════════════════════════════════════════════════
 
-def get_output_path():
+def get_output_path(output_dir=None, prefix="resolved"):
     """Return path to JSONL output file (resume-aware)."""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    existing = sorted(glob.glob(os.path.join(OUTPUT_DIR, "resolved_*.jsonl")))
+    d = output_dir or OUTPUT_DIR
+    os.makedirs(d, exist_ok=True)
+    existing = sorted(glob.glob(os.path.join(d, f"{prefix}_*.jsonl")))
     if existing:
         return existing[-1]
     ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-    return os.path.join(OUTPUT_DIR, f"resolved_{ts}.jsonl")
+    return os.path.join(d, f"{prefix}_{ts}.jsonl")
 
 
 def load_processed_ids(jsonl_path):
@@ -441,10 +501,12 @@ def process_feature(feat, model):
 # Commands
 # ═══════════════════════════════════════════════════════════
 
-def cmd_dry_run(candidates, model):
+def cmd_dry_run(candidates, model, verify_mode=False):
     """Preview candidate count and estimated cost."""
     print(f"\nCandidates: {len(candidates)}")
     print(f"Model: {model}")
+    if verify_mode:
+        print(f"Mode: VERIFY xref-anonymous")
 
     # Sample image counts from first 50
     total_images = 0
@@ -466,11 +528,25 @@ def cmd_dry_run(candidates, model):
     print(f"Estimated cost: ${est_cost:.2f}")
     print(f"Estimated time: ~{len(candidates) * 2 / 60:.0f} minutes")
 
+    if verify_mode:
+        # Show xref names for review
+        with_names = [f for f in candidates if f.get("_xref_name") and f["_xref_name"] != "Anonymous"]
+        print(f"\nXrefs with real-looking names: {len(with_names)}")
+        for f in sorted(with_names, key=lambda x: x.get("_xref_name", "")):
+            fid = f["id"]
+            xn = f.get("_xref_name", "?")
+            xv = f.get("_xref_verdict", "?")
+            title = (f.get("article_title") or "")[:40]
+            yr = f.get("_year", "?")
+            print(f"  #{fid:5d} ({yr}) xref: {xn:35s} [{xv}]  {title}")
 
-def cmd_stats():
+
+def cmd_stats(verify_mode=False):
     """Print summary of latest results."""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    existing = sorted(glob.glob(os.path.join(OUTPUT_DIR, "resolved_*.jsonl")))
+    d = VERIFY_OUTPUT_DIR if verify_mode else OUTPUT_DIR
+    prefix = "verify" if verify_mode else "resolved"
+    os.makedirs(d, exist_ok=True)
+    existing = sorted(glob.glob(os.path.join(d, f"{prefix}_*.jsonl")))
     if not existing:
         print("No results found.")
         return
@@ -541,14 +617,21 @@ def cmd_stats():
             ev = (r.get("evidence") or "")[:80]
             fid = r.get("feature_id")
             print(f"  #{fid:5d} [{conf:6s}] {name:40s} [{cat}]")
+            if verify_mode:
+                xn = r.get("xref_name", "?")
+                xv = r.get("xref_verdict", "?")
+                match = "MATCH" if xn and name and xn.lower() == name.lower() else "DIFFERS"
+                print(f"         xref: {xn} [{xv}] — {match}")
             if ev:
                 print(f"         {ev}")
 
 
-def cmd_apply(apply_names=False):
+def cmd_apply(apply_names=False, verify_mode=False):
     """Apply results to Supabase."""
-    os.makedirs(OUTPUT_DIR, exist_ok=True)
-    existing = sorted(glob.glob(os.path.join(OUTPUT_DIR, "resolved_*.jsonl")))
+    d = VERIFY_OUTPUT_DIR if verify_mode else OUTPUT_DIR
+    prefix = "verify" if verify_mode else "resolved"
+    os.makedirs(d, exist_ok=True)
+    existing = sorted(glob.glob(os.path.join(d, f"{prefix}_*.jsonl")))
     if not existing:
         print("No results found.")
         return
@@ -560,19 +643,27 @@ def cmd_apply(apply_names=False):
     name_count = 0
     cat_count = 0
     skip_count = 0
+    xref_deleted = 0
 
     for r in results:
         fid = r.get("feature_id")
         result_type = r.get("result")
 
         if result_type == "anonymous":
-            updates = {"homeowner_name": "Anonymous"}
+            # Feature stays Anonymous — update category if found
+            updates = {}
             cat = r.get("subject_category")
             if cat and cat in VALID_CATEGORIES:
                 updates["subject_category"] = cat
                 cat_count += 1
-            sb.from_("features").update(updates).eq("id", fid).execute()
+            if updates:
+                sb.from_("features").update(updates).eq("id", fid).execute()
             anon_count += 1
+
+            # In verify mode, delete the junk xref (searched "Anonymous" as a name)
+            if verify_mode:
+                sb.from_("cross_references").delete().eq("feature_id", fid).execute()
+                xref_deleted += 1
 
         elif result_type == "name_found":
             if apply_names:
@@ -583,21 +674,35 @@ def cmd_apply(apply_names=False):
                     cat_count += 1
                 sb.from_("features").update(updates).eq("id", fid).execute()
                 name_count += 1
+
+                # In verify mode: if Opus found a DIFFERENT name than the xref,
+                # the xref is stale — delete it so it gets re-crossreferenced
+                if verify_mode:
+                    xref_name = r.get("xref_name", "")
+                    opus_name = r.get("homeowner_name", "")
+                    if xref_name and opus_name and xref_name.lower() != opus_name.lower():
+                        sb.from_("cross_references").delete().eq("feature_id", fid).execute()
+                        xref_deleted += 1
             else:
                 skip_count += 1
 
     print(f"\nApplied to Supabase:")
-    print(f"  Anonymous set: {anon_count}")
+    print(f"  Confirmed anonymous: {anon_count}")
     if apply_names:
-        print(f"  Names written: {name_count}")
+        print(f"  Names written:      {name_count}")
     else:
-        print(f"  Names skipped: {skip_count} (use --apply --names after review)")
-    print(f"  Categories set: {cat_count}")
+        print(f"  Names skipped:      {skip_count} (use --apply --names after review)")
+    print(f"  Categories set:     {cat_count}")
+    if verify_mode:
+        print(f"  Junk xrefs deleted: {xref_deleted}")
 
 
-def cmd_run(candidates, model, limit=None):
+def cmd_run(candidates, model, limit=None, verify_mode=False):
     """Main processing loop with JSONL output and resume support."""
-    jsonl_path = get_output_path()
+    if verify_mode:
+        jsonl_path = get_output_path(output_dir=VERIFY_OUTPUT_DIR, prefix="verify")
+    else:
+        jsonl_path = get_output_path()
     already_done = load_processed_ids(jsonl_path)
 
     # Filter out already-processed
@@ -631,24 +736,37 @@ def cmd_run(candidates, model, limit=None):
 
         try:
             result = process_feature(feat, model)
+
+            # In verify mode, attach xref metadata for review comparison
+            if verify_mode:
+                result["xref_name"] = feat.get("_xref_name", "")
+                result["xref_verdict"] = feat.get("_xref_verdict", "")
+                result["xref_binary"] = feat.get("_xref_binary", "")
+
             append_result(jsonl_path, result)
 
             total_in += result.get("input_tokens", 0)
             total_out += result.get("output_tokens", 0)
 
             rt = result["result"]
+            xref_info = ""
+            if verify_mode:
+                xn = feat.get("_xref_name", "")
+                if xn and xn != "Anonymous":
+                    xref_info = f"  (xref: {xn})"
+
             if rt == "name_found":
                 found += 1
                 name = result.get("homeowner_name", "?")
                 conf = result.get("confidence", "?")
                 own = " [OWN HOME]" if result.get("is_designers_own_home") else ""
-                print(f"  [{i+1:4d}/{len(remaining)}] #{fid} ({year}) → {name} [{conf}]{own}")
+                print(f"  [{i+1:4d}/{len(remaining)}] #{fid} ({year}) → {name} [{conf}]{own}{xref_info}")
                 print(f"    Evidence: {(result.get('evidence') or '')[:120]}")
             elif rt == "anonymous":
                 anon += 1
                 cat = result.get("subject_category", "?")
                 why = (result.get("why_anonymous") or "?")[:100]
-                print(f"  [{i+1:4d}/{len(remaining)}] #{fid} ({year}) ANON [{cat}]: {why}")
+                print(f"  [{i+1:4d}/{len(remaining)}] #{fid} ({year}) ANON [{cat}]: {why}{xref_info}")
             elif rt == "skipped":
                 skipped += 1
                 print(f"  [{i+1:4d}/{len(remaining)}] #{fid} ({year}) SKIP: no images")
@@ -686,10 +804,11 @@ def cmd_run(candidates, model, limit=None):
     print(f"  Errors:        {errors}")
     print(f"  Cost:          ${cost:.2f} ({total_in:,} in / {total_out:,} out)")
     print(f"  Output:        {jsonl_path}")
+    flag = " --verify-xref-anonymous" if verify_mode else ""
     print(f"\nNext steps:")
-    print(f"  python3 src/opus_name_recovery.py --stats           # Review results")
-    print(f"  python3 src/opus_name_recovery.py --apply           # Set anonymous in DB")
-    print(f"  python3 src/opus_name_recovery.py --apply --names   # Also write found names")
+    print(f"  python3 src/opus_name_recovery.py{flag} --stats           # Review results")
+    print(f"  python3 src/opus_name_recovery.py{flag} --apply           # Apply anonymous + delete junk xrefs")
+    print(f"  python3 src/opus_name_recovery.py{flag} --apply --names   # Also write found names")
 
 
 # ═══════════════════════════════════════════════════════════
@@ -704,28 +823,39 @@ def main():
     parser.add_argument("--stats", action="store_true", help="Print summary of latest results")
     parser.add_argument("--apply", action="store_true", help="Apply results to Supabase")
     parser.add_argument("--names", action="store_true", help="With --apply, also write found names")
+    parser.add_argument("--verify-xref-anonymous", action="store_true",
+                        help="Verify 66 Anonymous features that have cross-references")
     args = parser.parse_args()
 
+    verify = args.verify_xref_anonymous
+
     print("=" * 60)
-    print("NULL NAME RESOLUTION — Vision re-read pipeline")
+    if verify:
+        print("ANONYMOUS XREF VERIFICATION — Vision re-read pipeline")
+    else:
+        print("NULL NAME RESOLUTION — Vision re-read pipeline")
     print("=" * 60)
 
     if args.stats:
-        cmd_stats()
+        cmd_stats(verify_mode=verify)
         return
 
     if args.apply:
-        cmd_apply(apply_names=args.names)
+        cmd_apply(apply_names=args.names, verify_mode=verify)
         return
 
-    candidates = fetch_null_candidates()
-    print(f"Total NULL candidates: {len(candidates)}")
+    if verify:
+        candidates = fetch_xref_anonymous_candidates()
+        print(f"Anonymous features with xrefs: {len(candidates)}")
+    else:
+        candidates = fetch_null_candidates()
+        print(f"Total NULL candidates: {len(candidates)}")
 
     if args.dry_run:
-        cmd_dry_run(candidates, args.model)
+        cmd_dry_run(candidates, args.model, verify_mode=verify)
         return
 
-    cmd_run(candidates, args.model, limit=args.limit)
+    cmd_run(candidates, args.model, limit=args.limit, verify_mode=verify)
 
 
 if __name__ == "__main__":

@@ -136,10 +136,11 @@ export function GraphPreview() {
       const y = node.y ?? 0;
       const color = nodeColors[node.nodeType] ?? "#888";
       const isHovered = hoveredNodeRef.current?.id === node.id;
+      const isSquare = node.nodeType === "location";
 
       ctx.save();
 
-      // Uncertainty ring (copper, no glow — just clean strokes)
+      // Uncertainty ring
       if (confidence !== null) {
         const uc = uncertaintyConfig[confidence];
 
@@ -165,7 +166,12 @@ export function GraphPreview() {
       if (isHovered) {
         ctx.globalAlpha = 1;
         ctx.beginPath();
-        ctx.arc(x, y, size + 5 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
+        if (isSquare) {
+          const h = size + 5 / Math.pow(globalScale, 0.5);
+          ctx.rect(x - h, y - h, h * 2, h * 2);
+        } else {
+          ctx.arc(x, y, size + 5 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
+        }
         ctx.strokeStyle = "#333";
         ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
@@ -176,14 +182,22 @@ export function GraphPreview() {
 
       // Fill
       ctx.beginPath();
-      ctx.arc(x, y, size, 0, 2 * Math.PI);
+      if (isSquare) {
+        ctx.rect(x - size, y - size, size * 2, size * 2);
+      } else {
+        ctx.arc(x, y, size, 0, 2 * Math.PI);
+      }
       ctx.fillStyle = color;
       ctx.globalAlpha = isHovered ? 1.0 : 0.85;
       ctx.fill();
 
       // Stroke
       ctx.beginPath();
-      ctx.arc(x, y, size, 0, 2 * Math.PI);
+      if (isSquare) {
+        ctx.rect(x - size, y - size, size * 2, size * 2);
+      } else {
+        ctx.arc(x, y, size, 0, 2 * Math.PI);
+      }
       ctx.strokeStyle = color;
       ctx.lineWidth = 1 / globalScale;
       ctx.globalAlpha = 1;
@@ -215,8 +229,13 @@ export function GraphPreview() {
       const baseSize = nodeSize(node.degree ?? 0, node.pagerank);
       const rawSize = isSource ? Math.max(baseSize, 20) : isEpstein ? baseSize : baseSize * 0.5;
       const size = rawSize / Math.pow(globalScale, 0.5);
+      const hit = size + 8 / Math.pow(globalScale, 0.5);
       ctx.beginPath();
-      ctx.arc(node.x ?? 0, node.y ?? 0, size + 8 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
+      if (node.nodeType === "location") {
+        ctx.rect((node.x ?? 0) - hit, (node.y ?? 0) - hit, hit * 2, hit * 2);
+      } else {
+        ctx.arc(node.x ?? 0, node.y ?? 0, hit, 0, 2 * Math.PI);
+      }
       ctx.fillStyle = color;
       ctx.fill();
     },
@@ -357,7 +376,7 @@ export function GraphPreview() {
                   className="flex items-center gap-2 text-[10px] text-muted-foreground"
                 >
                   <span
-                    className="inline-block h-[6px] w-[6px] rounded-full"
+                    className={`inline-block h-[6px] w-[6px] ${type === "location" ? "" : "rounded-full"}`}
                     style={{ backgroundColor: nodeColors[type] }}
                   />
                   <span>{label}</span>

@@ -6,6 +6,23 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-02 (Session 60)
+
+### Changed — Dossier UI Restructure, Graph Squares, Red Confirmed Badges, Sankey Fix
+
+- **Dossier detail page restructure** (`DossierDetail.tsx`) — Numbered section layout:
+  1. Header, 2. Quick stats, 3. Editor's Review, 4. **Key Findings** (non-collapsible bullet list), 5. **Evidence** (renamed from "Epstein Connections"), 6. **Additional AD Featured Homes** (sibling dossiers for same person), 7. Aesthetic Profile, 8. Analysis (collapsible)
+- **Confirmed badge color change** — SearchableIndex Report column badges changed from gold (#8B5E2B) to red (#B91C1C) for confirmed connections. Arrow stroke updated to match (#FCA5A5).
+- **VerdictSankey anonymous fix** — Funnel now uses `featuresTotal - anonymous` (Supabase source of truth) instead of `featuresTotal - crossRefsTotal` for the Named Homeowners count. Fixes the 66-feature discrepancy from junk xrefs on Anonymous features.
+- **Graph location nodes as squares** — Location nodes in both GraphPreview and ConnectionExplorer now render as squares (rect) instead of circles, with matching hover/selection rings and hit areas. Legend dot for locations also changed to square.
+- **ConfirmedTimeline dot interactivity** — Scatter dots now have hover effects (fill change, size increase) and click to open dossier page in new tab.
+- **Deterministic location normalization** (`normalize_locations.py`) — Complete rewrite from LLM-based (Haiku API calls) to exact-match dictionary mappings. Zero API cost, instant execution. Normalizes country abbreviations (US→United States), state abbreviations (NY→New York), city synonyms, and UK region handling.
+- **Neo4j sync DOJ evidence enrichment** (`sync_graph.py`) — Person nodes now carry `doj_evidence_count`, `doj_evidence_summary`, and `doj_document_url` extracted from dossier `epstein_connections` JSONB. DOJ match detection uses `doj_results.total_results > 0` instead of string status check.
+- **Opus name recovery xref-anonymous mode** (`opus_name_recovery.py`) — New `--verify-xref-anonymous` flag for the 66 Anonymous features with junk cross-references. Separate output directory, verification pipeline with `--stats` and `--apply --names`.
+- **Figure number correction** — Graph preview caption updated from Fig. 5 to Fig. 8
+
+---
+
 ## 2026-03-02 (Session 59)
 
 ### Changed — Fig. 7 Timeline Chart Redesign

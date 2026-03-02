@@ -154,6 +154,7 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
       const confidence = getConfidenceLevel(node);
       const isSelected = selectedNode?.id === node.id;
       const isHovered = hoveredNode?.id === node.id;
+      const isSquare = node.nodeType === "location";
 
       ctx.save();
 
@@ -188,7 +189,12 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
       // ── 2. Selection ring ──
       if (isSelected) {
         ctx.beginPath();
-        ctx.arc(x, y, size + 6 / zoomDamp, 0, 2 * Math.PI);
+        if (isSquare) {
+          const h = size + 6 / zoomDamp;
+          ctx.rect(x - h, y - h, h * 2, h * 2);
+        } else {
+          ctx.arc(x, y, size + 6 / zoomDamp, 0, 2 * Math.PI);
+        }
         ctx.strokeStyle = "#FFF";
         ctx.lineWidth = 2 / globalScale;
         ctx.stroke();
@@ -197,7 +203,12 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
       // ── 3. Hover highlight ──
       if (isHovered && !isSelected) {
         ctx.beginPath();
-        ctx.arc(x, y, size + 5 / zoomDamp, 0, 2 * Math.PI);
+        if (isSquare) {
+          const h = size + 5 / zoomDamp;
+          ctx.rect(x - h, y - h, h * 2, h * 2);
+        } else {
+          ctx.arc(x, y, size + 5 / zoomDamp, 0, 2 * Math.PI);
+        }
         ctx.strokeStyle = "rgba(255,255,255,0.35)";
         ctx.lineWidth = 1.5 / globalScale;
         ctx.stroke();
@@ -209,7 +220,11 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
 
       // Outer ring
       ctx.beginPath();
-      ctx.arc(x, y, size, 0, 2 * Math.PI);
+      if (isSquare) {
+        ctx.rect(x - size, y - size, size * 2, size * 2);
+      } else {
+        ctx.arc(x, y, size, 0, 2 * Math.PI);
+      }
       ctx.strokeStyle = color;
       ctx.lineWidth = 1.5 / globalScale;
       ctx.globalAlpha = 1;
@@ -217,7 +232,12 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
 
       // Inner fill
       ctx.beginPath();
-      ctx.arc(x, y, size * 0.55, 0, 2 * Math.PI);
+      if (isSquare) {
+        const inner = size * 0.55;
+        ctx.rect(x - inner, y - inner, inner * 2, inner * 2);
+      } else {
+        ctx.arc(x, y, size * 0.55, 0, 2 * Math.PI);
+      }
       ctx.fillStyle = color;
       ctx.globalAlpha = isHovered ? 0.9 : 0.7;
       ctx.fill();
@@ -255,8 +275,13 @@ export function ConnectionExplorer({ navOffset = 56 }: ConnectionExplorerProps =
     (node: FGNode, color: string, ctx: CanvasRenderingContext2D, globalScale: number) => {
       const rawSize = nodeSize(node.degree ?? 0, node.pagerank);
       const size = rawSize / Math.pow(globalScale, 0.5);
+      const hit = size + 8 / Math.pow(globalScale, 0.5);
       ctx.beginPath();
-      ctx.arc(node.x ?? 0, node.y ?? 0, size + 8 / Math.pow(globalScale, 0.5), 0, 2 * Math.PI);
+      if (node.nodeType === "location") {
+        ctx.rect((node.x ?? 0) - hit, (node.y ?? 0) - hit, hit * 2, hit * 2);
+      } else {
+        ctx.arc(node.x ?? 0, node.y ?? 0, hit, 0, 2 * Math.PI);
+      }
       ctx.fillStyle = color;
       ctx.fill();
     },

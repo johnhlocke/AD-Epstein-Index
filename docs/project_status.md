@@ -217,6 +217,13 @@ This file should be automatically updated when necessary to answer three key que
 | Investigation Funnel date range display | Phase 3 | Done |
 | Fig. 7 timeline redesign (frequency line, hatched fill, legal callouts) | Phase 3 | Done |
 | Clickable dossier dots in timeline chart | Phase 3 | Done |
+| Dossier detail page restructure (Key Findings, Evidence, Siblings) | Phase 3 | Done |
+| Confirmed badge red color (SearchableIndex) | Phase 3 | Done |
+| VerdictSankey anonymous count fix | Phase 3 | Done |
+| Graph location nodes as squares | Phase 3 | Done |
+| Deterministic location normalization (no LLM) | Tooling | Done |
+| Neo4j DOJ evidence enrichment on Person nodes | Phase 3.5 | Done |
+| Opus name recovery xref-anonymous verification mode | Phase 1 | Done |
 
 ## 2. What's Been Accomplished
 

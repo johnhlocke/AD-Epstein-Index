@@ -145,7 +145,7 @@ export default async function Home() {
                 <GraphPreview />
               </div>
               <p className="n-caption">
-                Fig. 5 &mdash; Interactive knowledge graph of confirmed Epstein
+                Fig. 8 &mdash; Interactive knowledge graph of confirmed Epstein
                 connections within the AD homeowner population. Copper rings
                 mark confirmed links. Drag to explore, scroll to zoom.
               </p>

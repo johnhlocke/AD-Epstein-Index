@@ -134,8 +134,10 @@ function buildFrequencyPath(
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function CustomDot(props: any) {
-  const { cx, cy } = props;
+  const { cx, cy, payload } = props;
   if (cx == null || cy == null) return null;
+  const dossier = payload as PlotPoint | undefined;
+  const dossierId = dossier?.dossierId;
   return (
     <circle
       cx={cx}
@@ -144,6 +146,20 @@ function CustomDot(props: any) {
       fill={DOT_COLOR}
       fillOpacity={0.45}
       stroke="none"
+      style={{ cursor: dossierId ? "pointer" : undefined }}
+      onMouseEnter={(e) => {
+        (e.target as SVGCircleElement).setAttribute("fill", "#1A1A1A");
+        (e.target as SVGCircleElement).setAttribute("fill-opacity", "1");
+        (e.target as SVGCircleElement).setAttribute("r", "5");
+      }}
+      onMouseLeave={(e) => {
+        (e.target as SVGCircleElement).setAttribute("fill", DOT_COLOR);
+        (e.target as SVGCircleElement).setAttribute("fill-opacity", "0.45");
+        (e.target as SVGCircleElement).setAttribute("r", String(DOT_R));
+      }}
+      onClick={() => {
+        if (dossierId) window.open(`/dossier/${dossierId}`, "_blank");
+      }}
     />
   );
 }
