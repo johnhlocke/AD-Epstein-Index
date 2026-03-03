@@ -565,37 +565,57 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
 
   return (
     <div>
-      <h2 className="mb-2 font-serif text-2xl font-bold">Aesthetic Profile</h2>
+      <p
+        className="text-[11px] font-bold uppercase tracking-[0.15em]"
+        style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
+      >
+        Aesthetic Profile
+      </p>
+      <hr className="mt-2" style={{ border: 0, borderTop: "2px solid #1A1A1A" }} />
 
       {/* Scored Home Qualities summary — prefer Opus aesthetic_profile over template */}
       {(feature.aesthetic_profile || summary) && (
-        <div className="mb-6 rounded-lg border border-border bg-muted/30 p-5">
-          <div className="flex items-center gap-2">
-            <h3 className="text-xs font-bold uppercase tracking-[0.12em] text-muted-foreground">
+        <div
+          className="mt-5 overflow-hidden border"
+          style={{ backgroundColor: "#FAFAFA", borderColor: "#000", borderWidth: "1px", boxShadow: "4px 4px 0 0 #000" }}
+        >
+          <div className="flex items-center gap-2 px-4 py-2" style={{ borderBottom: "1px solid #000", backgroundColor: "#EDEDED" }}>
+            <p
+              className="text-[9px] font-bold uppercase tracking-[0.12em]"
+              style={{ fontFamily: "futura-pt, sans-serif", color: "#000" }}
+            >
               Scored Home Qualities
-            </h3>
+            </p>
             {feature.scoring_version && (
-              <span className="font-mono text-[10px] text-muted-foreground/60">
+              <span className="font-mono text-[9px]" style={{ color: "#999" }}>
                 {feature.scoring_version}
               </span>
             )}
           </div>
-          {feature.aesthetic_profile ? (
-            <blockquote className="mt-3 border-l-2 border-foreground/20 pl-4 font-serif text-lg italic leading-[1.8] text-foreground">
-              {feature.aesthetic_profile}
-            </blockquote>
-          ) : (
-            <p className="mt-2 font-serif text-base leading-[1.7] text-foreground">
-              {summary}
-            </p>
-          )}
+          <div className="px-4 py-4">
+            {feature.aesthetic_profile ? (
+              <blockquote
+                className="border-l-2 border-[#1A1A1A]/20 pl-4 text-[16px] italic leading-[1.8]"
+                style={{ fontFamily: "'Lora', serif", color: "#333" }}
+              >
+                {feature.aesthetic_profile}
+              </blockquote>
+            ) : (
+              <p
+                className="text-[15px] leading-[1.7]"
+                style={{ fontFamily: "'Lora', serif", color: "#333" }}
+              >
+                {summary}
+              </p>
+            )}
+          </div>
         </div>
       )}
 
       {/* Full-width radar chart */}
       <div
-        className="h-[420px] overflow-hidden rounded border border-border shadow-[0_2px_12px_rgba(0,0,0,0.06)]"
-        style={{ backgroundColor: "#FAFAFA" }}
+        className="mt-5 h-[420px] overflow-hidden border"
+        style={{ backgroundColor: "#FAFAFA", borderColor: "#000", borderWidth: "1px", boxShadow: "4px 4px 0 0 #000" }}
       >
         {mounted ? (
           <ResponsiveContainer width="100%" height="100%">
@@ -621,20 +641,23 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
       </div>
 
       {/* Scoring rationale — flat 3-column grid so rows align across groups */}
-      <div className="mt-6 grid gap-x-6 gap-y-3 md:grid-cols-3">
+      <div className="mt-6 grid gap-x-4 gap-y-3 md:grid-cols-3">
         {/* Group headers */}
         {(["SPACE", "STORY", "STAGE"] as const).map((groupKey) => {
           const [title, subtitle] = groupLabels[groupKey].split(" — ");
           return (
             <div key={groupKey} className="mb-1 text-center">
               <p
-                className="text-lg font-bold uppercase tracking-[0.1em]"
-                style={{ color: GROUP_COLORS[groupKey] }}
+                className="text-[14px] font-bold uppercase tracking-[0.12em]"
+                style={{ fontFamily: "futura-pt, sans-serif", color: GROUP_COLORS[groupKey] }}
               >
                 {title}
               </p>
               {subtitle && (
-                <p className="text-xs italic text-muted-foreground">
+                <p
+                  className="text-[10px] italic"
+                  style={{ fontFamily: "'Lora', serif", color: "#999" }}
+                >
                   {subtitle}
                 </p>
               )}
@@ -649,11 +672,12 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
             return (
               <div
                 key={item.label}
-                className="rounded border border-border bg-muted/30 px-4 py-4"
+                className="overflow-hidden border"
+                style={{ backgroundColor: "#FAFAFA", borderColor: "#000", borderWidth: "1px" }}
               >
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 px-3 py-3">
                   <span
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded font-mono text-xs font-bold text-white"
+                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center font-mono text-xs font-bold text-white"
                     style={{
                       backgroundColor: GROUP_COLORS[item.group as keyof typeof GROUP_COLORS],
                       opacity: 0.4 + (item.scoreValue - 1) * 0.15,
@@ -662,12 +686,17 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
                     {item.scoreValue}
                   </span>
                   <div>
-                    <span className="text-sm font-medium">{item.label}</span>
-                    <div className="mt-1 flex gap-1">
+                    <span
+                      className="text-[12px] font-bold uppercase tracking-[0.08em]"
+                      style={{ fontFamily: "futura-pt, sans-serif" }}
+                    >
+                      {item.label}
+                    </span>
+                    <div className="mt-1 flex gap-0.5">
                       {[1, 2, 3, 4, 5].map((dot) => (
                         <div
                           key={dot}
-                          className="h-2 w-2 rounded-full"
+                          className="h-1.5 w-3"
                           style={{
                             backgroundColor:
                               dot <= item.scoreValue ? "#555" : "#E5E5E5",
@@ -677,9 +706,14 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
                     </div>
                   </div>
                 </div>
-                <p className="mt-5 text-xs leading-relaxed text-muted-foreground">
-                  {item.anchor}
-                </p>
+                <div className="border-t border-[#E5E5E5] px-3 py-3">
+                  <p
+                    className="text-[11px] leading-[1.6]"
+                    style={{ fontFamily: "'Lora', serif", color: "#666" }}
+                  >
+                    {item.anchor}
+                  </p>
+                </div>
               </div>
             );
           })

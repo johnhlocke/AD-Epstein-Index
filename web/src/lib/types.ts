@@ -106,11 +106,30 @@ export interface SiblingDossier {
   issue_date: string | null;
 }
 
+/** Wealth profile from wealth_profiles table */
+export interface WealthProfile {
+  forbes_score: number | null;
+  forbes_confidence: string | null;
+  classification: string | null;
+  wealth_source: string | null;
+  background: string | null;
+  trajectory: string | null;
+  rationale: string | null;
+  education: string | null;
+  museum_boards: string | null;
+  elite_boards: string | null;
+  generational_wealth: string | null;
+  cultural_capital_notes: string | null;
+  social_capital_notes: string | null;
+  bio_summary: string | null;
+}
+
 /** Enriched dossier with feature + issue context */
 export interface DossierWithContext extends Dossier {
   feature: Feature | null;
   issue: Issue | null;
   images: DossierImage[];
+  wealth: WealthProfile | null;
 }
 
 /** Stats API response */
@@ -201,6 +220,7 @@ export interface FeatureReport {
   issue: Issue | null;
   images: FeatureImage[];
   dossier: Dossier | null;
+  wealth: WealthProfile | null;
 }
 
 /** Hero mosaic tile data */

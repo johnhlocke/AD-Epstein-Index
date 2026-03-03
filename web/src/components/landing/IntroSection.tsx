@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 
 // ── Sidenote components (same pattern as MethodologySection) ─────────────────
 
@@ -215,6 +215,62 @@ export function IntroSection({ stats }: IntroSectionProps) {
   const sectionRef = useRef<HTMLDivElement>(null);
   usePreventSidenoteOverlap(sectionRef);
 
+  // ── Cascade connector overlay ──
+  const cascadeRef = useRef<HTMLDivElement>(null);
+  const [cascadeOverlay, setCascadeOverlay] = useState<{
+    w: number; h: number;
+    connectors: Array<{ sx: number; sy: number; ex: number; ey: number; fromIsLeft: boolean }>;
+  } | null>(null);
+
+  const computeCascade = useCallback(() => {
+    const el = cascadeRef.current;
+    if (!el) return;
+    const cr = el.getBoundingClientRect();
+    const steps = ["A", "B", "1", "2", "3", "4"];
+    const rects: Record<string, DOMRect> = {};
+    for (const s of steps) {
+      const node = el.querySelector<HTMLElement>(`[data-step="${s}"]`);
+      if (node) rects[s] = node.getBoundingClientRect();
+    }
+    const pairs: [string, string][] = [["A","B"],["B","1"],["1","2"],["2","3"],["3","4"]];
+    const connectors = pairs.map(([from, to]) => {
+      const f = rects[from], t = rects[to];
+      if (!f || !t) return null;
+      const fCenter = f.left + f.width / 2 - cr.left;
+      const fromIsLeft = fCenter < cr.width / 2;
+      // Start: bottom-right (left img) or bottom-left (right img), nudged up 12px
+      const sx = fromIsLeft ? f.right - cr.left : f.left - cr.left;
+      const sy = f.bottom - cr.top - 12;
+      // End: top edge of target image
+      const ex = t.left + t.width / 2 - cr.left;
+      const ey = t.top - cr.top;
+      // Path: vertical down through gutter, then horizontal into target center
+      return { sx, sy, ex, ey, fromIsLeft };
+    }).filter(Boolean) as Array<{ sx: number; sy: number; ex: number; ey: number; fromIsLeft: boolean }>;
+    setCascadeOverlay({ w: cr.width, h: cr.height, connectors });
+  }, []);
+
+  useEffect(() => {
+    const el = cascadeRef.current;
+    if (!el) return;
+    // Wait for all cascade images to load before measuring
+    const imgs = Array.from(el.querySelectorAll<HTMLImageElement>("img"));
+    let loaded = 0;
+    const onLoad = () => { loaded++; if (loaded >= imgs.length) computeCascade(); };
+    for (const img of imgs) {
+      if (img.complete) loaded++;
+      else img.addEventListener("load", onLoad);
+    }
+    if (loaded >= imgs.length) requestAnimationFrame(computeCascade);
+    const fallback = setTimeout(computeCascade, 800);
+    window.addEventListener("resize", computeCascade);
+    return () => {
+      clearTimeout(fallback);
+      window.removeEventListener("resize", computeCascade);
+      for (const img of imgs) img.removeEventListener("load", onLoad);
+    };
+  }, [computeCascade]);
+
   return (
     <div ref={sectionRef} className="text-[16px] font-medium leading-[1.65] text-[#333]" style={{ fontFamily: "'Lora', serif" }}>
       {/* ── Paragraph 1 ── */}
@@ -284,6 +340,61 @@ export function IntroSection({ stats }: IntroSectionProps) {
           achieve its social purpose.
         </p>
       </SidenoteBlock>
+
+      {/* ── Diagram 1: Venn Overlap ── */}
+      <div
+        className="float-left mb-4 mr-6 hidden md:block"
+        style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
+      >
+        <svg
+          viewBox="0 0 280 200"
+          className="w-full"
+          role="img"
+          aria-label={`Venn diagram: ${stats.dossiers.confirmed} confirmed connections between AD homeowners and Epstein's social network`}
+        >
+          <title>Overlap between AD homeowners and Epstein&apos;s social network</title>
+          <defs>
+            {/* Halftone dot pattern — AD */}
+            <pattern id="intro-dots" x="0" y="0" width="3.5" height="3.5" patternUnits="userSpaceOnUse">
+              <circle cx="1.75" cy="1.75" r="0.8" fill="#333" fillOpacity={0.4} />
+            </pattern>
+            {/* Diagonal line hatching — Epstein */}
+            <pattern id="intro-lines" x="0" y="0" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+              <line x1="0" y1="0" x2="0" y2="3" stroke="#333" strokeWidth={0.7} strokeOpacity={0.55} />
+            </pattern>
+            {/* Clip paths for each circle */}
+            <clipPath id="intro-clip-ad"><circle cx="108" cy="94" r="62" /></clipPath>
+            <clipPath id="intro-clip-ep"><circle cx="172" cy="94" r="62" /></clipPath>
+          </defs>
+
+          {/* Title */}
+          <text x="140" y="16" textAnchor="middle" style={{ fontSize: 9, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }} fill="#999">The Narrowest Sliver</text>
+
+          {/* AD circle — dots */}
+          <rect x="0" y="0" width="280" height="200" fill="url(#intro-dots)" clipPath="url(#intro-clip-ad)" />
+
+          {/* Epstein circle — diagonal lines */}
+          <rect x="0" y="0" width="280" height="200" fill="url(#intro-lines)" clipPath="url(#intro-clip-ep)" />
+
+          {/* Overlap count */}
+          <text x="140" y="91" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 32, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#333">
+            {stats.dossiers.confirmed}
+          </text>
+
+          {/* AD label — below left */}
+          <text x="68" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">AD HOMEOWNERS</text>
+          <text x="68" y="186" textAnchor="middle" style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#555">
+            {stats.features.uniqueHomeowners.toLocaleString()}
+          </text>
+
+          {/* Epstein label — below right */}
+          <text x="212" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">EPSTEIN NETWORK</text>
+        </svg>
+        <p className="mt-1 text-[11px] italic text-[#aaa]" style={{ fontFamily: "'Lora', serif" }}>
+          Fig. i &mdash; Both institutions draw from the same narrow pool of
+          dominant-class habitus.
+        </p>
+      </div>
 
       {/* ── Paragraph 3 ── */}
       <SidenoteBlock
@@ -359,6 +470,153 @@ export function IntroSection({ stats }: IntroSectionProps) {
         </p>
       </SidenoteBlock>
 
+      {/* Clear float from diagram 1 */}
+      <div style={{ clear: "both" }} />
+
+      {/* ── Fig. ii: Meaning Transfer Cascade ── */}
+      <div
+        className="float-left mb-4 mr-6 hidden md:block"
+        style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)", position: "relative", zIndex: 1 }}
+      >
+        <div ref={cascadeRef} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 24 }}>
+          {/* Step A: AD Feature — left */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div data-step="A" style={{ width: "55%", flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <a href="https://www.architecturaldigest.com/story/how-this-stunning-brooklyn-townhouse-became-a-forever-family-home" target="_blank" rel="noopener noreferrer">
+                <img src="/cascade/ad-feature.png" alt="Camaleonda sofa in AD feature, October 2018" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+              </a>
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Editorial Origin</p>
+              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                <em>Architectural Digest</em>, Oct 2018. Camaleonda by Mario Bellini for B&amp;B Italia.
+              </p>
+              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$25,000+</p>
+            </div>
+          </div>
+
+          {/* Step B: Celebrity Amplification — right */}
+          <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
+            <div data-step="B" style={{ width: "55%", flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <a href="https://www.instagram.com/p/CLC_gXOhW_u/" target="_blank" rel="noopener noreferrer">
+                <img src="/cascade/chrissy-teigen.png" alt="Chrissy Teigen with Camaleonda sofa on Instagram" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+              </a>
+            </div>
+            <div style={{ flex: 1, textAlign: "right" }}>
+              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Celebrity Amplification</p>
+              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                Celebrity, Instagram. 574K likes. Feb 2021.
+              </p>
+              <p style={{ fontFamily: "'Lora', serif", fontSize: 10, fontStyle: "italic", color: "#666", marginTop: 2, lineHeight: 1.4 }}>
+                Commenter: &ldquo;Just got my sofa!!! Love it!&rdquo;
+              </p>
+            </div>
+          </div>
+
+          {/* Step 1: B&B Italia Original — left */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div data-step="1" style={{ width: "55%", flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <a href="https://shop.bebitalia.com/en/us/camaleonda-straight-sofa---olive-green-chenille--chenille-green/E_CAM_0008.html" target="_blank" rel="noopener noreferrer">
+                <img src="/cascade/bb-italia.png" alt="B&B Italia Camaleonda original, $18,921" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+              </a>
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Original Reissued</p>
+              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                B&amp;B Italia Camaleonda. Mario Bellini, 2020 reissue.
+              </p>
+              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$18,921.00</p>
+            </div>
+          </div>
+
+          {/* Step 2: Reproduction — right */}
+          <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
+            <div data-step="2" style={{ width: "55%", flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <a href="https://eternitymodern.com/mario-bellini-sofa-combination-006" target="_blank" rel="noopener noreferrer">
+                <img src="/cascade/eternity-modern.png" alt="Eternity Modern reproduction, $6,285" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+              </a>
+            </div>
+            <div style={{ flex: 1, textAlign: "right" }}>
+              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Reproduction</p>
+              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                Eternity Modern. &ldquo;Mario Bellini Sofa.&rdquo;
+              </p>
+              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$6,285.00</p>
+            </div>
+          </div>
+
+          {/* Step 3: Mass Market — left */}
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div data-step="3" style={{ width: "55%", flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <a href="https://www.walmart.com/ip/bokifol-104-Modular-Sectional-Sofa-for-Living-Room-Cloud-Couch-3-Seat-Sofa-for-Apartment-Office-Bedroom-Green/16676450426" target="_blank" rel="noopener noreferrer">
+                <img src="/cascade/walmart.png" alt="Walmart Bokifol sectional, $699" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+              </a>
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Mass Market</p>
+              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                Walmart. &ldquo;Bokifol Sectional Sofa.&rdquo;
+              </p>
+              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$698.99</p>
+            </div>
+          </div>
+
+          {/* Step 4: Ultra-cheap knockoff — right */}
+          <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
+            <div data-step="4" style={{ width: "55%", flexShrink: 0 }}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <a href="https://www.temu.com/loveseat-sofa-couch-modern-minimalist-velvet-sofas-suitable-for-christmas-modular-l-sahped-sectional-sofa-free-combination-sofa-for-living-room-office-apartment-lounge-room-reception-room-romantic-furnitureidiy-combination-pet-friendly-g-601103676797003.html" target="_blank" rel="noopener noreferrer">
+                <img src="/cascade/temu.png" alt="Temu knockoff sofa, $403" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+              </a>
+            </div>
+            <div style={{ flex: 1, textAlign: "right" }}>
+              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Knockoff</p>
+              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                Temu. &ldquo;Loveseat Sofa Couch, Modern Minimalist Velvet.&rdquo;
+              </p>
+              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$403.18</p>
+            </div>
+          </div>
+
+          {/* Connector overlay — drawn after measuring image positions */}
+          {cascadeOverlay && cascadeOverlay.connectors.length > 0 && (
+            <svg
+              viewBox={`0 0 ${cascadeOverlay.w} ${cascadeOverlay.h}`}
+              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 10 }}
+            >
+              {cascadeOverlay.connectors.map((c, i) => {
+                // Path: horizontal from dot to target center-x, then vertical down
+                // Arrowhead points DOWN at target center
+                return (
+                  <g key={i}>
+                    <circle cx={c.sx} cy={c.sy} r={4} fill="#bbb" />
+                    <path
+                      d={`M ${c.sx} ${c.sy} L ${c.ex} ${c.sy} L ${c.ex} ${c.ey - 8}`}
+                      fill="none" stroke="#bbb" strokeWidth={1.5}
+                    />
+                    <polygon
+                      points={`${c.ex - 5},${c.ey - 10} ${c.ex},${c.ey} ${c.ex + 5},${c.ey - 10}`}
+                      fill="#bbb"
+                    />
+                  </g>
+                );
+              })}
+            </svg>
+          )}
+        </div>
+
+        <p className="mt-2 text-[11px] italic text-[#aaa]" style={{ fontFamily: "'Lora', serif" }}>
+          Fig. ii &mdash; McCracken&rsquo;s meaning transfer in action: from an AD
+          feature to your Temu cart in six steps. The sofa loses its provenance
+          at each tier; the silhouette survives.
+        </p>
+      </div>
+
       {/* ── Paragraph 5 ── */}
       <SidenoteBlock
         note={
@@ -389,61 +647,6 @@ export function IntroSection({ stats }: IntroSectionProps) {
           this as a foregone conclusion, not a conspiracy. The overlap was inevitable.
         </p>
       </SidenoteBlock>
-
-      {/* ── Diagram 1: Venn Overlap ── */}
-      <div
-        className="float-left mb-4 mr-6 hidden md:block"
-        style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
-      >
-        <svg
-          viewBox="0 0 280 200"
-          className="w-full"
-          role="img"
-          aria-label={`Venn diagram: ${stats.dossiers.confirmed} confirmed connections between AD homeowners and Epstein's social network`}
-        >
-          <title>Overlap between AD homeowners and Epstein&apos;s social network</title>
-          <defs>
-            {/* Halftone dot pattern — AD */}
-            <pattern id="intro-dots" x="0" y="0" width="3.5" height="3.5" patternUnits="userSpaceOnUse">
-              <circle cx="1.75" cy="1.75" r="0.8" fill="#333" fillOpacity={0.4} />
-            </pattern>
-            {/* Diagonal line hatching — Epstein */}
-            <pattern id="intro-lines" x="0" y="0" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="3" stroke="#333" strokeWidth={0.7} strokeOpacity={0.55} />
-            </pattern>
-            {/* Clip paths for each circle */}
-            <clipPath id="intro-clip-ad"><circle cx="108" cy="94" r="62" /></clipPath>
-            <clipPath id="intro-clip-ep"><circle cx="172" cy="94" r="62" /></clipPath>
-          </defs>
-
-          {/* Title */}
-          <text x="140" y="16" textAnchor="middle" style={{ fontSize: 9, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }} fill="#999">The Narrowest Sliver</text>
-
-          {/* AD circle — dots */}
-          <rect x="0" y="0" width="280" height="200" fill="url(#intro-dots)" clipPath="url(#intro-clip-ad)" />
-
-          {/* Epstein circle — diagonal lines */}
-          <rect x="0" y="0" width="280" height="200" fill="url(#intro-lines)" clipPath="url(#intro-clip-ep)" />
-
-          {/* Overlap count */}
-          <text x="140" y="91" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 32, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#333">
-            {stats.dossiers.confirmed}
-          </text>
-
-          {/* AD label — below left */}
-          <text x="68" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">AD HOMEOWNERS</text>
-          <text x="68" y="186" textAnchor="middle" style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#555">
-            {stats.features.uniqueHomeowners.toLocaleString()}
-          </text>
-
-          {/* Epstein label — below right */}
-          <text x="212" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">EPSTEIN NETWORK</text>
-        </svg>
-        <p className="mt-1 text-[11px] italic text-[#aaa]" style={{ fontFamily: "'Lora', serif" }}>
-          Fig. i &mdash; Both institutions draw from the same narrow pool of
-          dominant-class habitus.
-        </p>
-      </div>
 
       {/* ── Paragraph 6 — Trickle-Down Fashion ── */}
       <SidenoteBlock
@@ -548,38 +751,6 @@ export function IntroSection({ stats }: IntroSectionProps) {
           penthouse eventually finds its way to your local West Elm.
         </p>
       </SidenoteBlock>
-
-      {/* Clear float from diagram 1 */}
-      <div style={{ clear: "both" }} />
-
-      {/* ── Floated Diagram 2: Meaning Transfer Pipeline (placed in flow before paragraph 8) ── */}
-      <div
-        className="float-left mb-4 mr-6 hidden md:block"
-        style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
-      >
-        <div className="flex h-[200px] w-full items-center justify-center border border-dashed border-[#999] bg-[#F5F5F0]">
-          <div className="text-center">
-            <p
-              className="text-[13px] font-bold uppercase tracking-[0.1em] text-[#999]"
-              style={{ fontFamily: "futura-pt, sans-serif" }}
-            >
-              Diagram Placeholder
-            </p>
-            <p className="mt-2 text-[14px] italic text-[#666]">
-              Pipeline: Elite Home &rarr; AD Feature &rarr; Social Media &rarr;
-              Mass Market
-            </p>
-            <p className="mt-1 text-[12px] text-[#999]">
-              McCracken&rsquo;s meaning transfer cascade through the editorial
-              pipeline
-            </p>
-          </div>
-        </div>
-        <p className="mt-2 text-[12px] italic text-[#999]">
-          Fig. ii &mdash; How aesthetic meaning cascades from elite homes to your
-          local West Elm.
-        </p>
-      </div>
 
       {/* ── Paragraph 8 — Trickle-Round + Shoppable Content ── */}
       <SidenoteBlock

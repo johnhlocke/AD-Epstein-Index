@@ -1,17 +1,42 @@
 import Image from "next/image";
 import Link from "next/link";
-import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
 import { SectionContainer } from "@/components/layout/SectionContainer";
 import { VerdictBadge } from "./VerdictBadge";
 import { EvidenceSection } from "./EvidenceSection";
 import { DossierAestheticRadar } from "./DossierAestheticRadar";
+import { FitName } from "./FitName";
+import { ArticleImageGrid } from "./ArticleImageGrid";
+import { getDossierPageBackground } from "@/lib/design-tokens";
 import type { DossierWithContext } from "@/lib/types";
 
 const MONTH_NAMES = [
   "", "January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December",
 ];
+
+/** Feltron card container styles — black border, offset shadow, white fill */
+const CARD = {
+  backgroundColor: "#FAFAFA",
+  borderColor: "#000",
+  borderWidth: "1px",
+  boxShadow: "4px 4px 0 0 #000",
+} as const;
+
+/** Feltron card header bar */
+const CARD_HEADER = {
+  borderBottom: "1px solid #000",
+  backgroundColor: "#EDEDED",
+} as const;
+
+/** futura-pt label (9px uppercase) */
+const LABEL = {
+  fontFamily: "futura-pt, sans-serif",
+  fontSize: "9px",
+  fontWeight: 700,
+  textTransform: "uppercase" as const,
+  letterSpacing: "0.12em",
+  color: "#000",
+};
 
 interface DossierDetailProps {
   dossier: DossierWithContext;
@@ -20,6 +45,7 @@ interface DossierDetailProps {
 export function DossierDetail({ dossier }: DossierDetailProps) {
   const feature = dossier.feature;
   const issue = dossier.issue;
+  const wealth = dossier.wealth;
 
   const issueDateStr = issue
     ? `${issue.month ? MONTH_NAMES[issue.month] + " " : ""}${issue.year}`
@@ -33,194 +59,344 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
     ? dossier.sibling_dossiers
     : [];
 
-  return (
-    <SectionContainer width="narrow" className="py-12">
-      <Link
-        href="/#verdicts"
-        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        &larr; Back to Index
-      </Link>
+  const pageBg = getDossierPageBackground(dossier);
 
-      {/* 1. Header */}
-      <div className="mt-6 flex items-start justify-between gap-4">
-        <div>
-          <h1 className="font-serif text-4xl font-bold">{dossier.subject_name}</h1>
-          <p className="mt-2 text-muted-foreground">
-            Featured in <em>Architectural Digest</em>, {issueDateStr}
+  return (
+    <div style={{ backgroundColor: pageBg, minHeight: "100vh", position: "relative", overflow: "hidden" }}>
+      {/* Giant dossier number — background watermark */}
+      <div
+        aria-hidden
+        style={{
+          position: "absolute",
+          top: 0,
+          left: "-0.2em",
+          margin: 0,
+          padding: 0,
+          fontFamily: "futura-pt, sans-serif",
+          fontWeight: 900,
+          fontSize: "clamp(200px, 25vw, 400px)",
+          lineHeight: 1,
+          letterSpacing: "-0.08em",
+          color: "rgba(0, 0, 0, 0.05)",
+          pointerEvents: "none",
+          zIndex: 0,
+          userSelect: "none",
+          writingMode: "vertical-lr",
+          textOrientation: "sideways",
+          transform: "rotate(180deg)",
+          transformOrigin: "center center",
+        }}
+      >
+        {dossier.id}
+      </div>
+      <SectionContainer width="wide" className="relative z-[1] pt-4 pb-12">
+        {/* 1. Back link */}
+        <Link
+          href="/#verdicts"
+          className="inline-block text-[10px] font-bold uppercase tracking-[0.15em] text-[#1A1A1A]/60 transition-colors hover:text-[#1A1A1A]"
+          style={{ fontFamily: "futura-pt, sans-serif" }}
+        >
+          &larr; Back to Index
+        </Link>
+
+        {/* 2. Section A header */}
+        <div className="mt-16">
+          <p style={{ fontFamily: "'Lora', serif", color: "#1A1A1A", lineHeight: 1.4 }}>
+            <span style={{ fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Section A:</span>
+            <br />
+            <span style={{ fontSize: "14px", fontWeight: 700, backgroundColor: "#000", color: pageBg, padding: "2px 6px", display: "block", marginTop: "4px" }}>Homeowner Information</span>
           </p>
         </div>
-        <VerdictBadge verdict={dossier.editor_verdict} size="lg" />
-      </div>
 
-      {/* 2. Quick stats */}
-      <div className="mt-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-        {dossier.connection_strength && (
-          <Card className="!h-[108px] !py-0 overflow-hidden gap-0">
-            <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">Connection Strength</p>
-              <p className="mt-1 font-mono font-semibold">{dossier.connection_strength}</p>
-            </CardContent>
-          </Card>
-        )}
-        {dossier.confidence_score !== null && (
-          <Card className="!h-[108px] !py-0 overflow-hidden gap-0">
-            <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">Confidence</p>
-              <p className="mt-1 font-mono font-semibold">
-                {Math.round(dossier.confidence_score * 100)}%
-              </p>
-            </CardContent>
-          </Card>
-        )}
-        {feature?.location_city && (
-          <Card className="!h-[108px] !py-0 overflow-hidden gap-0">
-            <CardContent className="p-3">
-              <p className="text-xs text-muted-foreground">Location</p>
-              <p className="mt-1 font-semibold">
-                {[feature.location_city, feature.location_state].filter(Boolean).join(", ")}
-              </p>
-            </CardContent>
-          </Card>
-        )}
-      </div>
-
-      {/* 3. Editor's Review */}
-      {dossier.editor_reasoning && (
-        <>
-          <Separator className="my-8" />
-          <div className="rounded-lg border border-border bg-muted/50 p-6">
-            <h2 className="font-serif text-lg font-semibold">Editor&rsquo;s Review</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {dossier.editor_reasoning}
-            </p>
-            {dossier.editor_reviewed_at && (
-              <p className="mt-2 text-xs text-muted-foreground">
-                Reviewed: {new Date(dossier.editor_reviewed_at).toLocaleDateString()}
+        {/* 3. Name + badge + stat rows */}
+        <div className="mt-4" style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "24px" }}>
+          {/* Row 1: Name (cols 1-4) + Connection/Badge (cols 5-7), bottoms aligned */}
+          <div style={{ gridColumn: "1 / 5", gridRow: "1", display: "flex", flexDirection: "column" }}>
+            <p className="mb-1 px-1" style={{ fontFamily: "'Lora', serif", fontSize: "8px", fontWeight: 700, textTransform: "none", letterSpacing: "0.02em", color: "#1A1A1A", marginTop: 0 }}>Homeowner Name</p>
+            <div style={{ borderTop: "1px solid #000" }} />
+            <div style={{ marginTop: "auto", transform: "translateY(calc(0.08em + 3px))" }}>
+              <FitName name={dossier.subject_name} />
+            </div>
+          </div>
+          {/* Row 2: About (cols 1-4) + Property Details (cols 5-7), tops aligned */}
+          <div style={{ gridColumn: "1 / 5", gridRow: "2", display: "flex", flexDirection: "column" }}>
+            <p className="mb-1 px-1" style={{ fontFamily: "'Lora', serif", fontSize: "8px", fontWeight: 700, textTransform: "none", letterSpacing: "0.02em", color: "#1A1A1A", marginTop: 0 }}>About <span style={{ fontWeight: 400, fontStyle: "italic" }}>(information sourced from public biographical records)</span></p>
+            <div style={{ borderTop: "1px solid #000", flexGrow: 1, paddingTop: "8px" }}>
+              {wealth?.bio_summary && (
+                <p style={{ fontFamily: "'Lora', serif", fontSize: "14px", lineHeight: 1.65, color: "#333" }}>
+                  {wealth.bio_summary}
+                </p>
+              )}
+            </div>
+          </div>
+          {/* Row 1 right: Connection badge */}
+          <div style={{ gridColumn: "5 / 7", gridRow: "1" }}>
+            <p className="mb-1 px-1" style={{ fontFamily: "'Lora', serif", fontSize: "8px", fontWeight: 700, textTransform: "none", letterSpacing: "0.02em", color: "#1A1A1A", marginTop: 0 }}>Epstein Connection?</p>
+            <div className="flex justify-between px-1" style={{ borderTop: "1px solid #000", height: 28, alignItems: "center", fontFamily: "futura-pt, sans-serif", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+              <span style={{ color: "#1A1A1A", fontWeight: 400 }}>Connected to Epstein</span>
+              <span style={{ color: "#1A1A1A", fontWeight: 700 }}>{dossier.editor_verdict === "CONFIRMED" ? "Confirmed" : dossier.editor_verdict === "REJECTED" ? "No Connection" : "Pending Review"}</span>
+            </div>
+            <div style={{ paddingTop: "12px", display: "flex", justifyContent: "center" }}>
+              <VerdictBadge verdict={dossier.editor_verdict} connectionStrength={dossier.connection_strength} confidenceScore={dossier.confidence_score} size="lg" />
+            </div>
+          </div>
+          {/* Row 2 right: Property Details */}
+          <div style={{ gridColumn: "5 / 7", gridRow: "2", fontFamily: "futura-pt, sans-serif", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+            <p className="mb-1 px-1" style={{ fontFamily: "'Lora', serif", fontSize: "8px", fontWeight: 700, textTransform: "none", letterSpacing: "0.02em", color: "#1A1A1A" }}>Property Details</p>
+            <div className="flex justify-between px-1" style={{ borderTop: "1px solid #000", borderBottom: "1px solid #000", height: 28, alignItems: "center" }}>
+              <span style={{ color: "#1A1A1A", fontWeight: 400 }}>Location</span>
+              <span style={{ color: "#1A1A1A", fontWeight: 700 }}>{[feature?.location_city, feature?.location_state].filter(Boolean).join(", ") || "—"}</span>
+            </div>
+            <div className="flex justify-between px-1" style={{ borderBottom: "1px solid #000", height: 28, alignItems: "center" }}>
+              <span style={{ color: "#1A1A1A", fontWeight: 400 }}>Year Built</span>
+              <span style={{ color: "#1A1A1A", fontWeight: 700 }}>{feature?.year_built || "—"}</span>
+            </div>
+            <div className="flex justify-between px-1" style={{ borderBottom: "1px solid #000", height: 28, alignItems: "center" }}>
+              <span style={{ color: "#1A1A1A", fontWeight: 400 }}>Square Footage</span>
+              <span style={{ color: "#1A1A1A", fontWeight: 700 }}>{feature?.square_footage ? feature.square_footage.toLocaleString() : "—"}</span>
+            </div>
+            <div className="flex justify-between px-1" style={{ borderBottom: "1px solid #000", height: 28, alignItems: "center" }}>
+              <span style={{ color: "#1A1A1A", fontWeight: 400 }}>Issue</span>
+              <span style={{ color: "#1A1A1A", fontWeight: 700 }}>{issueDateStr}</span>
+            </div>
+            {feature?.designer_name && (
+              <div className="flex justify-between px-1" style={{ borderBottom: "1px solid #000", height: 28, alignItems: "center" }}>
+                <span style={{ color: "#1A1A1A", fontWeight: 400 }}>Designer</span>
+                <span style={{ color: "#1A1A1A", fontWeight: 700 }}>{feature.designer_name}</span>
+              </div>
+            )}
+            <div className="flex justify-between px-1" style={{ height: 28, alignItems: "center" }}>
+              <span style={{ color: "#1A1A1A", fontWeight: 400 }}>Architect</span>
+              <span style={{ color: "#1A1A1A", fontWeight: 700 }}>{feature?.architecture_firm || "—"}</span>
+            </div>
+          </div>
+        </div>
+        {/* 3. AD Issue section — full width */}
+        <div style={{ marginTop: "-16px" }}>
+          <p className="mb-1 px-1" style={{ fontFamily: "'Lora', serif", fontSize: "8px", fontWeight: 700, textTransform: "none", letterSpacing: "0.02em", color: "#1A1A1A" }}>Architectural Digest Issue:</p>
+          <div style={{ borderTop: "1px solid #000", paddingTop: "6px" }}>
+            {feature?.article_title && (
+              <p style={{ fontFamily: "'Lora', serif", fontSize: "32px", fontWeight: 400, fontStyle: "italic", color: "#1A1A1A", lineHeight: 1.3, textTransform: "capitalize" }}>
+                &ldquo;{feature.article_title.toLowerCase()}&rdquo;
               </p>
             )}
+            {feature?.article_author && (
+              <p style={{ fontFamily: "'Lora', serif", fontSize: "18px", fontWeight: 400, color: "#1A1A1A", marginTop: "4px" }}>
+                by {feature.article_author}
+              </p>
+            )}
+            {dossier.images.length > 0 && (
+              <ArticleImageGrid images={dossier.images} />
+            )}
           </div>
-        </>
-      )}
+        </div>
 
-      {/* 4. Key Findings — non-collapsible */}
-      {keyFindings.length > 0 && (
-        <>
-          <Separator className="my-8" />
-          <h2 className="mb-4 font-serif text-2xl font-bold">Key Findings</h2>
-          <div className="rounded-lg border border-border bg-muted/50 p-6">
-            <ul className="space-y-3">
+        {/* Section B header */}
+        <div className="mt-24">
+          <p style={{ fontFamily: "'Lora', serif", color: "#1A1A1A", lineHeight: 1.4 }}>
+            <span style={{ fontSize: "14px", textTransform: "uppercase", letterSpacing: "0.08em" }}>Section B:</span>
+            <br />
+            <span style={{ fontSize: "14px", fontWeight: 700, backgroundColor: "#000", color: pageBg, padding: "2px 6px", display: "block", marginTop: "4px" }}>Epstein Connection</span>
+          </p>
+        </div>
+
+        {/* 4. Editor's Review — prose width */}
+        {dossier.editor_reasoning && (
+          <div className="mt-12" style={{ maxWidth: "var(--content-narrow)" }}>
+            <div className="overflow-hidden border" style={CARD}>
+              <div className="px-4 py-2" style={CARD_HEADER}>
+                <p style={LABEL}>Editor&rsquo;s Review</p>
+              </div>
+              <div className="px-4 py-4">
+                <p
+                  className="text-[15px] leading-[1.7]"
+                  style={{ fontFamily: "'Lora', serif", color: "#333" }}
+                >
+                  {dossier.editor_reasoning}
+                </p>
+                {dossier.editor_reviewed_at && (
+                  <p
+                    className="mt-3 text-[10px] uppercase tracking-[0.1em]"
+                    style={{ fontFamily: "futura-pt, sans-serif", color: "#999" }}
+                  >
+                    Reviewed {new Date(dossier.editor_reviewed_at).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 5. Key Findings — prose width */}
+        {keyFindings.length > 0 && (
+          <div className="mt-12" style={{ maxWidth: "var(--content-narrow)" }}>
+            <p
+              className="text-[11px] font-bold uppercase tracking-[0.15em]"
+              style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
+            >
+              Key Findings
+            </p>
+            <hr className="mt-2" style={{ border: 0, borderTop: "2px solid #1A1A1A" }} />
+            <ul className="mt-4 space-y-3">
               {keyFindings.map((finding: string, i: number) => (
-                <li key={i} className="flex gap-3 text-sm leading-relaxed">
-                  <span className="mt-0.5 shrink-0 text-muted-foreground">&bull;</span>
+                <li
+                  key={i}
+                  className="flex gap-3 text-[14px] leading-[1.65]"
+                  style={{ fontFamily: "'Lora', serif", color: "#333" }}
+                >
+                  <span className="mt-0.5 shrink-0 font-mono text-[12px] text-[#999]">{String(i + 1).padStart(2, "0")}</span>
                   <span>{finding}</span>
                 </li>
               ))}
             </ul>
           </div>
-        </>
-      )}
+        )}
 
-      {/* 5. Evidence (Epstein Connections) — collapsible */}
-      {dossier.epstein_connections && (
-        <>
-          <Separator className="my-8" />
-          <h2 className="mb-4 font-serif text-2xl font-bold">Evidence</h2>
-          <div className="space-y-4">
+        {/* 6. Evidence (Epstein Connections) — full width */}
+        {dossier.epstein_connections && (
+          <div className="mt-12">
+            <p
+              className="text-[11px] font-bold uppercase tracking-[0.15em]"
+              style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
+            >
+              Evidence
+            </p>
+            <h2
+              className="mt-1 text-[28px] font-black leading-[0.95]"
+              style={{ fontFamily: "futura-pt, sans-serif", color: "#1A1A1A" }}
+            >
+              Epstein Connections
+            </h2>
+            <hr className="mt-3" style={{ border: 0, borderTop: "2px solid #1A1A1A" }} />
+            <div className="mt-5 space-y-4">
+              <EvidenceSection
+                title="Epstein Connections"
+                data={dossier.epstein_connections}
+                defaultOpen
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 7. Connection Assessment — prose width */}
+        {dossier.strength_rationale && (
+          <div className="mt-12" style={{ maxWidth: "var(--content-narrow)" }}>
+            <div className="overflow-hidden border" style={CARD}>
+              <div className="px-4 py-2" style={CARD_HEADER}>
+                <p style={LABEL}>Connection Assessment</p>
+              </div>
+              <div className="px-4 py-4">
+                <p
+                  className="text-[15px] leading-[1.7]"
+                  style={{ fontFamily: "'Lora', serif", color: "#333" }}
+                >
+                  {dossier.strength_rationale}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 8. Aesthetic Profile — full width */}
+        {feature && (
+          <div className="mt-12">
+            <DossierAestheticRadar feature={feature} />
+          </div>
+        )}
+
+        {/* 9. Analysis sections — full width */}
+        <div className="mt-12">
+          <p
+            className="text-[11px] font-bold uppercase tracking-[0.15em]"
+            style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
+          >
+            Analysis
+          </p>
+          <hr className="mt-2" style={{ border: 0, borderTop: "2px solid #1A1A1A" }} />
+          <div className="mt-5 space-y-4">
             <EvidenceSection
-              title="Epstein Connections"
-              data={dossier.epstein_connections}
+              title="AD Appearance"
+              data={dossier.ad_appearance}
               defaultOpen
             />
+            <EvidenceSection title="Home Analysis" data={dossier.home_analysis} />
+            <EvidenceSection title="Pattern Analysis" data={dossier.pattern_analysis} />
           </div>
-        </>
-      )}
-
-      {/* 6. Additional AD Featured Homes */}
-      <Separator className="my-8" />
-      <h2 className="mb-4 font-serif text-2xl font-bold">Additional AD Featured Homes</h2>
-      {siblings.length > 0 ? (
-        <div className="grid gap-3 sm:grid-cols-2">
-          {siblings.map((s) => (
-            <Link
-              key={s.dossier_id}
-              href={`/dossier/${s.dossier_id}`}
-              className="rounded-lg border border-border p-4 transition-colors hover:bg-muted/50"
-            >
-              <p className="font-semibold">{s.location || "Location unknown"}</p>
-              {s.issue_date && (
-                <p className="mt-1 text-sm text-muted-foreground">
-                  <em>Architectural Digest</em>, {s.issue_date}
-                </p>
-              )}
-            </Link>
-          ))}
         </div>
-      ) : (
-        <p className="text-sm text-muted-foreground">None.</p>
-      )}
 
-      {/* 7. Aesthetic Profile */}
-      {feature && (
-        <>
-          <Separator className="my-8" />
-          <DossierAestheticRadar feature={feature} />
-        </>
-      )}
-
-      {/* 8. Analysis sections — collapsible */}
-      <Separator className="my-8" />
-      <h2 className="mb-4 font-serif text-2xl font-bold">Analysis</h2>
-      <div className="space-y-4">
-        <EvidenceSection
-          title="AD Appearance"
-          data={dossier.ad_appearance}
-          defaultOpen
-        />
-        <EvidenceSection title="Home Analysis" data={dossier.home_analysis} />
-        <EvidenceSection title="Pattern Analysis" data={dossier.pattern_analysis} />
-      </div>
-
-      {/* 9. Article images */}
-      {dossier.images.length > 0 && (
-        <>
-          <Separator className="my-8" />
-          <h2 className="mb-4 font-serif text-2xl font-bold">Article Pages</h2>
-          <div className="grid grid-cols-2 gap-4">
-            {dossier.images.map((img) => (
-              <div key={img.id} className="overflow-hidden rounded-lg border border-border">
-                {img.public_url && (
-                  <Image
-                    src={img.public_url}
-                    alt={`Article page ${img.page_number}`}
-                    width={600}
-                    height={800}
-                    className="w-full object-cover"
-                  />
-                )}
-                {img.page_number && (
-                  <p className="bg-muted px-3 py-1.5 text-xs text-muted-foreground">
-                    Page {img.page_number}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {/* 10. Connection Assessment */}
-      {dossier.strength_rationale && (
-        <>
-          <Separator className="my-8" />
-          <div>
-            <h2 className="font-serif text-lg font-semibold">Connection Assessment</h2>
-            <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-              {dossier.strength_rationale}
+        {/* 10. Additional AD Featured Homes — full width */}
+        <div className="mt-12">
+          <p
+            className="text-[11px] font-bold uppercase tracking-[0.15em]"
+            style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
+          >
+            Additional AD Featured Homes
+          </p>
+          <hr className="mt-2" style={{ border: 0, borderTop: "2px solid #1A1A1A" }} />
+          {siblings.length > 0 ? (
+            <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {siblings.map((s) => (
+                <Link
+                  key={s.dossier_id}
+                  href={`/dossier/${s.dossier_id}`}
+                  className="block overflow-hidden border transition-shadow hover:shadow-[6px_6px_0_0_#000]"
+                  style={CARD}
+                >
+                  <div className="px-3 py-2" style={CARD_HEADER}>
+                    <p style={LABEL}>{s.issue_date || "Unknown date"}</p>
+                  </div>
+                  <div className="px-3 py-3">
+                    <p className="text-[14px] font-semibold" style={{ fontFamily: "futura-pt, sans-serif" }}>
+                      {s.location || "Location unknown"}
+                    </p>
+                  </div>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-4 text-[13px]" style={{ fontFamily: "'Lora', serif", color: "#999" }}>
+              No additional homes on file.
             </p>
+          )}
+        </div>
+
+        {/* Article images — full width (color originals) */}
+        {dossier.images.length > 0 && (
+          <div className="mt-12">
+            <p
+              className="text-[11px] font-bold uppercase tracking-[0.15em]"
+              style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
+            >
+              Article Pages
+            </p>
+            <hr className="mt-2" style={{ border: 0, borderTop: "2px solid #1A1A1A" }} />
+            <div className="mt-5 grid grid-cols-2 gap-4">
+              {dossier.images.map((img) => (
+                <div
+                  key={img.id}
+                  className="overflow-hidden border"
+                  style={{ borderColor: "#000", borderWidth: "1px" }}
+                >
+                  {img.public_url && (
+                    <Image
+                      src={img.public_url}
+                      alt={`Article page ${img.page_number}`}
+                      width={600}
+                      height={800}
+                      className="w-full object-cover"
+                    />
+                  )}
+                  {img.page_number && (
+                    <div className="px-3 py-1.5" style={{ borderTop: "1px solid #000", backgroundColor: "#EDEDED" }}>
+                      <p style={{ ...LABEL, fontSize: "8px" }}>Page {img.page_number}</p>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
           </div>
-        </>
-      )}
-    </SectionContainer>
+        )}
+      </SectionContainer>
+    </div>
   );
 }

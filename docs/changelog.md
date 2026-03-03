@@ -6,6 +6,20 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-02 (Session 61)
+
+### Added — Archival Bio Generation, Fame Pipeline Phases 4+5
+
+- **Archival bio generator** (`src/generate_bios.py`) — NEW Opus-powered pipeline that generates 2-3 sentence archival biographical summaries for all homeowners. Reads existing wealth_profiles research data, synthesizes into museum-placard-style entries (who they are, AD connection, biographical origin + wealth mechanism). Batches 12 names per API call, resume-capable, ~$39 for 2,527 bios.
+- **bio_summary column** — New TEXT column on `wealth_profiles` table. All 2,527 profiles populated with archival bios.
+- **About section populated** — `DossierDetail.tsx` and `ReportDetail.tsx` About sections now render bio_summary with source attribution: "(information sourced from public biographical records)" in italic Lora.
+- **Expanded WealthProfile TypeScript type** — Added 11 new fields to `web/src/lib/types.ts` (wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary) with matching query updates.
+- **Fame pipeline Phase 5: Wikipedia Reference Counts** — Counts `<ref>` tags in Wikipedia wikitext as citation proxy. 2,527 names collected (1,717 with data, 810 no wiki page).
+- **Fame pipeline Phase 4: NYT Article Search** — Built but not yet run. Uses NYT Article Search API (`response.metadata.hits`). Rate limited to 500/day.
+- **Wealth profiles Supabase sync** — Re-ran `--apply-db` to backfill 2,527 profiles (was stuck at 1,223 from earlier partial run).
+
+---
+
 ## 2026-03-02 (Session 60)
 
 ### Changed — Dossier UI Restructure, Graph Squares, Red Confirmed Badges, Sankey Fix

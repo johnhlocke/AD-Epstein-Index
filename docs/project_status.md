@@ -224,6 +224,12 @@ This file should be automatically updated when necessary to answer three key que
 | Deterministic location normalization (no LLM) | Tooling | Done |
 | Neo4j DOJ evidence enrichment on Person nodes | Phase 3.5 | Done |
 | Opus name recovery xref-anonymous verification mode | Phase 1 | Done |
+| Archival bio generation (2,527 bios via Opus) | Phase 2 | Done |
+| About section populated (DossierDetail + ReportDetail) | Phase 3 | Done |
+| WealthProfile type expansion (11 new fields) | Phase 3 | Done |
+| Wealth profiles Supabase sync (2,527 profiles backfilled) | Phase 2 | Done |
+| Fame pipeline Phase 5: Wikipedia reference counts | Phase 2 | Done |
+| Fame pipeline Phase 4: NYT Article Search | Phase 2 | Not Started |
 
 ## 2. What's Been Accomplished
 

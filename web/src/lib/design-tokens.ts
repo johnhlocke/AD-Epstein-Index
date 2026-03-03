@@ -41,6 +41,14 @@ export const colors = {
   muted: "#737373",
   mutedLight: "#A3A3A3",
   surface: "#FFFFFF",
+  // Dossier page backgrounds — confidence-scaled
+  dossierBackground: {
+    none: "#acc1d3",         // No connection — soft blue
+    coincidence: "#f0daac",  // Coincidence — amber
+    confirmedLow: "#e2a094", // Confirmed 0% confidence — muted salmon
+    confirmedHigh: "#e94e31",// Confirmed 100% confidence — red
+    rejected: "#e7cbc5",     // Rejected — muted pink
+  },
 } as const;
 
 export const typography = {
@@ -152,3 +160,44 @@ export const verdictConfig = {
   REJECTED: { label: "Rejected", color: colors.rejected, bg: colors.rejectedBg },
   PENDING_REVIEW: { label: "Pending Review", color: colors.pending, bg: colors.pendingBg },
 } as const;
+
+/**
+ * Returns the page background color for a dossier detail page.
+ * Confidence-scaled: no connection → blue, coincidence → amber,
+ * confirmed → salmon-to-red gradient, rejected → muted pink.
+ */
+export function getDossierPageBackground(
+  dossier: {
+    editor_verdict?: string | null;
+    connection_strength?: string | null;
+    confidence_score?: number | null;
+  } | null
+): string {
+  const bg = colors.dossierBackground;
+  if (!dossier) return bg.none;
+
+  if (dossier.editor_verdict === "REJECTED") return bg.rejected;
+
+  if (dossier.connection_strength === "COINCIDENCE") return bg.coincidence;
+
+  if (dossier.editor_verdict === "CONFIRMED") {
+    const t = Math.max(0, Math.min(1, dossier.confidence_score ?? 0));
+    return lerpColor(bg.confirmedLow, bg.confirmedHigh, t);
+  }
+
+  return bg.none;
+}
+
+/** Linear interpolation between two hex colors in RGB space. */
+function lerpColor(a: string, b: string, t: number): string {
+  const ar = parseInt(a.slice(1, 3), 16);
+  const ag = parseInt(a.slice(3, 5), 16);
+  const ab = parseInt(a.slice(5, 7), 16);
+  const br = parseInt(b.slice(1, 3), 16);
+  const bg = parseInt(b.slice(3, 5), 16);
+  const bb = parseInt(b.slice(5, 7), 16);
+  const r = Math.round(ar + (br - ar) * t);
+  const g = Math.round(ag + (bg - ag) * t);
+  const bl = Math.round(ab + (bb - ab) * t);
+  return `#${r.toString(16).padStart(2, "0")}${g.toString(16).padStart(2, "0")}${bl.toString(16).padStart(2, "0")}`;
+}

@@ -8,6 +8,7 @@ import type {
   DossierImage,
   FeatureImage,
   FeatureReport,
+  WealthProfile,
   PaginatedResponse,
   AestheticRadarData,
   MosaicTile,
@@ -707,11 +708,23 @@ export async function getDossier(id: number): Promise<DossierWithContext | null>
     .eq("dossier_id", dossier.id)
     .order("page_number");
 
+  // Fetch wealth profile
+  let wealth: WealthProfile | null = null;
+  if (dossier.feature_id) {
+    const { data: wp } = await sb
+      .from("wealth_profiles")
+      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary")
+      .eq("feature_id", dossier.feature_id)
+      .maybeSingle();
+    wealth = wp as WealthProfile | null;
+  }
+
   return {
     ...dossier,
     feature,
     issue,
     images: (images ?? []) as DossierImage[],
+    wealth,
   } as DossierWithContext;
 }
 
@@ -754,11 +767,19 @@ export async function getFeatureReport(featureId: number): Promise<FeatureReport
     .eq("feature_id", featureId)
     .maybeSingle();
 
+  // Fetch wealth profile
+  const { data: wp } = await sb
+    .from("wealth_profiles")
+    .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary")
+    .eq("feature_id", featureId)
+    .maybeSingle();
+
   return {
     feature: feature as Feature,
     issue,
     images: (images ?? []) as FeatureImage[],
     dossier: dossier as Dossier | null,
+    wealth: wp as WealthProfile | null,
   };
 }
 
