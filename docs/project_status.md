@@ -230,7 +230,10 @@ This file should be automatically updated when necessary to answer three key que
 | Wealth profiles Supabase sync (2,527 profiles backfilled) | Phase 2 | Done |
 | Fame pipeline Phase 5: Wikipedia reference counts | Phase 2 | Done |
 | Wikipedia matching algorithm rewrite + audit (10 fixes, 12 nulled, 3 manual) | Phase 2 | Done |
-| Fame pipeline Phase 4: NYT Article Search | Phase 2 | Not Started |
+| Low-image feature audit (30 deleted, cross-table name fixes) | Phase 1 | Done |
+| NYT article count backfill (500/2,527 applied) | Phase 2 | In Progress |
+| Profession category classification | Phase 2 | Not Started |
+| Fame pipeline Phase 4: NYT Article Search | Phase 2 | In Progress |
 
 ## 2. What's Been Accomplished
 
@@ -390,7 +393,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **Run 4 — Complete (Database Built):**
 - All Supabase tables, Neo4j graph, local data wiped (Feb 12). Pipeline rebuilt from scratch.
-- **Final stats**: 470 issues, **3,440 features**, 2,859 cross-references, 1,434 dossiers, **233 confirmed dossiers (~173 unique people)**
+- **Final stats**: 470 issues, **3,401 features**, 2,859 cross-references, 1,434 dossiers, **233 confirmed dossiers (~173 unique people)**
 - Scoring v2.3: aesthetic_summary field, structural overwrite on rescore, expanded subject_category (Art/Media/Design), --offset flag, checkpoint refresh
 - Full archive re-extraction: `src/reextract_features.py` reads spread data from all 470 issues, classified 3,506 home features via Haiku ($0.57), inserted 2,305 new features with images
 - Opus Vision v2.2 scoring: 3,783 features scored across 2 runs ($145 + $172 so far). 1,008 pre-update features cleared for rescoring (missing subject_category). 73 features backfilled with images.

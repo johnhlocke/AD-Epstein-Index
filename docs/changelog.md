@@ -6,6 +6,29 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-03 (Session 63)
+
+### Database — Feature Data Cleanup & Cross-Table Fixes
+
+- **Low-image feature audit** — Reviewed all features with ≤4 images across 3 buckets:
+  - **2-image bucket**: All 24 deleted (too few images — single-page mentions, not real features)
+  - **3-image bucket**: 4 deleted (5798 Francis Fry, 6613 Ward Bennett, 6648 Todd Merrill, 6658 Duke of Phuong Hoa), 77 kept
+  - **4-image bucket**: 2 deleted (3974 Hans Hedberg, 4109 Edward and Mrs. Boscawen), 184 kept
+- **Non-home feature deletions** — 9399 (Ma Yansong opera house), 9406 (Earthship by Michael Reynolds)
+- **Cross-table name fixes** — Corrected homeowner names, propagated to wealth_profiles/fame_metrics, re-ran BB and DOJ searches:
+  - 5951: Anonymous → Bruce Goldreyer; 4655: Van Dusen → Mark Hampton; 5915: Colman → Rob Cohen; 5581: Goldberger → Joe Manget
+  - 9466: Anonymous → Florence and Harry Thomas (restaurant heiress + stockbroker)
+- **Foundation/historical feature deletions** — 7592 (Historic Hudson Valley), 9403 (Stavros Niarchos Foundation), 5576/4379 (Thomas Jefferson ×2), 9606 (Dian Fossey Gorilla Fund), 7779 (The British Royal Family)
+- **7411 marked Anonymous** (Blair House / US Government)
+- **Feature 5964 deleted** (yacht, not a home)
+- **FK cascade handling** — Shared-name fame_metrics/wealth_profiles repointed to surviving features before deletion (Catroux, Montoya, Kravitz, Mota)
+- **NYT data applied** — 500 fame_metrics records with nyt_article_count backfilled from local JSONL
+- **New column**: `profession_category TEXT` on wealth_profiles (empty, ready for classification)
+- **New column**: `nyt_article_count INTEGER` on fame_metrics
+- **Total features**: 3,401 (down from 3,440)
+
+---
+
 ## 2026-03-03 (Session 62)
 
 ### Changed — Wikipedia Algorithm Rewrite & Match Audit
