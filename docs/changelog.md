@@ -6,6 +6,34 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-03 (Session 62)
+
+### Changed — Wikipedia Algorithm Rewrite & Match Audit
+
+- **Wikipedia name-matching algorithm rewrite** (`measure_fame.py`) — 10 major improvements to `_name_matches_title()` and `split_compound_name()`:
+  - Expanded prefix stripping (Governor, Ambassador, Crown Prince/ss, Maharaja/Maharani, Landgrave, Madame, Marchese/a, etc.)
+  - 60+ nickname mappings (Ken↔Kenneth, Ray↔Raymond, Gene↔Eugene, Jerry↔Gerald/Jerome, etc.)
+  - Parenthetical content extraction as alternative search names
+  - "/" separator normalization (treated as "and" for compound name splitting)
+  - Hyphen↔space first name matching (Marie-Caroline = Marie Caroline)
+  - Japanese/inverted name order detection (strict: surname must be position 1 only)
+  - Quoted nickname extraction ("Douglas 'Pete' Peterson")
+  - All-parts-match rule for ≥3 name parts
+  - Separated initials check (C.C. → C. C.)
+  - New non-person page reject patterns (palace, plantation, entertainment, winery, architects)
+- **Comprehensive Wikipedia audit** — 5-category quality check across all 1,371 matches:
+  - Non-person pages (theaters, brands, foundations, awards)
+  - Low edit count (<20 edits) wrong-person matches
+  - Compound name low-confidence matches
+  - Zero word overlap verification
+  - Epstein top matches sanity check
+- **12 false positives nulled** — Ed Hardy (brand), Film producer (generic), Peter Jay Sharp Theater, Greg Norman Medal, George Dunbar (MP), Bob Hill (racing driver), John Rosselli (historian), Howard Feldman (neuroscientist), YSL (fashion house), Bernard B. Jacobs Theatre, Stavros Niarchos Foundation, Donald Smith (banker)
+- **3 manual Wikipedia fixes** — Yves Saint Laurent → YSL (designer) (2,042 edits), Princess Margaret → Countess of Snowdon (3,821 edits), Queen Elizabeth II → Elizabeth II (18,345 edits)
+- **20 blocklist additions** (`fix_wikipedia_matches.py`) — Rounds 5-7 of false positive identification, preventing re-collection of known wrong matches
+- **Final Wikipedia coverage**: 1,362/2,542 (53.6%) — Epstein 135/172 (78.5%), Baseline 1,227/2,370 (51.8%)
+
+---
+
 ## 2026-03-02 (Session 61)
 
 ### Added — Archival Bio Generation, Fame Pipeline Phases 4+5

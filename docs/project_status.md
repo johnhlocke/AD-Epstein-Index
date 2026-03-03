@@ -229,6 +229,7 @@ This file should be automatically updated when necessary to answer three key que
 | WealthProfile type expansion (11 new fields) | Phase 3 | Done |
 | Wealth profiles Supabase sync (2,527 profiles backfilled) | Phase 2 | Done |
 | Fame pipeline Phase 5: Wikipedia reference counts | Phase 2 | Done |
+| Wikipedia matching algorithm rewrite + audit (10 fixes, 12 nulled, 3 manual) | Phase 2 | Done |
 | Fame pipeline Phase 4: NYT Article Search | Phase 2 | Not Started |
 
 ## 2. What's Been Accomplished

@@ -11,7 +11,12 @@ Distribution of Fame" (PLOS ONE). Collects six metrics per person:
   6. Wikipedia ref count    (WR — archival depth proxy)
 
 Fame follows a power law distribution — all analysis uses log-transformed values.
-Geometric mean fame score computed across available metrics.
+
+Composite fame score pipeline (log+1 → min-max → arithmetic mean):
+  1. Log-plus-one:  x_log = log(x + 1)  — tames power law outliers
+  2. Min-max scale: x_norm = (x_log - min) / (max - min)  — 0-1 range
+  3. Arithmetic mean of normalized scores = final fame score
+  (Arithmetic mean of log-transformed data ≡ log of geometric mean)
 
 Usage:
     python3 src/measure_fame.py --dry-run          # Preview names + cost estimate
@@ -22,6 +27,7 @@ Usage:
     python3 src/measure_fame.py --wikirefs-only     # Phase 5 only (free)
     python3 src/measure_fame.py                     # All phases
     python3 src/measure_fame.py --resume            # Skip already-collected names
+    python3 src/measure_fame.py --normalize         # Log+1 → min-max → composite score
     python3 src/measure_fame.py --report            # Stats + group comparison
     python3 src/measure_fame.py --apply-db          # Upsert to Supabase
 
@@ -182,13 +188,454 @@ async def _wiki_get(session, url, params=None, headers=None):
     return 429, None
 
 
-async def wikipedia_search(session, name):
-    """Search Wikipedia for a person's canonical page title."""
+def split_compound_name(name):
+    """Split compound names like 'Don Johnson and Melanie Griffith' into individual names.
+
+    Handles patterns:
+      'Don Johnson and Melanie Griffith' → ['Don Johnson', 'Melanie Griffith']
+      'Demi Moore & Ashton Kutcher'      → ['Demi Moore', 'Ashton Kutcher']
+      'John and Jane Smith'              → ['John Smith', 'Jane Smith']
+      'Nate Berkus and Jeremiah Brent'   → ['Nate Berkus', 'Jeremiah Brent']
+      'Malcolm Forbes / Christopher Forbes' → ['Malcolm Forbes', 'Christopher Forbes']
+      'Ralph Lauren'                     → ['Ralph Lauren']
+
+    Also extracts parenthetical content as alternative names:
+      'Lord Glenconner (Colin Tennant)' → ['Glenconner', 'Colin Tennant']
+
+    Returns list of individual name strings to search.
+    """
+    # Extract parenthetical content BEFORE stripping it — may contain real names
+    # "Lord Glenconner (Colin Tennant)" → paren_names = ["Colin Tennant"]
+    paren_names = []
+    paren_matches = re.findall(r'\(([^)]+)\)', name)
+    for pm in paren_matches:
+        pm = pm.strip()
+        # Only keep if it looks like a person name (2+ words, not descriptive)
+        words = pm.split()
+        if len(words) >= 2 and not any(w.lower() in {"a.k.a.", "aka", "née", "nee",
+                "formerly", "previously", "now"} for w in words):
+            paren_names.append(pm)
+
+    # Strip common prefixes/suffixes and honorifics
+    clean = re.sub(
+        r'\b(Crown\s+Prince(?:ss)?|Vice\s+President|President|Governor|Ambassador|'
+        r'Maharaja|Maharana|Maharani|Rani|Landgrave|Landgravine|Madame|'
+        r'Marqués|Marquis|Marquise|Marchioness|'
+        r'Dr\.|Sir|Lord|Lady|Prince|Princess|Duke|Duchess|'
+        r'Baron(?:ess)?|Viscount(?:ess)?|Count(?:ess)?|Senator|'
+        r'Czar|Tsar|Mrs?\.|Ms\.|Mme\.?|Marchese|Marchesa)\s+',
+        '', name, flags=re.IGNORECASE
+    ).strip()
+
+    # Strip parenthetical aliases: "Diplo (Thomas Wesley Pentz)" → "Diplo"
+    clean = re.sub(r'\s*\([^)]*\)\s*', ' ', clean).strip()
+
+    # Strip leading "and " left over from "Mr. and Mrs." prefix removal
+    clean = re.sub(r'^and\s+', '', clean, flags=re.IGNORECASE).strip()
+
+    # Normalize "&" to "and" for splitting
+    clean = re.sub(r'\s*&\s*', ' and ', clean)
+
+    # Normalize "/" to "and" for splitting ("Malcolm Forbes / Christopher Forbes")
+    clean = re.sub(r'\s*/\s*', ' and ', clean)
+
+    # Strip quoted nicknames from the main name (they'll be handled in _name_matches_title)
+    # But keep them in the search string for Wikipedia
+    # "Douglas 'Pete' Peterson" stays as-is for search
+
+    if " and " not in clean:
+        result = [clean]
+        # Add parenthetical names as additional search terms
+        for pn in paren_names:
+            # Strip the same prefixes from parenthetical names
+            pn_clean = re.sub(
+                r'\b(Crown\s+Prince(?:ss)?|Vice\s+President|President|Governor|Ambassador|'
+                r'Maharaja|Maharana|Maharani|Rani|Landgrave|Landgravine|Madame|'
+                r'Marqués|Marquis|Marquise|Marchioness|'
+                r'Dr\.|Sir|Lord|Lady|Prince|Princess|Duke|Duchess|'
+                r'Earl|Baron(?:ess)?|Viscount(?:ess)?|Count(?:ess)?|Senator|'
+                r'Czar|Tsar|Mrs?\.|Ms\.|Mme\.?|Marchese|Marchesa|The)\s+',
+                '', pn, flags=re.IGNORECASE
+            ).strip()
+            if pn_clean and pn_clean not in result:
+                result.append(pn_clean)
+        return result
+
+    parts = [p.strip() for p in clean.split(" and ", 1)]
+    if len(parts) != 2:
+        return [name.strip()]
+
+    left, right = parts
+
+    # Share surname when one side has only a first name
+    right_words = right.split()
+    left_words = left.split()
+    if len(right_words) == 1 and len(left_words) >= 2:
+        surname = left_words[-1]
+        right = f"{right} {surname}"
+    elif len(left_words) == 1 and len(right_words) >= 2:
+        surname = right_words[-1]
+        left = f"{left} {surname}"
+
+    # Filter out fragments that aren't real names (< 2 words or very short)
+    result = []
+    for part in [left, right]:
+        words = part.split()
+        if len(words) >= 2 or (len(words) == 1 and len(words[0]) > 3):
+            result.append(part)
+
+    # Add parenthetical names as additional search terms
+    for pn in paren_names:
+        pn_clean = re.sub(
+            r'\b(Crown\s+Prince(?:ss)?|Vice\s+President|President|Governor|Ambassador|'
+            r'Maharaja|Maharana|Maharani|Rani|Landgrave|Landgravine|Madame|'
+            r'Marqués|Marquis|Marquise|Marchioness|'
+            r'Dr\.|Sir|Lord|Lady|Prince|Princess|Duke|Duchess|'
+            r'Earl|Baron(?:ess)?|Viscount(?:ess)?|Count(?:ess)?|Senator|'
+            r'Czar|Tsar|Mrs?\.|Ms\.|Mme\.?|Marchese|Marchesa|The)\s+',
+            '', pn, flags=re.IGNORECASE
+        ).strip()
+        if pn_clean and pn_clean not in result:
+            result.append(pn_clean)
+
+    return result if result else [clean]
+
+
+def _name_matches_title(name_parts, title):
+    """Check if the person's name plausibly matches a Wikipedia title.
+
+    Strict matching to prevent false positives:
+    - Uses WORD BOUNDARY matching (not substring) to prevent "Ann" matching "Joanna"
+    - Recognizes common nicknames (Jim↔James, Bill↔William, etc.)
+    - Rejects non-person pages (films, albums, lists, places, etc.)
+    - For multi-word names: requires BOTH surname AND first name as whole words
+    - For mononyms: requires the word as the first word in the title
+    - Handles Jr./Sr. suffixes, single-letter names, hyphenated first names
+    """
+    title_lower = title.lower().replace("_", " ")
+
+    # Reject non-person pages immediately
+    reject_patterns = [
+        "(given name)", "(surname)", "(name)", "(disambiguation)",
+        "list of ", "family of ", "(album)", "(film)", "(song)",
+        "(tv series)", "(tv show)", "(band)", "(novel)", "(comic", "(magazine)",
+        "(video game)", "(play)", "(musical)", "(opera)", "(painting)",
+        " county", " township", " district",
+        " show)",  # "The Joan Rivers Show"
+        " discography", " filmography",  # "Robbie Williams discography"
+        " museum",  # "John Hauberg Museum of Native American Life"
+        "(murderer)", "(serial killer)", "(criminal)", "(rapist)",
+        " dynasty",  # "Tang dynasty"
+        " university", " college", " school", " institute",
+        " airport", " international",
+        " palace",  # "Menshikov Palace"
+        " plantation",  # "Berry Hill Plantation"
+        " entertainment",  # "Feld Entertainment", "Turner Entertainment"
+        " cellars", " winery", " vineyard",  # "Colgin Cellars"
+        " architects",  # "Tsao & McKown Architects"
+        " fund international",  # "Dian Fossey Gorilla Fund International"
+    ]
+    # Also reject titles that ARE a TV show / talk show / game show name
+    title_lower_check = title.lower()
+    if title_lower_check.startswith("the ") and title_lower_check.endswith(" show"):
+        return False
+    if any(p in title_lower for p in reject_patterns):
+        return False
+
+    # Tokenize title into words for boundary-safe matching (splits on hyphens too)
+    title_words = set(re.findall(r"[a-zà-öø-ÿ]+", title_lower))
+    # Also build space-delimited token set (preserves hyphens like "Kana-Biyik")
+    # Used for surname matching to prevent "kana" from matching "Kana-Biyik"
+    title_space_words = set(title_lower.split())
+    # Strip trailing punctuation from space tokens for matching "jr." → "jr"
+    title_space_words_clean = {w.rstrip(".,;:") for w in title_space_words}
+
+    # --- Clean name parts ---
+    _TITLES = {"sir", "lord", "lady", "prince", "princess", "duke", "duchess",
+               "baron", "baroness", "count", "countess", "viscount", "viscountess",
+               "senator", "madame", "monsieur", "czar", "tsar", "vice",
+               "governor", "ambassador", "maharaja", "maharana", "maharani", "rani",
+               "landgrave", "landgravine", "crown", "mme", "sawai",
+               "marchese", "marchesa", "marquis", "marquise",
+               "marqués", "marchioness"}
+    _SUFFIXES = {"jr", "sr", "ii", "iii", "iv", "esq"}
+
+    clean_parts = [w.lower().strip(".,;:()\"") for w in name_parts
+                   if len(w.strip(".,;:()\"")) >= 2]
+    clean_parts = [p for p in clean_parts
+                   if not re.match(r"^\d+(st|nd|rd|th)$", p)]
+    clean_parts = [p for p in clean_parts if p not in _TITLES]
+    # Remove suffixes (Jr., Sr., III, etc.) — they're not surnames
+    clean_parts = [p for p in clean_parts if p not in _SUFFIXES]
+
+    if not clean_parts:
+        return False
+
+    # Track single-letter parts that were stripped (for leading-word logic)
+    single_letter_parts = [w.lower().strip(".,;:()\"") for w in name_parts
+                           if len(w.strip(".,;:()\"")) == 1]
+
+    # Count original meaningful words (exclude stripped titles/suffixes)
+    # to distinguish true mononyms from collapsed multi-word names
+    orig_meaningful = [w.lower().strip(".,;:()\"") for w in name_parts
+                       if len(w.strip(".,;:()\"")) >= 1]
+    orig_meaningful = [w for w in orig_meaningful if w not in _TITLES and w not in _SUFFIXES]
+    original_word_count = len(orig_meaningful)
+
+    if len(clean_parts) == 1 and original_word_count <= 2:
+        # Mononym or near-mononym (e.g., "Kenny G" → clean="kenny", orig=["kenny","g"])
+        word = clean_parts[0]
+        title_split = title_lower.split()
+        title_first = title_split[0].rstrip(".,;:") if title_split else ""
+        title_second = title_split[1].rstrip(".,;:") if len(title_split) >= 2 else ""
+
+        # Case 1: word IS the first word ("Valentino" → "valentino garavani")
+        if word == title_first:
+            return True
+        # Case 2: single letter is first, word is second ("J Balvin" → "j balvin")
+        if single_letter_parts and single_letter_parts[0] == title_first and word == title_second:
+            return True
+        # Case 3: word is first, single letter is second ("Kenny G" → "kenny g")
+        if single_letter_parts and word == title_first and single_letter_parts[0] == title_second:
+            return True
+        return False
+
+    if len(clean_parts) == 1:
+        # Was multi-word but collapsed (e.g., "James H. T." → "james").
+        # Don't treat as mononym — too ambiguous. Reject.
+        return False
+
+    # Multi-word name: surname is the last token, first name is the first token
+    surname = clean_parts[-1]
+    first_name = clean_parts[0]
+
+    # Surname MUST appear as a standalone space-delimited word in title.
+    # Using space-split (not regex-split) prevents "kana" from matching
+    # "Kana-Biyik" or "browne" from matching "Gore-Browne".
+    # Also check with punctuation stripped ("jr." → "jr")
+    surname_found = (surname in title_space_words or
+                     surname in title_space_words_clean)
+    if not surname_found:
+        surname_ascii = _strip_accents(surname)
+        title_space_words_ascii = {_strip_accents(w) for w in title_space_words_clean}
+        if surname_ascii not in title_space_words_ascii:
+            return False
+
+    # Build accent-stripped version of title words for fuzzy matching
+    title_words_ascii = {_strip_accents(w) for w in title_words}
+    first_ascii = _strip_accents(first_name)
+    # Also normalize dots/periods (C.C. → cc)
+    first_nodots = first_name.replace(".", "")
+    first_ascii_nodots = first_ascii.replace(".", "")
+
+    # First name MUST appear at position 1 in the title. We allow position 2
+    # ONLY if the first word is a non-name prefix (article/particle like "the",
+    # "al", "el", "de", "van", "von"), a single-letter initial (like "M." in
+    # "M. Night Shyamalan"), OR an honorific title (like "Sir", "Lady", "Prince").
+    # This prevents "Patrick Wade" from matching "Brian Patrick Wade"
+    # (Brian is a real first name, not a prefix).
+    title_word_list = re.findall(r"[a-zà-öø-ÿ]+", title_lower)
+    _TITLE_PREFIXES = {"the", "al", "el", "de", "del", "van", "von", "le", "la",
+                       "di", "da", "du", "den", "der", "das", "bin", "ibn", "abd"}
+    if len(title_word_list) >= 2:
+        first_title_word = title_word_list[0]
+        if (first_title_word in _TITLE_PREFIXES or
+                first_title_word in _TITLES or
+                len(first_title_word) == 1):
+            # Prefix, title, or initial — allow position 2
+            leading_words = set(title_word_list[:2])
+        else:
+            leading_words = {first_title_word}
+    else:
+        leading_words = set(title_word_list[:1])
+    leading_words_ascii = {_strip_accents(w) for w in leading_words}
+
+    # Also build leading words from space-split (preserves hyphens)
+    # so "Deborra-Lee" can match "deborra-lee" in the title
+    title_space_list = title_lower.split()
+    if len(title_space_list) >= 2:
+        first_space_word = title_space_list[0].rstrip(".,;:")
+        if (first_space_word in _TITLE_PREFIXES or
+                first_space_word in _TITLES or
+                len(first_space_word) == 1):
+            leading_space_words = {w.rstrip(".,;:") for w in title_space_list[:2]}
+        else:
+            leading_space_words = {first_space_word}
+    else:
+        leading_space_words = {title_space_list[0].rstrip(".,;:") if title_space_list else ""}
+
+    if first_name in leading_words or first_ascii in leading_words_ascii:
+        return True
+    # Check hyphenated first name against space-split leading words
+    if first_name in leading_space_words:
+        return True
+
+    # Check first name with hyphens replaced by spaces against title
+    # "Marie-Caroline" should match title starting with "Marie Caroline"
+    if "-" in first_name:
+        dehyphen_parts = first_name.replace("-", " ").split()
+        if len(dehyphen_parts) >= 2 and len(title_word_list) >= len(dehyphen_parts):
+            if all(dp == tw for dp, tw in zip(dehyphen_parts, title_word_list)):
+                return True
+
+    # Check initials with separated dots: "C.C." → "C. C." in title
+    # "c.c" should match when title starts with "c c" (two single-letter tokens)
+    if "." in first_name:
+        first_nopunc = re.sub(r'[^a-z]', '', first_name)
+        if len(first_nopunc) >= 2:
+            title_prefix = "".join(title_word_list[:len(first_nopunc)])
+            if first_nopunc == title_prefix:
+                return True
+
+    # Check nickname/formal name variants (accent-insensitive)
+    # Try both the raw name and the dot-stripped version as map keys
+    first_variants = set()
+    for key in (first_name, first_nodots, first_ascii, first_ascii_nodots):
+        first_variants |= _NICKNAME_MAP.get(key, set())
+    if first_variants & leading_words:
+        return True
+    if first_variants & leading_words_ascii:
+        return True
+
+    # Check quoted nicknames in name_parts against leading words
+    # "Douglas 'Pete' Peterson" → 'Pete' should match "Pete Peterson"
+    for part in name_parts:
+        stripped = part.strip("'\"'\u2018\u2019\u201c\u201d").lower().strip(".,;:()")
+        original = part.lower().strip(".,;:()")
+        if stripped != original and len(stripped) >= 2 and stripped not in _TITLES:
+            if stripped in leading_words or _strip_accents(stripped) in leading_words_ascii:
+                return True
+            # Also check nickname variants of the quoted name
+            nick_variants = _NICKNAME_MAP.get(stripped, set())
+            if nick_variants & leading_words:
+                return True
+
+    # Reversed name order (Japanese/other conventions):
+    # "Azuma Makoto" (first=azuma, surname=makoto) should match
+    # "Makoto Azuma" (title starts with makoto, has azuma)
+    # STRICT: surname must be the EXACT first word of the title (position 1 only).
+    # This prevents "Parker Gilbert" → "Sir Gilbert Parker" false positives
+    # where both names appear but in the same order (not reversed).
+    _NOT_NAMES = {"the", "of", "and", "in", "at", "by", "for", "to", "a", "an",
+                  "on", "or", "as", "is", "it", "no", "do", "if", "so", "up"}
+    title_space_words_ascii = {_strip_accents(w) for w in title_space_words_clean}
+    if first_name not in _NOT_NAMES and surname not in _NOT_NAMES:
+        # Check if surname is the FIRST word (not just in leading_words which can include pos 2)
+        title_first_word = title_word_list[0] if title_word_list else ""
+        title_first_space = title_space_list[0].rstrip(".,;:") if title_space_list else ""
+        surname_is_first = (
+            surname == title_first_word or
+            _strip_accents(surname) == _strip_accents(title_first_word) or
+            surname == title_first_space or
+            _strip_accents(surname) == _strip_accents(title_first_space)
+        )
+        first_in_title = (first_name in title_words or
+                          first_ascii in title_words_ascii or
+                          first_name in title_space_words_clean or
+                          first_ascii in title_space_words_ascii)
+        if surname_is_first and first_in_title:
+            return True
+
+    # Strong match: ALL name parts (≥3) appear as words in the title.
+    # "Amalia Lacroze de Fortabat" matches "María Amalia Lacroze de Fortabat"
+    # Uses both regex-split and space-split for Unicode coverage.
+    if len(clean_parts) >= 3:
+        all_match = all(
+            p in title_words or _strip_accents(p) in title_words_ascii or
+            p in title_space_words_clean or _strip_accents(p) in title_space_words_ascii
+            for p in clean_parts
+        )
+        if all_match:
+            return True
+
+    return False
+
+
+# Bidirectional nickname/formal name map for Wikipedia title matching.
+# Each key maps to the set of names it should also accept.
+_NICKNAME_MAP = {
+    "jim": {"james"}, "jimmy": {"james"}, "james": {"jim", "jimmy"},
+    "bill": {"william"}, "billy": {"william"}, "william": {"bill", "billy"},
+    "bob": {"robert"}, "bobby": {"robert"}, "rob": {"robert"},
+    "robert": {"bob", "bobby", "rob"},
+    "dick": {"richard"}, "rick": {"richard"}, "richard": {"dick", "rick"},
+    "mike": {"michael"}, "michael": {"mike"},
+    "joe": {"joseph"}, "joseph": {"joe"},
+    "ted": {"edward", "theodore"}, "ed": {"edward", "edwin"},
+    "edward": {"ted", "ed"}, "edwin": {"ed"},
+    "tony": {"anthony"}, "anthony": {"tony"},
+    "tom": {"thomas"}, "tommy": {"thomas"}, "thomas": {"tom", "tommy"},
+    "jack": {"john"}, "john": {"jack"},
+    "larry": {"lawrence", "laurence"}, "lawrence": {"larry"},
+    "laurence": {"larry"},
+    "charlie": {"charles"}, "chuck": {"charles"},
+    "charles": {"charlie", "chuck"},
+    "nick": {"nicholas", "nicky"}, "nicky": {"nicholas"},
+    "nicholas": {"nick", "nicky"},
+    "dan": {"daniel"}, "danny": {"daniel"}, "daniel": {"dan", "danny"},
+    "dave": {"david"}, "david": {"dave"},
+    "chris": {"christopher"}, "christopher": {"chris"},
+    "matt": {"matthew"}, "matthew": {"matt"},
+    "pat": {"patrick"}, "patrick": {"pat"},
+    "steve": {"stephen", "steven"}, "stephen": {"steve"},
+    "steven": {"steve"},
+    "alex": {"alexander"}, "alexander": {"alex"},
+    "kate": {"catherine", "katherine"}, "kathy": {"katherine", "kathleen"},
+    "catherine": {"kate"}, "katherine": {"kate", "kathy"},
+    "betty": {"elizabeth", "elisabeth"}, "beth": {"elizabeth", "elisabeth"},
+    "liz": {"elizabeth", "elisabeth"},
+    "elizabeth": {"betty", "beth", "liz", "elisabeth"},
+    "elisabeth": {"betty", "beth", "liz", "elizabeth"},
+    "peggy": {"margaret"}, "maggie": {"margaret"},
+    "margaret": {"peggy", "maggie"},
+    "sandy": {"sanford", "sandra"}, "sanford": {"sandy"},
+    "sandra": {"sandy"},
+    "mort": {"mortimer"}, "mortimer": {"mort"},
+    "nat": {"nathaniel"}, "nathaniel": {"nat"},
+    "bernie": {"bernard"}, "bernard": {"bernie"},
+    "geoff": {"geoffrey"}, "geoffrey": {"geoff"},
+    "cc": {"c.c.", "c.c"}, "c.c.": {"cc"}, "c.c": {"cc"},
+    "ken": {"kenneth"}, "kenneth": {"ken"},
+    "ray": {"raymond"}, "raymond": {"ray"},
+    "bert": {"bertram", "albert", "herbert"}, "bertram": {"bert"},
+    "albert": {"bert", "al"}, "al": {"albert", "alfred"},
+    "herbert": {"bert", "herb"}, "herb": {"herbert"},
+    "joan": {"joanne", "joanna"}, "joanne": {"joan"}, "joanna": {"joan"},
+    "pete": {"peter"}, "peter": {"pete"},
+    "gord": {"gordon"}, "gordon": {"gord"},
+    "fred": {"frederick", "alfred"}, "frederick": {"fred"},
+    "alfred": {"fred", "al"},
+    "phil": {"philip", "phillip"}, "philip": {"phil"}, "phillip": {"phil"},
+    "wally": {"walter"}, "walt": {"walter"}, "walter": {"wally", "walt"},
+    "gene": {"eugene"}, "eugene": {"gene"},
+    "jerry": {"gerald", "jerome", "jeremiah"}, "gerald": {"jerry"},
+    "jerome": {"jerry"}, "jeremiah": {"jerry"},
+}
+
+
+def _strip_accents(s):
+    """Remove diacritical marks from a string for accent-insensitive comparison."""
+    import unicodedata
+    nfkd = unicodedata.normalize("NFKD", s)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+async def _wiki_search_single(session, search_name):
+    """Search Wikipedia for a single person name. Returns page title or None.
+
+    Two-pass strategy:
+      Pass 1 (strict): Biographical page where title matches the name
+             (word-boundary matching, nickname-aware). Requires bio signals
+             in the snippet to confirm it's about a person.
+      Pass 2 (mononym): For single-word names only (Cher, Valentino, Diplo).
+             Accepts biographical pages even if title doesn't exactly match,
+             but ONLY for the first search result (highest relevance).
+    """
     url = "https://en.wikipedia.org/w/api.php"
     params = {
         "action": "query",
         "list": "search",
-        "srsearch": name,
+        "srsearch": search_name,
         "srnamespace": "0",
         "srlimit": "5",
         "format": "json",
@@ -202,38 +649,83 @@ async def wikipedia_search(session, name):
         if not results:
             return None
 
-        # Check top results for a plausible person page
-        for result in results[:3]:
+        name_parts = search_name.split()
+
+        # Biographical indicators in Wikipedia search snippets
+        bio_signals = [
+            "born", "born in", "was a", "is a", "is an",
+            "american", "british", "french", "businessman",
+            "actress", "actor", "politician", "designer",
+            "artist", "philanthropist", "billionaire",
+            "socialite", "entrepreneur", "financier",
+            "author", "writer", "singer", "musician",
+            "director", "producer", "architect", "lawyer",
+            "journalist", "model", "athlete", "player",
+        ]
+
+        # Pass 1: biographical page with strict name match
+        for result in results[:5]:
             title = result.get("title", "")
             snippet = result.get("snippet", "").lower()
-
-            # Skip disambiguation pages
             if "disambiguation" in snippet or "(disambiguation)" in title:
                 continue
+            if _name_matches_title(name_parts, title):
+                if any(sig in snippet for sig in bio_signals):
+                    return title
 
-            # Biographical indicators
-            bio_signals = [
-                "born", "born in", "was a", "is a", "is an",
-                "american", "british", "french", "businessman",
-                "actress", "actor", "politician", "designer",
-                "artist", "philanthropist", "billionaire",
-                "socialite", "entrepreneur", "financier",
-                "author", "writer", "singer", "musician",
-                "director", "producer", "architect", "lawyer",
-                "journalist", "model", "athlete", "player",
-            ]
-            if any(sig in snippet for sig in bio_signals):
-                return title
-
-        # Fall back to first non-disambiguation result
-        for result in results[:3]:
+        # Pass 2: mononym fallback — single-word original name only,
+        # first result only, biographical only
+        if len(name_parts) == 1 and len(name_parts[0]) > 4:
+            result = results[0]
             title = result.get("title", "")
-            if "(disambiguation)" not in title:
-                return title
+            snippet = result.get("snippet", "").lower()
+            if "disambiguation" not in snippet and "(disambiguation)" not in title:
+                title_lower = title.lower()
+                reject = ["(given name)", "(surname)", "(name)",
+                          "list of ", "family of ", "(album)", "(film)",
+                          "(song)", " airport", " international"]
+                if not any(r in title_lower for r in reject):
+                    if any(sig in snippet for sig in bio_signals):
+                        # The search name must be the FIRST WORD in the title
+                        # (word boundary match, not substring).
+                        # "Valentino" → "Valentino Garavani" ✓
+                        # "Hendrix" → "Jimi Hendrix" ✗
+                        search_lower = name_parts[0].lower()
+                        title_first = title_lower.split()[0] if title_lower.split() else ""
+                        if search_lower == title_first:
+                            return title
 
         return None
     except Exception:
         return None
+
+
+async def wikipedia_search(session, name):
+    """Search Wikipedia for a person's canonical page title.
+
+    For compound names ('X and Y'), splits and searches each person separately,
+    returning the match for the most notable individual (highest edit count).
+    Validates that Wikipedia titles contain at least one token from the search name
+    to prevent spurious matches (e.g., 'Bill Cohen' → 'Sacha Baron Cohen').
+    """
+    individuals = split_compound_name(name)
+
+    if len(individuals) == 1:
+        return await _wiki_search_single(session, individuals[0])
+
+    # Search each individual, pick the one with a valid match
+    # (For fame scoring, we want the most notable person in the pair)
+    best_title = None
+    best_edits = -1
+    for individual in individuals:
+        title = await _wiki_search_single(session, individual)
+        if title:
+            edits = await wikipedia_edit_count(session, title)
+            if edits is not None and edits > best_edits:
+                best_edits = edits
+                best_title = title
+
+    return best_title
 
 
 async def wikipedia_edit_count(session, title):
@@ -901,6 +1393,174 @@ async def run_google_phase(people, existing, output_file):
 
 # ── Report Mode ──────────────────────────────────────────────
 
+# ── Normalization ────────────────────────────────────────────
+
+# The 5 core metrics for the composite fame score.
+# Falls back to newsapi_article_count when nyt_article_count is missing.
+NORM_METRICS = [
+    "wikipedia_edit_count",
+    "wikipedia_pageviews",
+    "google_search_results",
+    "nyt_article_count",
+    "wikipedia_reference_count",
+]
+
+
+def normalize_fame(records):
+    """Log+1 → min-max normalization → arithmetic mean composite score.
+
+    For each metric:
+      1. x_log = log(x + 1)           — tames power law distribution
+      2. x_norm = (x_log - min) / (max - min)  — rescales to [0, 1]
+
+    Composite fame_score = arithmetic mean of available normalized metrics.
+    (Equivalent to log of geometric mean, but bounded and interpretable.)
+
+    People missing a metric (e.g., no Wikipedia page) get their score
+    averaged over fewer columns — they aren't penalized with a zero,
+    but they also can't score as high as someone with data on all 5.
+
+    Writes *_lognorm fields and fame_score onto each record in-place.
+    """
+    n = len(records)
+
+    # Decide which metric to use for the news slot per record
+    # If nyt_article_count is available for >50% of records, use it;
+    # otherwise fall back to newsapi_article_count
+    nyt_coverage = sum(1 for r in records if r.get("nyt_article_count") is not None)
+    use_nyt = nyt_coverage > n * 0.5
+    news_key = "nyt_article_count" if use_nyt else "newsapi_article_count"
+    news_label = "NYT articles" if use_nyt else "NewsAPI articles (fallback)"
+
+    # Build the active metric list (swap in the news key)
+    active_metrics = []
+    for m in NORM_METRICS:
+        if m == "nyt_article_count":
+            active_metrics.append(news_key)
+        else:
+            active_metrics.append(m)
+
+    print(f"\n{'═' * 70}")
+    print(f"  NORMALIZE: log+1 → min-max → arithmetic mean")
+    print(f"{'═' * 70}")
+    print(f"  Records: {n}")
+    print(f"  News metric: {news_label} (NYT coverage: {nyt_coverage}/{n})")
+    print(f"  Active metrics: {active_metrics}")
+
+    # Step 1: Compute log(x + 1) for each metric, track min/max
+    log_key = {}  # metric -> "_lognorm" output key
+    log_values = {}  # metric -> list of (index, log_value)
+    log_min = {}
+    log_max = {}
+
+    for metric in active_metrics:
+        lk = metric + "_lognorm"
+        log_key[metric] = lk
+        log_values[metric] = []
+
+        for i, rec in enumerate(records):
+            raw = rec.get(metric)
+            if raw is not None:
+                lv = math.log(raw + 1)
+                log_values[metric].append((i, lv))
+
+        if log_values[metric]:
+            vals = [v for _, v in log_values[metric]]
+            log_min[metric] = min(vals)
+            log_max[metric] = max(vals)
+        else:
+            log_min[metric] = 0
+            log_max[metric] = 0
+
+    # Step 2: Min-max scale the log values → [0, 1]
+    for metric in active_metrics:
+        lk = log_key[metric]
+        mn = log_min[metric]
+        mx = log_max[metric]
+        spread = mx - mn
+
+        # Initialize all records to None for this lognorm field
+        for rec in records:
+            rec[lk] = None
+
+        non_null = len(log_values[metric])
+        if spread == 0:
+            # All values identical — set to 0.5 (or 0 if no data)
+            for idx, lv in log_values[metric]:
+                records[idx][lk] = 0.5 if non_null > 0 else None
+        else:
+            for idx, lv in log_values[metric]:
+                records[idx][lk] = round((lv - mn) / spread, 6)
+
+    # Step 3: Arithmetic mean of available normalized scores
+    for rec in records:
+        norm_vals = []
+        for metric in active_metrics:
+            lk = log_key[metric]
+            v = rec.get(lk)
+            if v is not None:
+                norm_vals.append(v)
+        if norm_vals:
+            rec["fame_score"] = round(sum(norm_vals) / len(norm_vals), 6)
+        else:
+            rec["fame_score"] = None
+
+    # Print summary stats
+    print(f"\n  {'Metric':<35} {'Non-null':>8} {'log min':>10} {'log max':>10}")
+    print(f"  {'─' * 65}")
+    for metric in active_metrics:
+        nn = len(log_values[metric])
+        print(f"  {metric:<35} {nn:>8} {log_min[metric]:>10.3f} {log_max[metric]:>10.3f}")
+
+    # Fame score summary by group
+    for group_label in ["epstein", "baseline"]:
+        group = [r for r in records if r.get("group") == group_label]
+        scores = sorted(r["fame_score"] for r in group if r.get("fame_score") is not None)
+        if not scores:
+            continue
+        ng = len(scores)
+        median = scores[ng // 2]
+        mean = sum(scores) / ng
+        p25 = scores[ng // 4] if ng >= 4 else scores[0]
+        p75 = scores[3 * ng // 4] if ng >= 4 else scores[-1]
+        print(f"\n  {group_label.upper()} (n={ng}):")
+        print(f"    Mean:   {mean:.4f}   Median: {median:.4f}")
+        print(f"    P25:    {p25:.4f}   P75:    {p75:.4f}")
+        print(f"    Min:    {scores[0]:.4f}   Max:    {scores[-1]:.4f}")
+
+    # Mann-Whitney U on composite fame score
+    try:
+        from scipy.stats import mannwhitneyu
+        ep_scores = [r["fame_score"] for r in records
+                     if r.get("group") == "epstein" and r.get("fame_score") is not None]
+        bl_scores = [r["fame_score"] for r in records
+                     if r.get("group") == "baseline" and r.get("fame_score") is not None]
+        if len(ep_scores) >= 5 and len(bl_scores) >= 5:
+            stat, pval = mannwhitneyu(ep_scores, bl_scores, alternative="two-sided")
+            sig = "***" if pval < 0.001 else "**" if pval < 0.01 else "*" if pval < 0.05 else "n.s."
+            ep_med = sorted(ep_scores)[len(ep_scores) // 2]
+            bl_med = sorted(bl_scores)[len(bl_scores) // 2]
+            direction = "HIGHER" if ep_med > bl_med else "LOWER"
+            print(f"\n  {'─' * 65}")
+            print(f"  MANN-WHITNEY U TEST (composite fame score)")
+            print(f"  {'─' * 65}")
+            print(f"  Epstein median: {ep_med:.4f}  Baseline median: {bl_med:.4f}  → Epstein {direction}")
+            print(f"  U={stat:,.0f}  p={pval:.2e}  {sig}")
+    except ImportError:
+        print("\n  (Install scipy for Mann-Whitney U test)")
+
+    print(f"\n{'═' * 70}")
+    return records
+
+
+def save_normalized(records, output_path):
+    """Write normalized records back to JSONL."""
+    with open(output_path, "w") as f:
+        for rec in records:
+            f.write(json.dumps(rec) + "\n")
+    print(f"  Saved {len(records)} records to {output_path}")
+
+
 def print_report(records):
     """Print fame comparison: Epstein vs baseline with Mann-Whitney U tests."""
     epstein = [r for r in records if r.get("group") == "epstein"]
@@ -1059,6 +1719,7 @@ def apply_to_db(records):
 
         fame_score = compute_fame_score(rec)
 
+        # Only include columns that exist in the DB table
         row = {
             "homeowner_name": name,
             "group_label": rec.get("group", "baseline"),
@@ -1069,9 +1730,6 @@ def apply_to_db(records):
             "google_search_results": rec.get("google_search_results"),
             "google_news_total": rec.get("google_news_total"),
             "google_news_visible": rec.get("google_news_visible"),
-            "newsapi_article_count": rec.get("newsapi_article_count"),
-            "nyt_article_count": rec.get("nyt_article_count"),
-            "wikipedia_reference_count": rec.get("wikipedia_reference_count"),
             "fame_score": fame_score,
         }
 
@@ -1107,6 +1765,8 @@ def main():
                         help="Phase 5 only (Wikipedia reference count, free)")
     parser.add_argument("--resume", action="store_true",
                         help="Skip already-collected names")
+    parser.add_argument("--normalize", action="store_true",
+                        help="Log+1 → min-max normalize, compute composite fame score")
     parser.add_argument("--report", action="store_true",
                         help="Print stats + group comparison")
     parser.add_argument("--apply-db", action="store_true",
@@ -1116,6 +1776,55 @@ def main():
     args = parser.parse_args()
 
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # Normalize mode: log+1 → min-max → composite score
+    if args.normalize:
+        existing = load_existing_results()
+        if not existing:
+            print("No results found in data/fame_metrics/")
+            return
+        records = list(existing.values())
+        print(f"Loaded {len(records)} records from data/fame_metrics/")
+        records = normalize_fame(records)
+
+        # Write back to the canonical file (latest non-archive JSONL)
+        jsonl_files = sorted(
+            f for f in globmod.glob(os.path.join(OUTPUT_DIR, "fame_*.jsonl"))
+            if "archive" not in f
+        )
+        if jsonl_files:
+            canonical = jsonl_files[-1]
+        else:
+            canonical = os.path.join(OUTPUT_DIR, "fame_normalized.jsonl")
+        save_normalized(records, canonical)
+
+        # Show a few example rows
+        print(f"\n  Sample rows (top 5 by fame_score):")
+        ranked = sorted(records, key=lambda r: r.get("fame_score") or 0, reverse=True)
+        for r in ranked[:5]:
+            norms = []
+            for m in NORM_METRICS:
+                mk = m + "_lognorm"
+                if m == "nyt_article_count" and r.get(mk) is None:
+                    mk = "newsapi_article_count_lognorm"
+                v = r.get(mk)
+                norms.append(f"{v:.3f}" if v is not None else " null")
+            print(f"    {r['name']:<35} score={r.get('fame_score', 0):.4f}  "
+                  f"[{', '.join(norms)}]")
+        print(f"\n  Sample rows (bottom 5):")
+        scored = [r for r in records if r.get("fame_score") is not None]
+        ranked_bottom = sorted(scored, key=lambda r: r["fame_score"])
+        for r in ranked_bottom[:5]:
+            norms = []
+            for m in NORM_METRICS:
+                mk = m + "_lognorm"
+                if m == "nyt_article_count" and r.get(mk) is None:
+                    mk = "newsapi_article_count_lognorm"
+                v = r.get(mk)
+                norms.append(f"{v:.3f}" if v is not None else " null")
+            print(f"    {r['name']:<35} score={r.get('fame_score', 0):.4f}  "
+                  f"[{', '.join(norms)}]")
+        return
 
     # Report mode: just load and print
     if args.report:
