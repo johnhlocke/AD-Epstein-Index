@@ -241,6 +241,10 @@ This file should be automatically updated when necessary to answer three key que
 | Gemini research rate limit fixes (backoff + throttle) | Tooling | Done |
 | Gemini model switch to 2.5-flash (500 RPD quota) | Phase 2 | Done |
 | Feature 3937 scoring nulled (Hearst historic article) | Phase 1 | Done |
+| Mosaic thumbnail optimization (123x164 Supabase thumbnails) | Phase 3 | Done |
+| Homepage search index performance rewrite (parallel queries, caching) | Phase 3 | Done |
+| API edge caching (s-maxage=60, stale-while-revalidate=300) | Phase 3 | Done |
+| Client-side page cache + next-page prefetch (SearchableIndex) | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -345,6 +349,8 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 
 **Pages & Routes:**
 - Landing page with streamlined sections: Hero (scrolling mosaic + Thoreau epigraph), Abstract (3-column drop-cap), NASA-style Contents, Introduction (9 paragraphs + 12 Tufte sidenotes + textured Venn diagram), Key Finding, Searchable Index, Confirmed Timeline, Knowledge Graph, Dossier Example, Aesthetic Pivot, Epstein Aesthetic (radar), Aesthetic Analysis, Testing Aesthetic, Conclusion, What's Next, Agent Methodology (cool purple-blue), Aesthetic Methodology (warm dark-cream)
+- Hero mosaic optimized: 3,401 thumbnails generated at 123x164 (JPEG Q60, ~4.4 KB avg), hosted in Supabase Storage `mosaic-thumbnails` bucket. Page load dropped from ~8s to ~2.8s
+- Search index performance rewrite: `getFeatures()` reduced from 4 sequential Supabase queries to 2 (year-sort) or 1 (non-year). `getStats()` parallelized with `Promise.all`. API responses ~119ms. CDN edge caching, client-side page cache, and next-page prefetching added
 - Dossier detail pages (`/dossier/[id]`) with evidence sections, verdict badges, article images
 - API routes: `/api/stats`, `/api/features` (paginated + filterable + confirmed-only), `/api/dossiers`, `/api/dossiers/[id]`
 

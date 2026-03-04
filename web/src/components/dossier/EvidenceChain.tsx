@@ -1,5 +1,54 @@
+"use client";
+
 import Image from "next/image";
+import { useRef, useState, useEffect, type ReactNode } from "react";
 import type { Dossier, CrossReference } from "@/lib/types";
+
+// ── ScaleToFit — shrinks children proportionally when container is narrower than designWidth ──
+
+export function ScaleToFit({ designWidth, children }: { designWidth: number; children: ReactNode }) {
+  const outerRef = useRef<HTMLDivElement>(null);
+  const innerRef = useRef<HTMLDivElement>(null);
+  const [scale, setScale] = useState(1);
+  const [height, setHeight] = useState<number | undefined>(undefined);
+
+  useEffect(() => {
+    const outer = outerRef.current;
+    const inner = innerRef.current;
+    if (!outer || !inner) return;
+
+    const ro = new ResizeObserver(() => {
+      const available = outer.clientWidth;
+      const s = Math.min(1, available / designWidth);
+      if (s < 1) {
+        setScale(s);
+        setHeight(inner.scrollHeight * s);
+      } else {
+        setScale(1);
+        setHeight(undefined);
+      }
+    });
+    ro.observe(outer);
+    return () => ro.disconnect();
+  }, [designWidth]);
+
+  return (
+    <div ref={outerRef} style={{ height, overflow: "visible" }}>
+      <div
+        ref={innerRef}
+        style={{
+          transformOrigin: "top left",
+          ...(scale < 1 && {
+            transform: `scale(${scale})`,
+            width: designWidth,
+          }),
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
 
 // ── Types ──
 
@@ -173,7 +222,7 @@ function ExitLabel({ label }: { label: string }) {
 function LShapedExitArrow({ label }: { label: string }) {
   // L-shaped: down 19px from bottom-center of box, then right 56px with arrowhead
   const downLen = 19;
-  const rightLen = 56;
+  const rightLen = 10;
   const tipW = 6;
   const totalW = rightLen + tipW;
   const totalH = downLen + 5;
@@ -182,9 +231,9 @@ function LShapedExitArrow({ label }: { label: string }) {
       <svg width={totalW + 3} height={totalH} viewBox={`0 0 ${totalW + 3} ${totalH}`} fill="none" style={{ display: "block", marginLeft: -1 }}>
         <line x1="1" y1="0" x2="1" y2={downLen} stroke="#000" strokeWidth="2" />
         <line x1="1" y1={downLen} x2={rightLen + 1} y2={downLen} stroke="#000" strokeWidth="2" />
-        <polygon points={`${rightLen + 1},${downLen - 4} ${rightLen + 1 + tipW},${downLen} ${rightLen + 1},${downLen + 4}`} fill="#000" />
+        <polygon points={`${rightLen + 1},${downLen - 6} ${rightLen + 1 + tipW},${downLen} ${rightLen + 1},${downLen + 6}`} fill="#000" />
       </svg>
-      <span style={{ ...EXIT_LABEL, position: "absolute", left: rightLen + tipW + 13, top: downLen - 7, whiteSpace: "nowrap" }}>
+      <span style={{ ...EXIT_LABEL, position: "absolute", left: rightLen + tipW + 4, top: downLen - 7, whiteSpace: "nowrap" }}>
         <ExitLabel label={label} />
       </span>
     </div>
@@ -202,7 +251,7 @@ export function EvidenceChain({ crossRef, dossier, pageBg = "#FAFAFA" }: Evidenc
     <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", position: "relative", width: "100%" }}>
       {chain.map((node, i) => (
         <div key={node.agent} style={{
-          display: "flex", flexDirection: "column", alignItems: "flex-start", position: "relative", zIndex: chain.length - i,
+          display: "flex", flexDirection: "column", alignItems: "stretch", position: "relative", zIndex: chain.length - i,
           alignSelf: "stretch",
         }}>
           {/* Fixed-height slot between boxes: evidence label + arrow */}
@@ -212,7 +261,7 @@ export function EvidenceChain({ crossRef, dossier, pageBg = "#FAFAFA" }: Evidenc
             const prevHasExit = !!chain[i - 1].exit;
             const exitOffset = prevHasExit ? 19 : 0;
             return (
-              <div style={{ height: SLOT_HEIGHT, position: "relative", zIndex: 0, display: "flex", alignItems: "flex-end", justifyContent: "center", width: 160 }}>
+              <div style={{ height: SLOT_HEIGHT, position: "relative", zIndex: 0, display: "flex", alignItems: "flex-end", justifyContent: "center" }}>
                 <DownArrow dashed={!isActive} height={SLOT_HEIGHT - exitOffset} />
                 {hasEvidence && (
                   <div style={{
@@ -239,7 +288,7 @@ export function EvidenceChain({ crossRef, dossier, pageBg = "#FAFAFA" }: Evidenc
             <div style={{
               ...(node.status === "active" ? ACTIVE_BOX : INACTIVE_BOX),
               backgroundColor: node.status === "active" ? "rgba(0, 0, 0, 0.08)" : pageBg,
-              minWidth: 160,
+              width: "100%",
               position: "relative",
             }}>
               <Image

@@ -21,7 +21,12 @@ export async function GET(request: NextRequest) {
     };
 
     const result = await getFeatures(filters);
-    return NextResponse.json(result);
+    return NextResponse.json(result, {
+      headers: {
+        // Cache on CDN for 60s, serve stale while revalidating for 5 min
+        "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300",
+      },
+    });
   } catch (error) {
     console.error("Features API error:", error);
     return NextResponse.json(

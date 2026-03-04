@@ -21,53 +21,52 @@ import type {
 // while keeping force-dynamic on the page (no build-time generation)
 export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
   const sb = getSupabase();
-
-  // Fetch all issues (lightweight — id, status, month, year)
-  const { data: issues } = await sb
-    .from("issues")
-    .select("id, status, month, year");
-
-  // Fetch all features — paginate to bypass Supabase 1000-row default limit
-  const featureFields = "id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built, subject_category";
-  const { count: featuresCount } = await sb
-    .from("features")
-    .select("id", { count: "exact", head: true });
-  const allFeatures: Record<string, unknown>[] = [];
   const PAGE = 1000;
-  for (let offset = 0; offset < (featuresCount ?? 0); offset += PAGE) {
-    const { data } = await sb
-      .from("features")
-      .select(featureFields)
-      .range(offset, offset + PAGE - 1);
-    if (data) allFeatures.push(...data);
-  }
 
-  // Fetch all dossiers — paginate to bypass 1000-row limit
+  const featureFields = "id, issue_id, homeowner_name, design_style, location_city, location_state, location_country, year_built, subject_category";
   const dossierFields = "id, editor_verdict, subject_name, feature_id, connection_strength, combined_verdict";
-  const { count: dossiersCount } = await sb
-    .from("dossiers")
-    .select("id", { count: "exact", head: true });
+
+  // ── Phase 1: Fire ALL independent count + lightweight queries in parallel ──
+  const [
+    { data: issues },
+    { count: featuresCount },
+    { count: dossiersCount },
+    { count: xrefCount },
+    { count: anonymousCount },
+  ] = await Promise.all([
+    sb.from("issues").select("id, status, month, year"),
+    sb.from("features").select("id", { count: "exact", head: true }),
+    sb.from("dossiers").select("id", { count: "exact", head: true }),
+    sb.from("cross_references").select("id", { count: "exact", head: true }),
+    sb.from("features").select("id", { count: "exact", head: true }).eq("homeowner_name", "Anonymous"),
+  ]);
+
+  // ── Phase 2: Fetch all feature + dossier rows in parallel batches ──
+  const featureBatches = Array.from(
+    { length: Math.ceil((featuresCount ?? 0) / PAGE) },
+    (_, i) => sb.from("features").select(featureFields).range(i * PAGE, (i + 1) * PAGE - 1)
+  );
+  const dossierBatches = Array.from(
+    { length: Math.ceil((dossiersCount ?? 0) / PAGE) },
+    (_, i) => sb.from("dossiers").select(dossierFields).range(i * PAGE, (i + 1) * PAGE - 1)
+  );
+
+  const batchResults = await Promise.all([...featureBatches, ...dossierBatches]);
+
+  const allFeatures: Record<string, unknown>[] = [];
   const allDossiers: Record<string, unknown>[] = [];
-  for (let offset = 0; offset < (dossiersCount ?? 0); offset += PAGE) {
-    const { data } = await sb
-      .from("dossiers")
-      .select(dossierFields)
-      .range(offset, offset + PAGE - 1);
-    if (data) allDossiers.push(...data);
+  const featureBatchCount = featureBatches.length;
+  for (let i = 0; i < batchResults.length; i++) {
+    const { data } = batchResults[i];
+    if (!data) continue;
+    if (i < featureBatchCount) allFeatures.push(...data);
+    else allDossiers.push(...data);
   }
-
-  // Fetch cross-reference count
-  const { count: xrefCount } = await sb
-    .from("cross_references")
-    .select("id", { count: "exact", head: true });
-
-  // Count Anonymous features directly (source of truth — not derived by subtraction)
-  const { count: anonymousCount } = await sb
-    .from("features")
-    .select("id", { count: "exact", head: true })
-    .eq("homeowner_name", "Anonymous");
 
   const allIssues = issues ?? [];
+
+  // Build issue lookup map (eliminates O(n²) .find() calls)
+  const issueMap = new Map(allIssues.map((i) => [i.id, i]));
 
   // Issue counts
   const statusCounts: Record<string, number> = {};
@@ -79,8 +78,7 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
   // Features by year
   const yearMap = new Map<number, number>();
   for (const f of allFeatures) {
-    // Get the issue year for this feature
-    const issue = allIssues.find((i) => i.id === f.issue_id);
+    const issue = issueMap.get(f.issue_id as number);
     const year = issue?.year;
     if (year) {
       yearMap.set(year, (yearMap.get(year) ?? 0) + 1);
@@ -155,13 +153,16 @@ export const getStats = unstable_cache(async (): Promise<StatsResponse> => {
     .map(([year, months]) => ({ year, months }))
     .sort((a, b) => a.year - b.year);
 
+  // Build feature lookup map (eliminates O(n²) .find() calls)
+  const featureMap = new Map(allFeatures.map((f) => [f.id, f]));
+
   // Confirmed timeline — place each confirmed dossier on the year axis
   const confirmedTimeline = allDossiers
     .filter((d) => d.editor_verdict === "CONFIRMED")
     .map((d) => {
-      const feature = allFeatures.find((f) => f.id === d.feature_id);
+      const feature = featureMap.get(d.feature_id as number) ?? null;
       const issue = feature
-        ? allIssues.find((i) => i.id === feature.issue_id)
+        ? issueMap.get(feature.issue_id as number) ?? null
         : null;
       return {
         dossierId: d.id as number,
@@ -287,72 +288,62 @@ interface FeatureFilters {
   order?: "asc" | "desc";
 }
 
+// Only fetch columns the table actually renders (not SELECT *)
+const FEATURE_TABLE_COLS = "id, homeowner_name, designer_name, design_style, subject_category, location_city, location_state, issue_id";
+
+type FeatureResult = Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null };
+
+/** Apply shared text filters to a Supabase query builder. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function applyTextFilters(q: any, filters: FeatureFilters) {
+  if (filters.style) q = q.ilike("design_style", `%${filters.style}%`);
+  if (filters.designer) q = q.ilike("designer_name", `%${filters.designer}%`);
+  if (filters.category) q = q.ilike("subject_category", `%${filters.category}%`);
+  if (filters.location) {
+    q = q.or(
+      `location_city.ilike.%${filters.location}%,location_state.ilike.%${filters.location}%,location_country.ilike.%${filters.location}%`
+    );
+  }
+  if (filters.search) {
+    q = q.or(
+      `homeowner_name.ilike.%${filters.search}%,designer_name.ilike.%${filters.search}%,article_title.ilike.%${filters.search}%`
+    );
+  }
+  return q;
+}
+
 export async function getFeatures(
   filters: FeatureFilters = {}
-): Promise<PaginatedResponse<Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null }>> {
+): Promise<PaginatedResponse<FeatureResult>> {
   const sb = getSupabase();
   const page = filters.page ?? 1;
   const pageSize = filters.pageSize ?? 20;
   const offset = (page - 1) * pageSize;
 
-  // Build query — join with issues for month/year, and dossiers for link
-  let query = sb
-    .from("features")
-    .select("*, issues!inner(month, year), dossiers(id, editor_verdict)", { count: "exact" });
+  // Determine dossier join type:
+  // - confirmedOnly → !inner join filtered to CONFIRMED (eliminates pre-query)
+  // - hasDossier → !inner join (any dossier exists)
+  // - default → left join (dossier may not exist)
+  const dossierJoin = filters.confirmedOnly
+    ? "dossiers!inner(id, editor_verdict)"
+    : filters.hasDossier
+      ? "dossiers!inner(id, editor_verdict)"
+      : "dossiers(id, editor_verdict)";
+
+  const selectCols = `${FEATURE_TABLE_COLS}, issues!inner(month, year), ${dossierJoin}`;
+
+  // Build query
+  let query = sb.from("features").select(selectCols, { count: "exact" });
+
+  // Apply dossier-level filters via the join
+  if (filters.confirmedOnly) {
+    query = query.eq("dossiers.editor_verdict", "CONFIRMED");
+  }
 
   if (filters.year) {
     query = query.eq("issues.year", filters.year);
   }
-  if (filters.style) {
-    query = query.ilike("design_style", `%${filters.style}%`);
-  }
-  if (filters.designer) {
-    query = query.ilike("designer_name", `%${filters.designer}%`);
-  }
-  if (filters.category) {
-    query = query.ilike("subject_category", `%${filters.category}%`);
-  }
-  if (filters.location) {
-    query = query.or(
-      `location_city.ilike.%${filters.location}%,location_state.ilike.%${filters.location}%,location_country.ilike.%${filters.location}%`
-    );
-  }
-  if (filters.search) {
-    query = query.or(
-      `homeowner_name.ilike.%${filters.search}%,designer_name.ilike.%${filters.search}%,article_title.ilike.%${filters.search}%`
-    );
-  }
-  // Hoist filter ID lists so they're available for both main query and year-sort idQuery
-  let confirmedIds: string[] | undefined;
-  let dossierIds: string[] | undefined;
-
-  if (filters.confirmedOnly) {
-    const { data: confirmed } = await sb
-      .from("dossiers")
-      .select("feature_id")
-      .eq("editor_verdict", "CONFIRMED");
-    confirmedIds = (confirmed ?? [])
-      .map((d: { feature_id: string | null }) => d.feature_id)
-      .filter(Boolean) as string[];
-    if (confirmedIds.length > 0) {
-      query = query.in("id", confirmedIds);
-    } else {
-      return { data: [], total: 0, page, pageSize, totalPages: 0 };
-    }
-  }
-  if (filters.hasDossier) {
-    const { data: withDossier } = await sb
-      .from("dossiers")
-      .select("feature_id");
-    dossierIds = (withDossier ?? [])
-      .map((d: { feature_id: string | null }) => d.feature_id)
-      .filter(Boolean) as string[];
-    if (dossierIds.length > 0) {
-      query = query.in("id", dossierIds);
-    } else {
-      return { data: [], total: 0, page, pageSize, totalPages: 0 };
-    }
-  }
+  query = applyTextFilters(query, filters);
 
   // Sorting — map frontend column names to DB columns
   const sortMap: Record<string, string> = {
@@ -363,72 +354,50 @@ export async function getFeatures(
   };
   const ascending = filters.order === "asc";
 
-  // Year sort requires a two-step approach: PostgREST can't sort parent rows
-  // by joined table columns, so we fetch sorted issue IDs first, then paginate.
+  // Year sort: PostgREST can't sort parent rows by joined columns.
+  // Strategy: fetch all matching IDs with year/month in one query, sort in JS, paginate.
   if (filters.sort === "year") {
-    // Step 1: Get total count (query already has .select with count: "exact")
-    const { count: totalCount } = await query.limit(0);
-
-    // Step 2: Fetch ALL matching feature IDs with issue year/month (lightweight)
-    // PostgREST caps at 1000 rows per request, so we paginate in batches.
     let idQuery = sb
       .from("features")
-      .select("id, issue_id, issues!inner(year, month)");
+      .select(`id, issues!inner(year, month), ${dossierJoin}`);
 
-    // Re-apply ALL filters to the ID query
+    if (filters.confirmedOnly) {
+      idQuery = idQuery.eq("dossiers.editor_verdict", "CONFIRMED");
+    }
     if (filters.year) idQuery = idQuery.eq("issues.year", filters.year);
-    if (filters.style) idQuery = idQuery.ilike("design_style", `%${filters.style}%`);
-    if (filters.designer) idQuery = idQuery.ilike("designer_name", `%${filters.designer}%`);
-    if (filters.category) idQuery = idQuery.ilike("subject_category", `%${filters.category}%`);
-    if (filters.location) {
-      idQuery = idQuery.or(
-        `location_city.ilike.%${filters.location}%,location_state.ilike.%${filters.location}%,location_country.ilike.%${filters.location}%`
-      );
-    }
-    if (filters.search) {
-      idQuery = idQuery.or(
-        `homeowner_name.ilike.%${filters.search}%,designer_name.ilike.%${filters.search}%,article_title.ilike.%${filters.search}%`
-      );
-    }
-    if (filters.confirmedOnly && confirmedIds) {
-      idQuery = idQuery.in("id", confirmedIds);
-    }
-    if (filters.hasDossier && dossierIds) {
-      idQuery = idQuery.in("id", dossierIds);
-    }
+    idQuery = applyTextFilters(idQuery, filters);
 
-    // Paginate through all results (PostgREST caps at 1000 per request)
-    const allRows: Array<{ id: number; issue_id: number; issues: { year: number; month: number | null } }> = [];
+    // Fetch all matching IDs (paginate past PostgREST 1000-row cap)
+    const allRows: Array<{ id: number; issues: { year: number; month: number | null } }> = [];
     let batchOffset = 0;
     const BATCH_SIZE = 1000;
     while (true) {
       const { data: batch } = await idQuery.range(batchOffset, batchOffset + BATCH_SIZE - 1);
-      const typedBatch = (batch ?? []) as unknown as Array<{ id: number; issue_id: number; issues: { year: number; month: number | null } }>;
+      const typedBatch = (batch ?? []) as unknown as Array<{ id: number; issues: { year: number; month: number | null } }>;
       allRows.push(...typedBatch);
       if (typedBatch.length < BATCH_SIZE) break;
       batchOffset += BATCH_SIZE;
     }
-    const rows = allRows;
 
     // Sort in JS by year, then month
-    rows.sort((a, b) => {
+    allRows.sort((a, b) => {
       const yearDiff = (a.issues.year ?? 0) - (b.issues.year ?? 0);
       if (yearDiff !== 0) return ascending ? yearDiff : -yearDiff;
       const monthDiff = (a.issues.month ?? 0) - (b.issues.month ?? 0);
       return ascending ? monthDiff : -monthDiff;
     });
 
-    // Paginate the sorted IDs
-    const pageIds = rows.slice(offset, offset + pageSize).map((r) => r.id);
+    const total = allRows.length;
+    const pageIds = allRows.slice(offset, offset + pageSize).map((r) => r.id);
 
     if (pageIds.length === 0) {
-      return { data: [], total: totalCount ?? 0, page, pageSize, totalPages: Math.ceil((totalCount ?? 0) / pageSize) };
+      return { data: [], total, page, pageSize, totalPages: Math.ceil(total / pageSize) };
     }
 
-    // Step 3: Fetch full feature data for just this page
+    // Fetch full data for just this page
     const { data: pageData } = await sb
       .from("features")
-      .select("*, issues!inner(month, year), dossiers(id, editor_verdict)")
+      .select(`${FEATURE_TABLE_COLS}, issues!inner(month, year), ${dossierJoin}`)
       .in("id", pageIds);
 
     // Re-sort to match our sorted order
@@ -437,24 +406,8 @@ export async function getFeatures(
       (idOrder.get((a as { id: number }).id) ?? 0) - (idOrder.get((b as { id: number }).id) ?? 0)
     );
 
-    const features = sorted.map((row: Record<string, unknown>) => {
-      const { issues: issueData, dossiers: dossierData, ...feature } = row as Record<string, unknown> & {
-        issues: { month: number | null; year: number };
-        dossiers: { id: number; editor_verdict: string | null } | null;
-      };
-      return {
-        ...feature,
-        issue_month: issueData?.month ?? null,
-        issue_year: issueData?.year ?? 0,
-        dossier_id: dossierData?.id ?? null,
-        editor_verdict: dossierData?.editor_verdict ?? null,
-      };
-    });
-
-    const total = totalCount ?? rows.length;
-
     return {
-      data: features as (Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null })[],
+      data: mapFeatureRows(sorted),
       total,
       page,
       pageSize,
@@ -469,29 +422,35 @@ export async function getFeatures(
   const { data, count } = await query
     .range(offset, offset + pageSize - 1);
 
-  const features = (data ?? []).map((row: Record<string, unknown>) => {
-    const { issues: issueData, dossiers: dossierData, ...feature } = row as Record<string, unknown> & {
-      issues: { month: number | null; year: number };
-      dossiers: { id: number; editor_verdict: string | null } | null;
-    };
-    return {
-      ...feature,
-      issue_month: issueData?.month ?? null,
-      issue_year: issueData?.year ?? 0,
-      dossier_id: dossierData?.id ?? null,
-      editor_verdict: dossierData?.editor_verdict ?? null,
-    };
-  });
-
   const total = count ?? 0;
 
   return {
-    data: features as (Feature & { issue_month: number | null; issue_year: number; dossier_id: number | null; editor_verdict: string | null })[],
+    data: mapFeatureRows(data ?? []),
     total,
     page,
     pageSize,
     totalPages: Math.ceil(total / pageSize),
   };
+}
+
+/** Map raw Supabase rows to the flat shape the frontend expects. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mapFeatureRows(rows: any[]): FeatureResult[] {
+  return rows.map((row) => {
+    const { issues: issueData, dossiers: dossierData, ...feature } = row as Record<string, unknown> & {
+      issues: { month: number | null; year: number };
+      dossiers: { id: number; editor_verdict: string | null } | { id: number; editor_verdict: string | null }[] | null;
+    };
+    // dossiers can be object (1:1 unique FK) or array (1:many) depending on join type
+    const dossier = Array.isArray(dossierData) ? dossierData[0] ?? null : dossierData;
+    return {
+      ...feature,
+      issue_month: issueData?.month ?? null,
+      issue_year: issueData?.year ?? 0,
+      dossier_id: dossier?.id ?? null,
+      editor_verdict: dossier?.editor_verdict ?? null,
+    };
+  }) as FeatureResult[];
 }
 
 // ── Dossiers ───────────────────────────────────────────────
@@ -527,17 +486,11 @@ export const getAestheticRadarData = unstable_cache(
   async (): Promise<AestheticRadarData> => {
     const sb = getSupabase();
 
-    // Fetch all features that have aesthetic_profile
-    const { data: features } = await sb
-      .from("features")
-      .select("id, aesthetic_profile")
-      .not("aesthetic_profile", "is", null);
-
-    // Fetch confirmed dossier feature IDs
-    const { data: confirmedDossiers } = await sb
-      .from("dossiers")
-      .select("feature_id")
-      .eq("editor_verdict", "CONFIRMED");
+    // Fetch features with aesthetic_profile AND confirmed dossiers in parallel
+    const [{ data: features }, { data: confirmedDossiers }] = await Promise.all([
+      sb.from("features").select("id, aesthetic_profile").not("aesthetic_profile", "is", null),
+      sb.from("dossiers").select("feature_id").eq("editor_verdict", "CONFIRMED"),
+    ]);
 
     const confirmedFeatureIds = new Set(
       (confirmedDossiers ?? [])
@@ -996,31 +949,30 @@ function distributedShuffle(tiles: MosaicTile[]): MosaicTile[] {
 }
 
 /**
- * Build Azure Blob thumbnail URL for a feature's page image.
- * Pattern: architecturaldigest{YYYYMMDD}thumbnails/Pages/0x600/{page}.jpg
+ * Build Supabase Storage URL for a feature's mosaic thumbnail.
+ * Thumbnails are 123x164 JPEG Q60, hosted in the mosaic-thumbnails bucket.
  */
-function buildAzureUrl(year: number, month: number | null, page: number): string {
-  const mm = String(month ?? 1).padStart(2, "0");
-  const dd = "01";
-  return `https://architecturaldigest.blob.core.windows.net/architecturaldigest${year}${mm}${dd}thumbnails/Pages/0x600/${page}.jpg`;
+function buildThumbnailUrl(featureId: number): string {
+  const base = process.env.SUPABASE_URL;
+  return `${base}/storage/v1/object/public/mosaic-thumbnails/${featureId}.jpg`;
 }
 
 export const getHeroMosaicData = unstable_cache(
   async (): Promise<MosaicTile[]> => {
     const sb = getSupabase();
 
-    // Fetch features that have page_number + joined issue date
-    const { data: features } = await sb
-      .from("features")
-      .select("id, page_number, issue_id, issues!inner(year, month)")
-      .not("page_number", "is", null)
-      .range(0, 4999);
-
-    // Fetch confirmed dossiers with connection_strength
-    const { data: confirmedDossiers } = await sb
-      .from("dossiers")
-      .select("feature_id, connection_strength")
-      .eq("editor_verdict", "CONFIRMED");
+    // Fetch features + confirmed dossiers in parallel (no issue join needed — thumbnails keyed by feature ID)
+    const [{ data: features }, { data: confirmedDossiers }] = await Promise.all([
+      sb
+        .from("features")
+        .select("id, page_number")
+        .not("page_number", "is", null)
+        .range(0, 4999),
+      sb
+        .from("dossiers")
+        .select("feature_id, connection_strength")
+        .eq("editor_verdict", "CONFIRMED"),
+    ]);
 
     const confirmedMap = new Map<number, string | null>();
     for (const d of confirmedDossiers ?? []) {
@@ -1035,13 +987,9 @@ export const getHeroMosaicData = unstable_cache(
     // Build tile objects
     const allTiles: MosaicTile[] = [];
     for (const f of features ?? []) {
-      const issue = (f as Record<string, unknown>).issues as {
-        year: number;
-        month: number | null;
-      };
-      if (!issue?.year || !f.page_number) continue;
+      if (!f.page_number) continue;
 
-      const url = buildAzureUrl(issue.year, issue.month, f.page_number);
+      const url = buildThumbnailUrl(f.id);
       const isConfirmed = confirmedMap.has(f.id);
       allTiles.push({
         id: f.id,
@@ -1057,6 +1005,6 @@ export const getHeroMosaicData = unstable_cache(
     const shuffled = distributedShuffle(allTiles);
     return shuffled.slice(0, MOSAIC_TILE_COUNT);
   },
-  ["hero-mosaic-v2"],
+  ["hero-mosaic-v3"],
   { revalidate: 3600 }
 );

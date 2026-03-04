@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { SectionContainer } from "@/components/layout/SectionContainer";
 import { Input } from "@/components/ui/input";
@@ -50,6 +50,9 @@ export function SearchableIndex({
   const [loading, setLoading] = useState(true);
   const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
 
+  // Client-side page cache — keyed by query string
+  const pageCache = useRef(new Map<string, PaginatedResponse<FeatureRow>>());
+
   const page = Number(searchParams.get("page") ?? "1");
   const search = searchParams.get("search") ?? "";
   const year = searchParams.get("year") ?? "";
@@ -88,10 +91,10 @@ export function SearchableIndex({
     );
   }
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  /** Build the API query string for a given page number. */
+  const buildParams = useCallback((p: number) => {
     const params = new URLSearchParams();
-    params.set("page", String(page));
+    params.set("page", String(p));
     params.set("limit", String(pageSize));
     if (search) params.set("search", search);
     if (year) params.set("year", year);
@@ -102,21 +105,55 @@ export function SearchableIndex({
     if (order) params.set("order", order);
     if (dossierOnly) params.set("dossier", "true");
     if (confirmedOnly) params.set("confirmed", "true");
+    return params.toString();
+  }, [pageSize, search, year, category, style, location, sort, order, dossierOnly, confirmedOnly]);
 
+  const fetchData = useCallback(async () => {
+    const qs = buildParams(page);
+
+    // Check client cache first — instant return for previously visited pages
+    const cached = pageCache.current.get(qs);
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
     try {
-      const res = await fetch(`/api/features?${params.toString()}`);
+      const res = await fetch(`/api/features?${qs}`);
       const json = await res.json();
+      pageCache.current.set(qs, json);
       setData(json);
     } catch {
       console.error("Failed to fetch features");
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, search, year, category, style, location, sort, order, dossierOnly, confirmedOnly]);
+  }, [page, buildParams]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // Pre-fetch next page in background after current page loads
+  useEffect(() => {
+    if (!data || loading) return;
+    const nextPage = page + 1;
+    if (nextPage > data.totalPages) return;
+    const nextQs = buildParams(nextPage);
+    if (pageCache.current.has(nextQs)) return;
+    // Fire and forget — populate cache for instant next-page navigation
+    fetch(`/api/features?${nextQs}`)
+      .then((r) => r.json())
+      .then((json) => pageCache.current.set(nextQs, json))
+      .catch(() => {});
+  }, [data, loading, page, buildParams]);
+
+  // Clear cache when filters change (not just page)
+  useEffect(() => {
+    pageCache.current.clear();
+  }, [search, year, category, style, location, sort, order, dossierOnly, confirmedOnly]);
 
   // Debounced search
   useEffect(() => {
@@ -270,8 +307,8 @@ export function SearchableIndex({
               <TableHead className="whitespace-nowrap font-serif">Style</TableHead>
             </TableRow>
           </TableHeader>
-          <TableBody>
-            {loading ? (
+          <TableBody className={loading && data ? "opacity-40 transition-opacity duration-150" : ""}>
+            {loading && !data ? (
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>

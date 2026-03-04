@@ -7,7 +7,7 @@ import { DossierAestheticRadar, ScoringBreakdown } from "@/components/dossier/Do
 import { FitName } from "@/components/dossier/FitName";
 import { ArticleImageGrid } from "@/components/dossier/ArticleImageGrid";
 import { ScatteredPages } from "@/components/dossier/ScatteredPages";
-import { EvidenceChain } from "@/components/dossier/EvidenceChain";
+import { EvidenceChain, ScaleToFit } from "@/components/dossier/EvidenceChain";
 import { CollapsibleSection } from "@/components/dossier/CollapsibleSection";
 import { getDossierPageBackground, GROUP_COLORS_DARK } from "@/lib/design-tokens";
 import type { FeatureReport } from "@/lib/types";
@@ -116,9 +116,12 @@ export function ReportDetail({ report }: ReportDetailProps) {
             <div className="px-1" style={{ borderTop: "1px solid #000", height: 28, display: "flex", alignItems: "center", fontFamily: "futura-pt, sans-serif", fontSize: "10px", fontWeight: 400, textTransform: "uppercase", letterSpacing: "0.1em", color: "#1A1A1A" }}>
               Evidence Pipeline
             </div>
+            <ScaleToFit designWidth={340}>
             <div style={{ paddingTop: "12px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "relative" }}>
-              <EvidenceChain crossRef={crossRef} dossier={dossier} pageBg={pageBg} />
-              <div style={{ paddingRight: "12px", marginTop: -15 }}>
+              <div style={{ width: "calc(50% - 12px)" }}>
+                <EvidenceChain crossRef={crossRef} dossier={dossier} pageBg={pageBg} />
+              </div>
+              <div style={{ width: "calc(50% - 12px)", display: "flex", justifyContent: "center", alignItems: "flex-start", marginTop: -15 }}>
                 <VerdictBadge
                   verdict={dossier?.editor_verdict ?? null}
                   connectionStrength={dossier?.connection_strength}
@@ -127,12 +130,11 @@ export function ReportDetail({ report }: ReportDetailProps) {
                   pageBg={pageBg}
                 />
               </div>
-              {/* Editor verdict label — flush right */}
               {/* Editor verdict line + label */}
               {dossier?.editor_verdict && dossier.editor_verdict !== "PENDING_REVIEW" && (
                 <div style={{
                   position: "absolute",
-                  left: 160,
+                  left: "calc(50% - 12px)",
                   right: 0,
                   bottom: 7,
                   display: "flex",
@@ -168,6 +170,7 @@ export function ReportDetail({ report }: ReportDetailProps) {
                 </div>
               )}
             </div>
+            </ScaleToFit>
           </div>
           {/* Row 2 right: Property Details */}
           <div style={{ gridColumn: "5 / 7", gridRow: "2", fontFamily: "futura-pt, sans-serif", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", display: "flex", flexDirection: "column" }}>

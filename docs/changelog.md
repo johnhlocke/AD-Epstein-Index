@@ -6,6 +6,30 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-04 (Session 66)
+
+### Added — Mosaic Thumbnail Optimization
+
+- **`src/generate_mosaic_thumbs.py`** — New batch script that downloads 463x600 page images from Azure Blob, resizes to 123x164 (3:4 ratio, JPEG Q60), and uploads to Supabase Storage `mosaic-thumbnails` public bucket. Async httpx + Pillow, 20 concurrent downloads, idempotent (skips existing). Ran: 3,401 thumbnails, 0 failures, 14.5 MB total (~4.4 KB avg)
+- **`buildThumbnailUrl()`** in `queries.ts` — Replaces `buildAzureUrl()` for hero mosaic. Points to `{SUPABASE_URL}/storage/v1/object/public/mosaic-thumbnails/{featureId}.jpg`
+- **Supabase Storage bucket**: `mosaic-thumbnails` (public) — 3,401 JPEG thumbnails at 123x164
+
+### Changed — Homepage Search Index Performance
+
+- **`getFeatures()` rewrite** — Eliminated redundant pre-query for confirmedOnly filter (was 4 sequential queries, now 2). Uses `dossiers!inner` join with `.eq("dossiers.editor_verdict", "CONFIRMED")` instead of separate ID fetch. Selective column fetching (`FEATURE_TABLE_COLS`) replaces `SELECT *`
+- **`getStats()` parallelization** — All independent count + batch queries now fire in parallel via `Promise.all` instead of sequential loops. Issue lookup uses `Map` instead of O(n²) `.find()` calls
+- **`getHeroMosaicData()` simplified** — No longer needs `issues!inner(year, month)` join. Features + confirmed dossiers fetched in parallel with `Promise.all`. Cache key bumped to `hero-mosaic-v3`
+- **API route caching** — `/api/features` now returns `Cache-Control: public, s-maxage=60, stale-while-revalidate=300` header for CDN edge caching
+- **Client-side page cache** — `SearchableIndex.tsx` caches fetched pages in `useRef(new Map())`, pre-fetches next page in background after current page loads
+- **Loading UX** — Previous data stays visible (dimmed at 40% opacity) during page transitions instead of replacing with skeleton. Skeletons only shown on initial load when no data exists
+- **`buildAzureUrl()` removed** — No longer needed (mosaic uses Supabase thumbnails, article images use `getArticleImageUrl()`)
+
+### Fixed — Evidence Chain Styling
+
+- **EvidenceChain.tsx** — Fixed active step glow styling, added proper copper border for confirmed status, improved text contrast on dark backgrounds
+
+---
+
 ## 2026-03-03 (Session 65)
 
 ### Added — Radar Summary Pipeline & Gemini Rate Limit Fixes

@@ -7,7 +7,7 @@ import { DossierAestheticRadar, ScoringBreakdown } from "./DossierAestheticRadar
 import { FitName } from "./FitName";
 import { ArticleImageGrid } from "./ArticleImageGrid";
 import { ScatteredPages } from "./ScatteredPages";
-import { EvidenceChain } from "./EvidenceChain";
+import { EvidenceChain, ScaleToFit } from "./EvidenceChain";
 import { CollapsibleSection } from "./CollapsibleSection";
 import { getDossierPageBackground, GROUP_COLORS_DARK } from "@/lib/design-tokens";
 import type { DossierWithContext } from "@/lib/types";
@@ -115,16 +115,19 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
             <div className="px-1" style={{ borderTop: "1px solid #000", height: 28, display: "flex", alignItems: "center", fontFamily: "futura-pt, sans-serif", fontSize: "10px", fontWeight: 400, textTransform: "uppercase", letterSpacing: "0.1em", color: "#1A1A1A" }}>
               Evidence Pipeline
             </div>
+            <ScaleToFit designWidth={340}>
             <div style={{ paddingTop: "12px", display: "flex", alignItems: "flex-start", justifyContent: "space-between", position: "relative" }}>
-              <EvidenceChain crossRef={dossier.crossRef} dossier={dossier} pageBg={pageBg} />
-              <div style={{ paddingRight: "12px", marginTop: -15 }}>
+              <div style={{ width: "calc(50% - 12px)" }}>
+                <EvidenceChain crossRef={dossier.crossRef} dossier={dossier} pageBg={pageBg} />
+              </div>
+              <div style={{ width: "calc(50% - 12px)", display: "flex", justifyContent: "center", alignItems: "flex-start", marginTop: -15 }}>
                 <VerdictBadge verdict={dossier.editor_verdict} connectionStrength={dossier.connection_strength} confidenceScore={dossier.confidence_score} size="lg" pageBg={pageBg} />
               </div>
               {/* Editor verdict line + label */}
               {dossier.editor_verdict !== "PENDING_REVIEW" && (
                 <div style={{
                   position: "absolute",
-                  left: 160,
+                  left: "calc(50% - 12px)",
                   right: 0,
                   bottom: 7,
                   display: "flex",
@@ -160,6 +163,7 @@ export function DossierDetail({ dossier }: DossierDetailProps) {
                 </div>
               )}
             </div>
+            </ScaleToFit>
           </div>
           {/* Row 2 right: Property Details */}
           <div style={{ gridColumn: "5 / 7", gridRow: "2", fontFamily: "futura-pt, sans-serif", fontSize: "10px", fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.1em", display: "flex", flexDirection: "column" }}>
