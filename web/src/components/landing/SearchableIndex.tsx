@@ -76,20 +76,6 @@ export function SearchableIndex({
   // Client-side page cache — keyed by query string
   const pageCache = useRef(new Map<string, PaginatedResponse<FeatureRow>>());
 
-  // Lazy-load: defer first fetch until component is near the viewport
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [visible, setVisible] = useState(false);
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const io = new IntersectionObserver(
-      ([entry]) => { if (entry.isIntersecting) { setVisible(true); io.disconnect(); } },
-      { rootMargin: "200px" } // start fetching 200px before it scrolls into view
-    );
-    io.observe(el);
-    return () => io.disconnect();
-  }, []);
-
   function toggleSort(column: string) {
     let newSort = column;
     let newOrder: "" | "asc" | "desc" = "asc";
@@ -179,10 +165,9 @@ export function SearchableIndex({
     }
   }, [page, buildParams]);
 
-  // Only fetch once the component is near the viewport (or after first interaction)
   useEffect(() => {
-    if (visible) fetchData();
-  }, [visible, fetchData]);
+    fetchData();
+  }, [fetchData]);
 
   // Pre-fetch next page in background after current page loads
   useEffect(() => {
@@ -241,8 +226,6 @@ export function SearchableIndex({
 
   return (
     <SectionContainer width="wide" className="pt-0 pb-20" id="index">
-      {/* Sentinel for IntersectionObserver — triggers data fetch when near viewport */}
-      <div ref={containerRef} />
       {/* Filters — snapped to 6-column design grid */}
       <div className="mb-6 grid grid-cols-6 gap-x-6 gap-y-3">
         {/* Subhead — major column 1 only */}
