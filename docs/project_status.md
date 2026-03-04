@@ -245,6 +245,11 @@ This file should be automatically updated when necessary to answer three key que
 | Homepage search index performance rewrite (parallel queries, caching) | Phase 3 | Done |
 | API edge caching (s-maxage=60, stale-while-revalidate=300) | Phase 3 | Done |
 | Client-side page cache + next-page prefetch (SearchableIndex) | Phase 3 | Done |
+| Gemini backfill script (748 names, gemini-2.5-flash) | Phase 2 | In Progress |
+| Evidence pipeline responsive scaling (ScaleToFit + 1-col boxes) | Phase 3 | Done |
+| L-shaped exit arrow tightening + arrowhead match | Phase 3 | Done |
+| Verdict stamp centered in column 6 | Phase 3 | Done |
+| Header nav links to homepage from subpages | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -419,7 +424,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **In Progress — Wealth Origin Study & Final Pipeline:**
 - **NULL name resolution COMPLETE**: 862 NULL features processed by Opus Vision → all genuinely anonymous. Applied to Supabase. Zero NULL homeowner names remain.
-- **Wealth origin classification**: Gemini research switched from `gemini-3-pro-preview` (250 RPD) to `gemini-2.5-flash` (500 RPD). Backoff + throttle fixes applied. ~448 names remaining, running 1-pass + Perplexity.
+- **Wealth origin classification**: Gemini research switched from `gemini-3-pro-preview` (250 RPD) to `gemini-2.5-flash` (500 RPD). Backoff + throttle fixes applied. 448 names completed in session 65. Backfill script running for 748 names still missing Gemini passes. 1,028 names still need Perplexity passes.
   - Key finding: MIXED wealth (inherited platform + self-amplified) ~2x overrepresented in Epstein orbit (25.9% vs 13.3% baseline)
   - **Googleable Parent Rule** formalized: parents with web presence → Forbes 7 max; same-industry → Forbes 6 max; Wikipedia-level parent → MIXED
   - Formal methodology: `docs/wealth-classification-methodology.md`

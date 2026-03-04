@@ -6,6 +6,26 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-04 (Session 67)
+
+### Added — Gemini Backfill Script
+
+- **`src/retry_gemini_passes.py`** — Targeted backfill script that scans all JSONL files in `data/wealth_research/`, identifies names with zero Gemini research passes, and runs 1 Gemini search-grounding call per name using `gemini-2.5-flash`. CLI: `--dry-run`, `--limit N`, `--reclassify`, `--apply-db`. Optional `--reclassify` re-runs Opus classification with combined Gemini + Perplexity research. 748 names identified for backfill.
+
+### Changed — Evidence Pipeline Responsive Scaling
+
+- **`ScaleToFit` wrapper** in `EvidenceChain.tsx` — New component that measures container width via ResizeObserver and applies `transform: scale()` when content exceeds available space. Used on iPad/narrow viewports to shrink the evidence pipeline + verdict stamp proportionally
+- **Agent boxes now fill one grid column** — Removed hardcoded `minWidth: 160`, boxes stretch to `width: 100%` of a `calc(50% - 12px)` container (one column of the 2-column section)
+- **Verdict stamp centered in column 6** — Badge wrapper now takes explicit column width with `justify-content: center`
+- **L-shaped exit arrow tightened** — Horizontal arm reduced from 56px to 10px, arrowhead scaled to match down-arrows (12px tall), label gap reduced from 13px to 4px
+- **Verdict arrow tracks column edge** — `left: 160` → `left: "calc(50% - 12px)"` in both DossierDetail and ReportDetail
+
+### Fixed — Navigation
+
+- **"WHERE THEY LIVE" header link** — Now uses Next.js `Link` to `/` instead of `href="#"` with scroll handler, so it navigates to homepage from dossier/report pages
+
+---
+
 ## 2026-03-04 (Session 66)
 
 ### Added — Mosaic Thumbnail Optimization
