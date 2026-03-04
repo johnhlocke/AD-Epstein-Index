@@ -40,7 +40,9 @@ interface SearchableIndexProps {
 /** Sync local filter state to the URL via replaceState (no Next.js navigation). */
 function syncUrl(params: URLSearchParams) {
   const qs = params.toString();
-  const url = qs ? `?${qs}#index` : `${window.location.pathname}#index`;
+  // Preserve whatever hash the browser currently has (e.g. #agent-methodology)
+  const hash = window.location.hash || "";
+  const url = qs ? `?${qs}${hash}` : `${window.location.pathname}${hash}`;
   window.history.replaceState(null, "", url);
 }
 
