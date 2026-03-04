@@ -237,6 +237,10 @@ This file should be automatically updated when necessary to answer three key que
 | Collapsible sections + typography polish (dossier/report) | Phase 3 | Done |
 | Evidence chain active box styling + line fix | Phase 3 | Done |
 | Analysis box page-background fill | Phase 3 | Done |
+| Radar summary pipeline (3,400 Haiku summaries, $2.62) | Phase 3 | Done |
+| Gemini research rate limit fixes (backoff + throttle) | Tooling | Done |
+| Gemini model switch to 2.5-flash (500 RPD quota) | Phase 2 | Done |
+| Feature 3937 scoring nulled (Hearst historic article) | Phase 1 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -409,7 +413,7 @@ Built a Neo4j knowledge graph with hybrid NetworkX analytics:
 
 **In Progress — Wealth Origin Study & Final Pipeline:**
 - **NULL name resolution COMPLETE**: 862 NULL features processed by Opus Vision → all genuinely anonymous. Applied to Supabase. Zero NULL homeowner names remain.
-- **Wealth origin classification**: ~850/1,246 names backfilled with Perplexity third pass. Full pipeline: Gemini Search Grounding (2 passes) + Perplexity (1 pass) + Opus synthesis. ~1,859 names still need initial classification.
+- **Wealth origin classification**: Gemini research switched from `gemini-3-pro-preview` (250 RPD) to `gemini-2.5-flash` (500 RPD). Backoff + throttle fixes applied. ~448 names remaining, running 1-pass + Perplexity.
   - Key finding: MIXED wealth (inherited platform + self-amplified) ~2x overrepresented in Epstein orbit (25.9% vs 13.3% baseline)
   - **Googleable Parent Rule** formalized: parents with web presence → Forbes 7 max; same-industry → Forbes 6 max; Wikipedia-level parent → MIXED
   - Formal methodology: `docs/wealth-classification-methodology.md`

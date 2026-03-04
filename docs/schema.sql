@@ -69,6 +69,7 @@ CREATE TABLE features (
   --   "extracted_at": "2026-02-13T..."                    -- When classified
   -- }
   aesthetic_profile JSONB DEFAULT NULL,
+  radar_summary TEXT DEFAULT NULL,
   subject_category TEXT DEFAULT NULL
     CHECK (subject_category IN ('Associate', 'Politician', 'Legal', 'Royalty',
                                  'Celebrity', 'Business', 'Designer', 'Socialite',

@@ -6,6 +6,33 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-03 (Session 65)
+
+### Added — Radar Summary Pipeline & Gemini Rate Limit Fixes
+
+- **`src/generate_radar_summaries.py`** — New batch pipeline that generates one-sentence Haiku interpretations of each feature's SPACE/STORY/STAGE score pattern. CLI: `--dry-run`, `--limit N`, `--resume`, `--apply-db`. JSONL output to `data/radar_summaries/`. 3,400 summaries generated ($2.62, zero errors)
+- **`radar_summary` column** on `features` table — TEXT DEFAULT NULL, stores the Haiku-generated sentence
+- **Frontend rendering** — `DossierDetail.tsx` and `ReportDetail.tsx` now display `radar_summary` in Lora 14px below the "Radial Graph" header, before the chart. Hidden when null
+- **`radar_summary` field** added to `Feature` TypeScript interface in `types.ts`
+
+### Fixed — Gemini Research Pipeline Rate Limits
+
+- **Exponential backoff on 429** — `_single_research_call()` in `research_classify.py` now retries up to 4 times on `429 RESOURCE_EXHAUSTED` and `503 UNAVAILABLE` with exponential backoff (5s → 13s → 23s → 43s + jitter)
+- **Inter-name throttle** — 3-second delay between names in the main research loop to avoid bursting Gemini rate limits
+- **Model switch** — Gemini research model changed from `gemini-3-pro-preview` (250 RPD free tier) to `gemini-2.5-flash` (500 RPD) for biographical research passes
+- **1-pass mode** — `NUM_RESEARCH_PASSES` temporarily set to 1 to complete all remaining names within daily quota
+
+### Database
+
+- `features.radar_summary TEXT DEFAULT NULL` — one-sentence aesthetic score interpretation
+- 3,400 radar summaries applied via `--apply-db`
+
+### Data
+
+- Feature 3937 (William Randolph Hearst / "Historic Architecture: Wyntoon") — all scoring nulled out (historical property article, not a homeowner feature)
+
+---
+
 ## 2026-03-03 (Session 64)
 
 ### Changed — Dossier & Report Detail Page Overhaul

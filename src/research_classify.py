@@ -64,7 +64,7 @@ load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 OPUS_MODEL = "claude-opus-4-6"
 DEEP_RESEARCH_AGENT = "deep-research-pro-preview-12-2025"
-SEARCH_MODEL = "gemini-3-pro-preview"  # overridden by --model flag
+SEARCH_MODEL = "gemini-2.5-flash"  # overridden by --model flag
 
 OPUS_PRICING = {"input": 15.0, "output": 75.0}       # per 1M tokens
 SEARCH_PRICING = {"input": 2.0, "output": 12.0}      # Gemini 3.1 Pro per 1M tokens
@@ -803,22 +803,33 @@ def research_person_grounded(gemini_client, person, max_retries=2):
             }
 
 
-NUM_RESEARCH_PASSES = 3  # independent Gemini web searches per name
+NUM_RESEARCH_PASSES = 1  # 1 pass to fit within 500 RPD free tier; set back to 3 for paid tier
 
 
-def _single_research_call(gemini_client, prompt):
-    """Single Gemini research call — runs in thread, returns dict or raises."""
-    response = _gemini_call(gemini_client, prompt)
-    text = _extract_response_text(response)
-    grounded = bool(response.candidates and response.candidates[0].grounding_metadata)
-    usage = response.usage_metadata
-    return {
-        "research": text,
-        "grounded": grounded,
-        "source": "gemini",
-        "gemini_input_tokens": usage.prompt_token_count if usage else 0,
-        "gemini_output_tokens": usage.candidates_token_count if usage else 0,
-    }
+def _single_research_call(gemini_client, prompt, max_retries=4):
+    """Single Gemini research call with exponential backoff on 429s."""
+    for attempt in range(max_retries + 1):
+        try:
+            response = _gemini_call(gemini_client, prompt)
+            text = _extract_response_text(response)
+            grounded = bool(response.candidates and response.candidates[0].grounding_metadata)
+            usage = response.usage_metadata
+            return {
+                "research": text,
+                "grounded": grounded,
+                "source": "gemini",
+                "gemini_input_tokens": usage.prompt_token_count if usage else 0,
+                "gemini_output_tokens": usage.candidates_token_count if usage else 0,
+            }
+        except Exception as e:
+            err_str = str(e)
+            is_rate_limit = "429" in err_str or "RESOURCE_EXHAUSTED" in err_str
+            is_unavailable = "503" in err_str or "UNAVAILABLE" in err_str
+            if (is_rate_limit or is_unavailable) and attempt < max_retries:
+                wait = (2 ** attempt) * 5 + random.uniform(0, 3)  # 5s, 13s, 23s, 43s + jitter
+                time.sleep(wait)
+                continue
+            raise  # re-raise on non-retryable errors or exhausted retries
 
 
 # ── Perplexity Research ──────────────────────────────────────
@@ -982,8 +993,14 @@ def run_search_grounding_pipeline(gemini_client, opus_client, persons, output_pa
     mode = "a" if done_names else "w"
     results = []
 
+    INTER_NAME_DELAY = 3  # seconds between names to avoid Gemini 429s
+
     with open(output_path, mode) as f:
         for i, person in enumerate(remaining, 1):
+            # Throttle between names to stay under Gemini rate limits
+            if i > 1:
+                time.sleep(INTER_NAME_DELAY)
+
             group_label = person["group"].upper()
             name = person["name"]
             print(f"  [{i:>3d}/{total}] [{group_label:8s}] "
