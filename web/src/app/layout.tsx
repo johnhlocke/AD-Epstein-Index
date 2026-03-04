@@ -43,6 +43,8 @@ export default function RootLayout({
       <head>
         <link rel="stylesheet" href="https://use.typekit.net/lui3uua.css" />
         <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,500;0,600;0,700;1,400;1,500;1,600&display=swap" />
+        {/* Temporary: Figma capture script */}
+        <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async />
       </head>
       <body
         className={`${inter.variable} ${playfair.variable} ${jetbrainsMono.variable} font-sans antialiased`}

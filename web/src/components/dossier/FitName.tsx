@@ -8,7 +8,7 @@ export function FitName({ name }: FitNameProps) {
       style={{
         fontFamily: "futura-pt, sans-serif",
         color: "#1A1A1A",
-        fontSize: "80px",
+        fontSize: "86px",
         fontWeight: 900,
         lineHeight: 0.95,
       }}

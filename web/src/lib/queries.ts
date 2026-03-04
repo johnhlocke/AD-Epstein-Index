@@ -5,10 +5,11 @@ import type {
   Feature,
   Dossier,
   DossierWithContext,
-  DossierImage,
   FeatureImage,
   FeatureReport,
   WealthProfile,
+  FameMetrics,
+  CrossReference,
   PaginatedResponse,
   AestheticRadarData,
   MosaicTile,
@@ -701,30 +702,70 @@ export async function getDossier(id: number): Promise<DossierWithContext | null>
     issue = issueData;
   }
 
-  // Fetch images
+  // Fetch article images from feature_images
   const { data: images } = await sb
-    .from("dossier_images")
-    .select("*")
-    .eq("dossier_id", dossier.id)
+    .from("feature_images")
+    .select("id, feature_id, page_number, public_url, created_at")
+    .eq("feature_id", dossier.feature_id)
     .order("page_number");
 
-  // Fetch wealth profile
+  // Fetch wealth profile (try feature_id first, fall back to name for multi-home people)
   let wealth: WealthProfile | null = null;
   if (dossier.feature_id) {
     const { data: wp } = await sb
       .from("wealth_profiles")
-      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary")
+      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
       .eq("feature_id", dossier.feature_id)
       .maybeSingle();
     wealth = wp as WealthProfile | null;
+  }
+  if (!wealth && dossier.subject_name) {
+    const { data: wp } = await sb
+      .from("wealth_profiles")
+      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
+      .eq("homeowner_name", dossier.subject_name)
+      .maybeSingle();
+    wealth = wp as WealthProfile | null;
+  }
+
+  // Fetch fame metrics (try feature_id first, fall back to name for multi-home people)
+  let fame: FameMetrics | null = null;
+  if (dossier.feature_id) {
+    const { data: fm } = await sb
+      .from("fame_metrics")
+      .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
+      .eq("feature_id", dossier.feature_id)
+      .maybeSingle();
+    fame = fm as FameMetrics | null;
+  }
+  if (!fame && dossier.subject_name) {
+    const { data: fm } = await sb
+      .from("fame_metrics")
+      .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
+      .eq("homeowner_name", dossier.subject_name)
+      .maybeSingle();
+    fame = fm as FameMetrics | null;
+  }
+
+  // Fetch cross-reference (Detective's investigation)
+  let crossRef = null;
+  if (dossier.feature_id) {
+    const { data: xref } = await sb
+      .from("cross_references")
+      .select("black_book_status, doj_status, doj_results, combined_verdict, confidence_score, verdict_rationale")
+      .eq("feature_id", dossier.feature_id)
+      .maybeSingle();
+    crossRef = xref as CrossReference | null;
   }
 
   return {
     ...dossier,
     feature,
     issue,
-    images: (images ?? []) as DossierImage[],
+    images: (images ?? []) as FeatureImage[],
     wealth,
+    fame,
+    crossRef,
   } as DossierWithContext;
 }
 
@@ -767,10 +808,42 @@ export async function getFeatureReport(featureId: number): Promise<FeatureReport
     .eq("feature_id", featureId)
     .maybeSingle();
 
-  // Fetch wealth profile
+  // Fetch wealth profile (try feature_id first, fall back to name for multi-home people)
   const { data: wp } = await sb
     .from("wealth_profiles")
-    .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary")
+    .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
+    .eq("feature_id", featureId)
+    .maybeSingle();
+  let wealth = wp as WealthProfile | null;
+  if (!wealth && feature.homeowner_name) {
+    const { data: wp2 } = await sb
+      .from("wealth_profiles")
+      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
+      .eq("homeowner_name", feature.homeowner_name)
+      .maybeSingle();
+    wealth = wp2 as WealthProfile | null;
+  }
+
+  // Fetch fame metrics (try feature_id first, fall back to name for multi-home people)
+  const { data: fm } = await sb
+    .from("fame_metrics")
+    .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
+    .eq("feature_id", featureId)
+    .maybeSingle();
+  let fame = fm as FameMetrics | null;
+  if (!fame && feature.homeowner_name) {
+    const { data: fm2 } = await sb
+      .from("fame_metrics")
+      .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
+      .eq("homeowner_name", feature.homeowner_name)
+      .maybeSingle();
+    fame = fm2 as FameMetrics | null;
+  }
+
+  // Fetch cross-reference (Detective's investigation)
+  const { data: xref } = await sb
+    .from("cross_references")
+    .select("black_book_status, doj_status, doj_results, combined_verdict, confidence_score, verdict_rationale")
     .eq("feature_id", featureId)
     .maybeSingle();
 
@@ -779,7 +852,9 @@ export async function getFeatureReport(featureId: number): Promise<FeatureReport
     issue,
     images: (images ?? []) as FeatureImage[],
     dossier: dossier as Dossier | null,
-    wealth: wp as WealthProfile | null,
+    wealth,
+    fame,
+    crossRef: xref as CrossReference | null,
   };
 }
 

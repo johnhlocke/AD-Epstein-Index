@@ -52,6 +52,7 @@ export interface Feature {
   scoring_rationale: Record<string, string> | null;
   scored_at: string | null;
   aesthetic_profile: string | null;
+  radar_summary: string | null;
 }
 
 export interface Dossier {
@@ -77,6 +78,7 @@ export interface Dossier {
   editor_reasoning: string | null;
   editor_reviewed_at: string | null;
   investigated_at: string | null;
+  connection_summary: string | null;
   sibling_dossiers: SiblingDossier[];
   created_at: string;
   updated_at: string | null;
@@ -122,14 +124,36 @@ export interface WealthProfile {
   cultural_capital_notes: string | null;
   social_capital_notes: string | null;
   bio_summary: string | null;
+  profession_category: string | null;
+}
+
+/** Fame metrics from fame_metrics table */
+export interface FameMetrics {
+  fame_score: number | null;
+  wikipedia_page: string | null;
+  wikipedia_edit_count: number | null;
+  wikipedia_pageviews: number | null;
+  nyt_article_count: number | null;
+}
+
+/** Cross-reference record from the Detective's investigation */
+export interface CrossReference {
+  black_book_status: "match" | "no_match" | "pending" | null;
+  doj_status: "searched" | "pending" | "error" | "skipped" | null;
+  doj_results: Record<string, unknown> | null;
+  combined_verdict: "confirmed_match" | "likely_match" | "possible_match" | "needs_review" | "no_match" | "pending" | null;
+  confidence_score: number | null;
+  verdict_rationale: string | null;
 }
 
 /** Enriched dossier with feature + issue context */
 export interface DossierWithContext extends Dossier {
   feature: Feature | null;
   issue: Issue | null;
-  images: DossierImage[];
+  images: FeatureImage[];
   wealth: WealthProfile | null;
+  fame: FameMetrics | null;
+  crossRef: CrossReference | null;
 }
 
 /** Stats API response */
@@ -221,6 +245,8 @@ export interface FeatureReport {
   images: FeatureImage[];
   dossier: Dossier | null;
   wealth: WealthProfile | null;
+  fame: FameMetrics | null;
+  crossRef: CrossReference | null;
 }
 
 /** Hero mosaic tile data */

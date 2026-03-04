@@ -526,6 +526,8 @@ Next.js App (web/)
 - `web/src/app/page.tsx` — server component, fetches all stats at build time (ISR 5min)
 - `web/src/app/dossier/[id]/page.tsx` — dynamic server component
 - `web/src/components/charts/` — Recharts wrappers (client components)
+- `web/src/components/dossier/` — DossierDetail, DossierAestheticRadar, EvidenceSection, EvidenceChain, CollapsibleSection (client), VerdictBadge, FitName, ArticleImageGrid, ScatteredPages
+- `web/src/components/report/` — ReportDetail (mirrors DossierDetail for /report/[slug] route)
 - `web/src/components/landing/` — SearchableIndex (client), Hero/KeyFindings/Methodology (server)
 
 **Data flow:** Supabase → Next.js server → HTML (static/ISR) or JSON (API routes) → Browser

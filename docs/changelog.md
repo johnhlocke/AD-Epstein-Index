@@ -6,6 +6,22 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-03 (Session 64)
+
+### Changed — Dossier & Report Detail Page Overhaul
+
+- **Collapsible sections** — All three sections (A: Homeowner Info, B: Epstein Connection Evidence, C: Aesthetic Profile) are now collapsible with +/− toggle buttons. New `CollapsibleSection` client component with `useState`-driven toggle (Safari-compatible, no CSS `details[open]` issues)
+- **Section spacing** — Increased vertical space between sections A→B→C (128px inline margin; Tailwind `mt-32` wasn't generating in v4)
+- **Field label typography** — All 8px Lora serif field labels replaced with futura-pt sans-serif (uppercase, 0.12em tracking). Italic child spans get `textTransform: "none"` override to prevent inheriting uppercase
+- **Removed "Additional AD Featured Homes" section** — Deleted Feltron card siblings section, plus dead `CARD`/`CARD_HEADER` constants and unused `siblings` variable from both files
+- **Analysis box backgrounds** — AD Appearance, Home Analysis, Pattern Analysis boxes now use page background color instead of hardcoded `#FAFAFA`/`#EDEDED`
+- **Evidence pipeline line fix** — Editor verdict line starts at box edge (160px) instead of overlapping into box (was 144px)
+- **Active agent box fill** — Active evidence chain boxes (Detective, Researcher, Editor) use `rgba(0,0,0,0.08)` tint matching Researcher/Editor reasoning box headers
+- **Radar chart + scoring breakdown** — GROUP_COLORS_DARK threaded through, colored SPACE/STORY/STAGE group headers, custom grid rings, blur transitions, power bars
+- **New components**: `CollapsibleSection.tsx`, `EvidenceChain.tsx`, `ScatteredPages.tsx`
+
+---
+
 ## 2026-03-03 (Session 63)
 
 ### Database — Feature Data Cleanup & Cross-Table Fixes

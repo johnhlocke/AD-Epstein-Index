@@ -560,6 +560,23 @@ html {
 .mosaic-tag-low     { background: rgba(220,38,38,0.6); color: #fff; }
 .mosaic-tag-coincidence { background: rgba(160,160,160,0.6); color: #fff; }
 
+/* DOJ document link pills */
+.doc-link {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  color: #666 !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+  border: none !important;
+  border-radius: 999px;
+  padding: 3px 10px;
+  text-decoration: none !important;
+  transition: color 0.15s, background 0.15s;
+}
+.doc-link:hover {
+  color: #000 !important;
+  background: rgba(0, 0, 0, 0.15) !important;
+}
+
 /* Accessibility: pause animation for reduced-motion preference */
 @media (prefers-reduced-motion: reduce) {
   .mosaic-scroller {

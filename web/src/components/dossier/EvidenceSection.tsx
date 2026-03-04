@@ -6,6 +6,7 @@ interface EvidenceSectionProps {
   title: string;
   data: Record<string, unknown> | unknown[] | null;
   defaultOpen?: boolean;
+  pageBg?: string;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -104,7 +105,7 @@ function EvidenceItem({ item }: { item: ReturnType<typeof isEvidenceItem extends
   );
 }
 
-export function EvidenceSection({ title, data, defaultOpen = false }: EvidenceSectionProps) {
+export function EvidenceSection({ title, data, defaultOpen = false, pageBg }: EvidenceSectionProps) {
   const [open, setOpen] = useState(defaultOpen);
 
   if (!data) return null;
@@ -113,11 +114,11 @@ export function EvidenceSection({ title, data, defaultOpen = false }: EvidenceSe
   const entries = isTopLevelArray ? [["items", data]] as [string, unknown][] : Object.entries(data);
 
   return (
-    <div className="overflow-hidden border" style={CARD}>
+    <div className="overflow-hidden border" style={{ ...CARD, ...(pageBg ? { backgroundColor: pageBg } : {}) }}>
       {/* Header bar — click to toggle */}
       <div
         className="flex cursor-pointer items-center justify-between px-4 py-2"
-        style={CARD_HEADER}
+        style={{ ...CARD_HEADER, ...(pageBg ? { backgroundColor: pageBg } : {}) }}
         onClick={() => setOpen(!open)}
       >
         <p style={LABEL}>{title}</p>

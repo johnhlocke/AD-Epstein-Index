@@ -8,7 +8,7 @@ import {
   PolarGrid,
   PolarAngleAxis,
   PolarRadiusAxis,
-  ResponsiveContainer,
+
   Tooltip,
 } from "recharts";
 
@@ -99,119 +99,12 @@ const ANCHORS: Record<string, Record<number, string>> = {
 // GROUP_COLORS imported from @/lib/design-tokens
 
 // ═══════════════════════════════════════════════════════════
-// Narrative summary generator
-// ═══════════════════════════════════════════════════════════
-
-type Scores = {
-  grandeur: number;
-  materialWarmth: number;
-  maximalism: number;
-  historicism: number;
-  provenance: number;
-  hospitality: number;
-  formality: number;
-  curation: number;
-  theatricality: number;
-};
-
-function extractScores(feature: Feature): Scores | null {
-  const g = feature.score_grandeur;
-  const mw = feature.score_material_warmth;
-  const mx = feature.score_maximalism;
-  const h = feature.score_historicism;
-  const p = feature.score_provenance;
-  const ho = feature.score_hospitality;
-  const f = feature.score_formality;
-  const c = feature.score_curation;
-  const t = feature.score_theatricality;
-
-  if (!g || !mw || !mx || !h || !p || !ho || !f || !c || !t) return null;
-
-  return {
-    grandeur: g,
-    materialWarmth: mw,
-    maximalism: mx,
-    historicism: h,
-    provenance: p,
-    hospitality: ho,
-    formality: f,
-    curation: c,
-    theatricality: t,
-  };
-}
-
-function generateSummary(s: Scores): string {
-  const parts: string[] = [];
-
-  // ── SPACE sentence ──
-  const spaceFragments: string[] = [];
-
-  if (s.grandeur >= 4) spaceFragments.push("grand, architecturally imposing");
-  else if (s.grandeur <= 2) spaceFragments.push("intimate, human-scale");
-
-  if (s.materialWarmth >= 4) spaceFragments.push("with warm, tactile materials throughout");
-  else if (s.materialWarmth <= 2) spaceFragments.push("with cold, hard surfaces — marble, chrome, lacquer");
-  else if (s.materialWarmth === 3) spaceFragments.push("balancing warm and cool materials");
-
-  if (s.maximalism >= 4) spaceFragments.push("and densely layered with objects in dialogue");
-  else if (s.maximalism <= 2) spaceFragments.push("and spare, minimal furnishing");
-
-  if (spaceFragments.length > 0) {
-    parts.push(spaceFragments[0].charAt(0).toUpperCase() + spaceFragments[0].slice(1) +
-      (spaceFragments.length > 1 ? ", " + spaceFragments.slice(1).join(", ") : "") + ".");
-  }
-
-  // ── STORY sentence ──
-  const storyFragments: string[] = [];
-
-  if (s.historicism >= 4) storyFragments.push("strongly committed to a historical period");
-  else if (s.historicism <= 2) storyFragments.push("contemporary with little period reference");
-
-  if (s.provenance >= 4) storyFragments.push("with genuine accumulated patina");
-  else if (s.provenance <= 2) storyFragments.push("where everything feels newly acquired");
-
-  if (s.hospitality >= 4) storyFragments.push("designed primarily as a social venue for entertaining");
-  else if (s.hospitality <= 2) storyFragments.push("designed as a private retreat");
-  else if (s.hospitality === 3) storyFragments.push("equally suited to private life and hosting");
-
-  if (storyFragments.length > 0) {
-    const story = storyFragments[0].charAt(0).toUpperCase() + storyFragments[0].slice(1) +
-      (storyFragments.length > 1 ? ", " + storyFragments.slice(1).join(", ") : "");
-    parts.push(story + ".");
-  }
-
-  // ── STAGE sentence ──
-  const stageAvg = (s.formality + s.curation + s.theatricality) / 3;
-
-  if (stageAvg >= 3.5) {
-    const stageDetails: string[] = [];
-    if (s.theatricality >= 4) stageDetails.push("performs wealth for an audience");
-    if (s.formality >= 4) stageDetails.push("enforces behavioral rules on occupants");
-    if (s.curation >= 4) stageDetails.push("styled by a designer for editorial effect");
-
-    if (stageDetails.length > 0) {
-      parts.push("The home " + stageDetails.join(", ") + ".");
-    }
-  } else if (stageAvg <= 2.5) {
-    const lowDetails: string[] = [];
-    if (s.theatricality <= 2) lowDetails.push("understated wealth");
-    if (s.formality <= 2) lowDetails.push("welcoming informality");
-    if (s.curation <= 2) lowDetails.push("personal curation");
-
-    if (lowDetails.length > 0) {
-      parts.push("The home reads as genuinely lived-in — " + lowDetails.join(", ") + ".");
-    }
-  }
-
-  return parts.join(" ");
-}
-
-// ═══════════════════════════════════════════════════════════
 // Components
 // ═══════════════════════════════════════════════════════════
 
 interface DossierAestheticRadarProps {
   feature: Feature;
+  groupColors?: Record<string, string>;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -267,7 +160,8 @@ function interpPoint(
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 function ColoredRadarShape(props: any) {
-  const { points } = props;
+  const { points, groupColors: gc } = props;
+  const GC = gc ?? GROUP_COLORS;
   if (!points || points.length < 3) return null;
 
   const cx = points[0].cx;
@@ -305,24 +199,20 @@ function ColoredRadarShape(props: any) {
     const groupB = AXES[next].group;
 
     if (boundaries.has(i)) {
-      // Boundary sector: subdivide into BLEND_STEPS thin slices with interpolated colors
       for (let s = 0; s < BLEND_STEPS; s++) {
         const t0 = s / BLEND_STEPS;
         const t1 = (s + 1) / BLEND_STEPS;
         const p0 = interpPoint(cx, cy, points[i], points[next], t0);
         const p1 = interpPoint(cx, cy, points[i], points[next], t1);
         const tMid = (t0 + t1) / 2;
-        const blendColor = lerpColor(GROUP_COLORS[groupA], GROUP_COLORS[groupB], tMid);
+        const blendColor = lerpColor(GC[groupA], GC[groupB], tMid);
         sectors.push({
           d: `M${cx},${cy} L${p0.x},${p0.y} L${p1.x},${p1.y} Z`,
           gradId: `blend-${i}-${s}`,
         });
-        // We'll create individual radial gradients for blend sectors below
-        // For now, store the color info
         (sectors[sectors.length - 1] as { d: string; gradId: string; color: string }).color = blendColor;
       }
     } else {
-      // Interior sector: single triangle with group gradient
       sectors.push({
         d: `M${cx},${cy} L${points[i].x},${points[i].y} L${points[next].x},${points[next].y} Z`,
         gradId: `grad-${groupA}`,
@@ -343,8 +233,8 @@ function ColoredRadarShape(props: any) {
             r={maxR}
             gradientUnits="userSpaceOnUse"
           >
-            <stop offset="0%" stopColor={GROUP_COLORS[group]} stopOpacity={0.1} />
-            <stop offset="100%" stopColor={GROUP_COLORS[group]} stopOpacity={0.9} />
+            <stop offset="0%" stopColor={GC[group]} stopOpacity={0.1} />
+            <stop offset="100%" stopColor={GC[group]} stopOpacity={1.0} />
           </radialGradient>
         ))}
         {/* Radial gradients for blend sectors */}
@@ -361,32 +251,95 @@ function ColoredRadarShape(props: any) {
               gradientUnits="userSpaceOnUse"
             >
               <stop offset="0%" stopColor={blendSector.color} stopOpacity={0.1} />
-              <stop offset="100%" stopColor={blendSector.color} stopOpacity={0.9} />
+              <stop offset="100%" stopColor={blendSector.color} stopOpacity={1.0} />
             </radialGradient>
           );
         })}
+        {/* Blur filter to smooth color transitions between groups */}
+        <filter id="sector-blur" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="4" />
+        </filter>
+        {/* Radial mask: white at center (blur visible), black at edges (blur hidden) */}
+        <radialGradient id="blur-fade" cx={cx} cy={cy} r={maxR} gradientUnits="userSpaceOnUse">
+          <stop offset="0%" stopColor="white" />
+          <stop offset="50%" stopColor="white" />
+          <stop offset="100%" stopColor="black" />
+        </radialGradient>
+        <mask id="blur-mask">
+          <rect x={cx - maxR * 1.5} y={cy - maxR * 1.5} width={maxR * 3} height={maxR * 3} fill="url(#blur-fade)" />
+        </mask>
+        {/* Clip to polygon shape so blur doesn't bleed outside */}
+        <clipPath id="shape-clip">
+          <path d={polyPath} />
+        </clipPath>
       </defs>
 
-      {/* All sectors */}
+      {/* Custom grid rings — progressively darker toward perimeter */}
+      {[1, 2, 3, 4, 5].map((ring) => {
+        const r = (ring / 5) * maxR;
+        const opacity = 0.05 + (ring / 5) * 0.55;
+        return (
+          <circle
+            key={`grid-ring-${ring}`}
+            cx={cx}
+            cy={cy}
+            r={r}
+            fill="none"
+            stroke={`rgba(100,100,100,${opacity})`}
+            strokeWidth={0.5}
+          />
+        );
+      })}
+      {/* Radial spokes */}
+      {AXES.map((_, i) => {
+        const angle = (i * 360) / AXES.length - 90;
+        const rad = (angle * Math.PI) / 180;
+        const x2 = cx + maxR * Math.cos(rad);
+        const y2 = cy + maxR * Math.sin(rad);
+        return (
+          <line
+            key={`spoke-${i}`}
+            x1={cx}
+            y1={cy}
+            x2={x2}
+            y2={y2}
+            stroke="rgba(100,100,100,0.4)"
+            strokeWidth={0.5}
+          />
+        );
+      })}
+
+      {/* Sharp sectors (base layer — visible at edges) */}
       {sectors.map((s, i) => (
         <path
-          key={`sector-${i}`}
+          key={`sector-sharp-${i}`}
           d={s.d}
           fill={`url(#${s.gradId})`}
         />
       ))}
 
+      {/* Blurred sectors (overlay — fades in toward center, clipped to shape) */}
+      <g filter="url(#sector-blur)" clipPath="url(#shape-clip)" mask="url(#blur-mask)">
+        {sectors.map((s, i) => (
+          <path
+            key={`sector-blur-${i}`}
+            d={s.d}
+            fill={`url(#${s.gradId})`}
+          />
+        ))}
+      </g>
+
       {/* Crisp outer edge — neutral gray */}
       <path
         d={polyPath}
         fill="none"
-        stroke="#999"
+        stroke="#444"
         strokeWidth={2}
       />
 
       {/* Crisp vertex dots */}
       {points.map((_: unknown, i: number) => {
-        const color = GROUP_COLORS[AXES[i].group];
+        const color = GC[AXES[i].group];
         return (
           <circle
             key={`dot-${i}`}
@@ -397,64 +350,6 @@ function ColoredRadarShape(props: any) {
         );
       })}
 
-      {/* Group arcs outside the chart */}
-      {(() => {
-        // Chart outer radius = where score 5 would be.
-        // Derive from outerRadius of the chart: each point is at (score/5)*outerR from center.
-        // Find the maximum possible radius by scaling up from the actual max data point.
-        const maxScore = Math.max(...points.map((p: { value?: number }) => p.value ?? 0), 1);
-        const chartOuterR = (maxR / maxScore) * 5;
-        const arcR = chartOuterR + 18;
-        const baseLabelR = arcR + 38;
-
-        // Axis angle formula: 9 axes evenly spaced, index 0 at top
-        const axisAngle = (idx: number) => -Math.PI / 2 + (idx * 2 * Math.PI / 9);
-
-        const arcs = [
-          { group: "SPACE" as const, startIdx: 0, endIdx: 2 },
-          { group: "STORY" as const, startIdx: 3, endIdx: 5 },
-          { group: "STAGE" as const, startIdx: 6, endIdx: 8 },
-        ];
-
-        return arcs.map(({ group, startIdx, endIdx }) => {
-          const startA = axisAngle(startIdx);
-          const endA = axisAngle(endIdx);
-          // Nudge STAGE label angle upward to avoid overlapping "Curation"
-          const midA = (startA + endA) / 2 + (group === "STAGE" ? 0.1 : group === "STORY" ? -0.1 : 0);
-          const labelR = baseLabelR + (group === "STAGE" ? 14 : group === "STORY" ? -4 : 0);
-
-          const sx = cx + arcR * Math.cos(startA);
-          const sy = cy + arcR * Math.sin(startA);
-          const ex = cx + arcR * Math.cos(endA);
-          const ey = cy + arcR * Math.sin(endA);
-
-          return (
-            <g key={`arc-${group}`}>
-              <path
-                d={`M${sx},${sy} A${arcR},${arcR} 0 0,1 ${ex},${ey}`}
-                fill="none"
-                stroke={GROUP_COLORS[group]}
-                strokeWidth={1.5}
-                strokeLinecap="round"
-                strokeOpacity={0.7}
-              />
-              <text
-                x={cx + labelR * Math.cos(midA)}
-                y={cy + labelR * Math.sin(midA)}
-                textAnchor="middle"
-                dominantBaseline="central"
-                fontSize={13}
-                fontWeight="bold"
-                fill={GROUP_COLORS[group]}
-                fontFamily="futura-pt, sans-serif"
-                letterSpacing="0.1em"
-              >
-                {group}
-              </text>
-            </g>
-          );
-        });
-      })()}
     </g>
   );
 }
@@ -469,24 +364,21 @@ for (const axis of AXES) {
 function AxisTick({ payload, x, y, textAnchor }: any) {
   const label = payload.value as string;
   const lines = label.split("\n");
-  const color = "#666";
+  const color = "#1A1A1A";
   const yAdj = label === "Grandeur" ? y - 6 : y;
   return (
     <text
       x={x}
       y={yAdj}
       textAnchor={textAnchor}
-      fontSize={12}
+      fontSize={10}
       fill={color}
-      stroke="white"
-      strokeWidth={4}
-      strokeLinejoin="round"
-      paintOrder="stroke"
       fontFamily="futura-pt, sans-serif"
+      fontWeight={700}
     >
       {lines.map((line: string, i: number) => (
         <tspan key={i} x={x} dy={i === 0 ? 0 : 15}>
-          {line}
+          {line.toUpperCase()}
         </tspan>
       ))}
     </text>
@@ -496,7 +388,8 @@ function AxisTick({ payload, x, y, textAnchor }: any) {
 /**
  * Full-width radar chart with summary + axis-by-axis breakdown.
  */
-export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
+export function DossierAestheticRadar({ feature, groupColors }: DossierAestheticRadarProps) {
+  const GC = groupColors ?? GROUP_COLORS;
   const mounted = useMounted();
 
   // Build radar data from feature scores
@@ -559,166 +452,145 @@ export function DossierAestheticRadar({ feature }: DossierAestheticRadarProps) {
     STAGE: "Stage — Who It's Performing For",
   };
 
-  // Generate summary
-  const scores = extractScores(feature);
-  const summary = scores ? generateSummary(scores) : null;
-
   return (
     <div>
-      <p
-        className="text-[11px] font-bold uppercase tracking-[0.15em]"
-        style={{ fontFamily: "futura-pt, sans-serif", color: "#B87333" }}
-      >
-        Aesthetic Profile
-      </p>
-      <hr className="mt-2" style={{ border: 0, borderTop: "2px solid #1A1A1A" }} />
+      {/* Radar chart */}
+      {mounted ? (
+        <RadarChart width={630} height={630} data={chartData} cx="50%" cy="50%" outerRadius="65%">
+          <PolarGrid stroke="none" gridType="circle" />
+          <PolarAngleAxis dataKey="axisLabel" tick={<AxisTick />} />
+          <PolarRadiusAxis
+            angle={90}
+            domain={[0, 5]}
+            tick={false}
+            tickCount={6}
+            axisLine={false}
+            style={{ display: "none" }}
+          />
+          <Radar
+            name="Score"
+            dataKey="scoreValue"
+            shape={<ColoredRadarShape groupColors={GC} />}
+          />
+          <Tooltip content={<ChartTooltip />} />
+        </RadarChart>
+      ) : null}
+    </div>
+  );
+}
 
-      {/* Scored Home Qualities summary — prefer Opus aesthetic_profile over template */}
-      {(feature.aesthetic_profile || summary) && (
-        <div
-          className="mt-5 overflow-hidden border"
-          style={{ backgroundColor: "#FAFAFA", borderColor: "#000", borderWidth: "1px", boxShadow: "4px 4px 0 0 #000" }}
-        >
-          <div className="flex items-center gap-2 px-4 py-2" style={{ borderBottom: "1px solid #000", backgroundColor: "#EDEDED" }}>
-            <p
-              className="text-[9px] font-bold uppercase tracking-[0.12em]"
-              style={{ fontFamily: "futura-pt, sans-serif", color: "#000" }}
+// ═══════════════════════════════════════════════════════════
+// Scoring Breakdown — one column per group (SPACE / STORY / STAGE)
+// ═══════════════════════════════════════════════════════════
+
+export function ScoringBreakdown({ feature, groupColors }: { feature: Feature; groupColors?: Record<string, string> }) {
+  const GC = groupColors ?? GROUP_COLORS;
+  const perHome = feature.scoring_rationale ?? {};
+  const rationaleKeyMap: Record<string, string> = {
+    score_grandeur: "grandeur",
+    score_material_warmth: "material_warmth",
+    score_maximalism: "maximalism",
+    score_historicism: "historicism",
+    score_provenance: "provenance",
+    score_hospitality: "hospitality",
+    score_formality: "formality",
+    score_curation: "curation",
+    score_theatricality: "theatricality",
+  };
+
+  const rationale = AXES.map((axis) => {
+    const val = feature[axis.key as keyof Feature] as number | null;
+    if (!val) return null;
+    const jsonKey = rationaleKeyMap[axis.key];
+    const homeRationale = jsonKey ? perHome[jsonKey] : undefined;
+    const anchor = homeRationale || ANCHORS[axis.key]?.[val];
+    if (!anchor) return null;
+    return {
+      label: axis.label.replace("\n", " "),
+      scoreValue: val,
+      group: axis.group,
+      anchor,
+    };
+  }).filter(Boolean) as { label: string; scoreValue: number; group: string; anchor: string }[];
+
+  const grouped = {
+    SPACE: rationale.filter((r) => r.group === "SPACE"),
+    STORY: rationale.filter((r) => r.group === "STORY"),
+    STAGE: rationale.filter((r) => r.group === "STAGE"),
+  };
+
+  const groupLabels: Record<string, string> = {
+    SPACE: "Space",
+    STORY: "Story",
+    STAGE: "Stage",
+  };
+
+  const groupSubtitles: Record<string, string> = {
+    SPACE: "The Physical Experience",
+    STORY: "The Narrative It Tells",
+    STAGE: "Who It's Performing For",
+  };
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
+      {(["SPACE", "STORY", "STAGE"] as const).map((groupKey) => (
+        <div key={groupKey}>
+          {/* Group header */}
+          <div
+            style={{ backgroundColor: GC[groupKey], padding: "4px 8px", display: "flex", alignItems: "center", gap: "10px" }}
+          >
+            <span
+              className="font-mono uppercase"
+              style={{ fontSize: "18px", fontWeight: 900, letterSpacing: "0.15em", color: "#fff", flexShrink: 0 }}
             >
-              Scored Home Qualities
-            </p>
-            {feature.scoring_version && (
-              <span className="font-mono text-[9px]" style={{ color: "#999" }}>
-                {feature.scoring_version}
-              </span>
-            )}
+              {groupLabels[groupKey]}
+            </span>
+            <span style={{ width: "2px", alignSelf: "stretch", backgroundColor: "rgba(255,255,255,0.3)", flexShrink: 0 }} />
+            <span
+              className="text-[12px] italic"
+              style={{ fontFamily: "'Lora', serif", color: "rgba(255,255,255,0.5)" }}
+            >
+              {groupSubtitles[groupKey]}
+            </span>
           </div>
-          <div className="px-4 py-4">
-            {feature.aesthetic_profile ? (
-              <blockquote
-                className="border-l-2 border-[#1A1A1A]/20 pl-4 text-[16px] italic leading-[1.8]"
-                style={{ fontFamily: "'Lora', serif", color: "#333" }}
-              >
-                {feature.aesthetic_profile}
-              </blockquote>
-            ) : (
-              <p
-                className="text-[15px] leading-[1.7]"
-                style={{ fontFamily: "'Lora', serif", color: "#333" }}
-              >
-                {summary}
-              </p>
-            )}
+          {/* Axis items in a row */}
+          <div className="mt-1" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: "16px" }}>
+            {grouped[groupKey].map((item) => (
+              <div key={item.label}>
+                <span
+                  className="text-[11px] font-bold uppercase tracking-[0.08em]"
+                  style={{ fontFamily: "futura-pt, sans-serif", color: "#1A1A1A" }}
+                >
+                  {item.label}
+                </span>
+                <div className="flex" style={{ width: "100%", gap: "2px" }}>
+                  {[1, 2, 3, 4, 5].map((dot) => (
+                    <div
+                      key={dot}
+                      style={{
+                        flex: 1,
+                        height: "8px",
+                        backgroundColor: dot <= item.scoreValue
+                          ? GC[item.group]
+                          : "#E5E5E5",
+                        opacity: dot <= item.scoreValue
+                          ? 0.3 + (dot / 5) * 0.7
+                          : 1,
+                      }}
+                    />
+                  ))}
+                </div>
+                <p
+                  className="mt-1 text-[10px] leading-[1.5]"
+                  style={{ fontFamily: "'Lora', serif", color: "#444" }}
+                >
+                  {item.anchor}
+                </p>
+              </div>
+            ))}
           </div>
         </div>
-      )}
-
-      {/* Full-width radar chart */}
-      <div
-        className="mt-5 h-[420px] overflow-hidden border"
-        style={{ backgroundColor: "#FAFAFA", borderColor: "#000", borderWidth: "1px", boxShadow: "4px 4px 0 0 #000" }}
-      >
-        {mounted ? (
-          <ResponsiveContainer width="100%" height="100%">
-            <RadarChart data={chartData} cx="50%" cy="50%" outerRadius="65%">
-              <PolarGrid stroke="#E0E0E0" strokeWidth={0.5} />
-              <PolarAngleAxis dataKey="axisLabel" tick={<AxisTick />} />
-              <PolarRadiusAxis
-                angle={90}
-                domain={[0, 5]}
-                tick={{ fontSize: 8, fill: "#C0C0C0" }}
-                tickCount={6}
-                axisLine={false}
-              />
-              <Radar
-                name="Score"
-                dataKey="scoreValue"
-                shape={<ColoredRadarShape />}
-              />
-              <Tooltip content={<ChartTooltip />} />
-            </RadarChart>
-          </ResponsiveContainer>
-        ) : null}
-      </div>
-
-      {/* Scoring rationale — flat 3-column grid so rows align across groups */}
-      <div className="mt-6 grid gap-x-4 gap-y-3 md:grid-cols-3">
-        {/* Group headers */}
-        {(["SPACE", "STORY", "STAGE"] as const).map((groupKey) => {
-          const [title, subtitle] = groupLabels[groupKey].split(" — ");
-          return (
-            <div key={groupKey} className="mb-1 text-center">
-              <p
-                className="text-[14px] font-bold uppercase tracking-[0.12em]"
-                style={{ fontFamily: "futura-pt, sans-serif", color: GROUP_COLORS[groupKey] }}
-              >
-                {title}
-              </p>
-              {subtitle && (
-                <p
-                  className="text-[10px] italic"
-                  style={{ fontFamily: "'Lora', serif", color: "#999" }}
-                >
-                  {subtitle}
-                </p>
-              )}
-            </div>
-          );
-        })}
-        {/* Axis cards — row by row so CSS grid aligns heights */}
-        {[0, 1, 2].map((rowIdx) =>
-          (["SPACE", "STORY", "STAGE"] as const).map((groupKey) => {
-            const item = grouped[groupKey][rowIdx];
-            if (!item) return <div key={`${groupKey}-${rowIdx}`} />;
-            return (
-              <div
-                key={item.label}
-                className="overflow-hidden border"
-                style={{ backgroundColor: "#FAFAFA", borderColor: "#000", borderWidth: "1px" }}
-              >
-                <div className="flex items-center gap-3 px-3 py-3">
-                  <span
-                    className="inline-flex h-6 w-6 shrink-0 items-center justify-center font-mono text-xs font-bold text-white"
-                    style={{
-                      backgroundColor: GROUP_COLORS[item.group as keyof typeof GROUP_COLORS],
-                      opacity: 0.4 + (item.scoreValue - 1) * 0.15,
-                    }}
-                  >
-                    {item.scoreValue}
-                  </span>
-                  <div>
-                    <span
-                      className="text-[12px] font-bold uppercase tracking-[0.08em]"
-                      style={{ fontFamily: "futura-pt, sans-serif" }}
-                    >
-                      {item.label}
-                    </span>
-                    <div className="mt-1 flex gap-0.5">
-                      {[1, 2, 3, 4, 5].map((dot) => (
-                        <div
-                          key={dot}
-                          className="h-1.5 w-3"
-                          style={{
-                            backgroundColor:
-                              dot <= item.scoreValue ? "#555" : "#E5E5E5",
-                          }}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="border-t border-[#E5E5E5] px-3 py-3">
-                  <p
-                    className="text-[11px] leading-[1.6]"
-                    style={{ fontFamily: "'Lora', serif", color: "#666" }}
-                  >
-                    {item.anchor}
-                  </p>
-                </div>
-              </div>
-            );
-          })
-        )}
-      </div>
+      ))}
     </div>
   );
 }

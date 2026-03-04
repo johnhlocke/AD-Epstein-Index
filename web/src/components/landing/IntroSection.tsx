@@ -10,7 +10,9 @@ function SidenoteBlock({
   children,
   note,
   notes,
+  noteIds,
   noteOffset,
+  float: floatEl,
   className = "",
 }: {
   children: React.ReactNode;
@@ -18,19 +20,30 @@ function SidenoteBlock({
   note?: React.ReactNode;
   /** Multiple independent sidenotes (each gets its own margin block the hook can separate) */
   notes?: React.ReactNode[];
+  /** Maps 1:1 to notes array — applied as data-note-id on each margin block */
+  noteIds?: number[];
   /** Pixel offset to nudge the first sidenote up (negative) or down (positive) */
   noteOffset?: number;
+  /** Diagram to float inside the prose column (contained by flow-root BFC) */
+  float?: React.ReactNode;
   className?: string;
 }) {
   return (
     <div className={`s-note-row ${className}`}>
-      <div style={{ maxWidth: "var(--content-narrow)" }}>{children}</div>
+      <div style={{
+        maxWidth: "var(--content-narrow)",
+        ...(floatEl ? { display: "flow-root" } : {}),
+      }}>
+        {floatEl}
+        {children}
+      </div>
       {/* Single note */}
       {note && (
         <div
           className="s-note-margin hidden md:block"
           style={MARGIN_STYLE}
           data-note-offset={noteOffset ?? 0}
+          data-note-id={noteIds?.[0]}
         >
           {note}
         </div>
@@ -42,6 +55,7 @@ function SidenoteBlock({
           className="s-note-margin hidden md:block"
           style={MARGIN_STYLE}
           data-note-offset={i === 0 ? (noteOffset ?? 0) : 0}
+          data-note-id={noteIds?.[i]}
         >
           {n}
         </div>
@@ -93,7 +107,11 @@ function Sidenote({
 
 function NoteArrow({ num }: { num?: number }) {
   return (
-    <span className="s-note-arrow hidden md:inline" style={{ color: "rgba(184, 115, 51, 0.9)" }}>
+    <span
+      className="s-note-arrow hidden md:inline"
+      style={{ color: "rgba(184, 115, 51, 0.9)" }}
+      data-note-for={num}
+    >
       {" "}&#9656;{num != null && <sup className="s-note-num-inline">i{num}</sup>}
     </span>
   );
@@ -127,7 +145,13 @@ function usePreventSidenoteOverlap(
       // Force reflow so measurements are clean
       el.offsetHeight; // eslint-disable-line no-unused-expressions
 
-      // ── Phase 2: Collect ideal Y + height for each note ──
+      // ── Phase 2: Build arrow map + collect entries ──
+      const arrowMap = new Map<string, HTMLElement>();
+      for (const a of Array.from(el.querySelectorAll<HTMLElement>(".s-note-arrow[data-note-for]"))) {
+        const id = a.dataset.noteFor;
+        if (id) arrowMap.set(id, a);
+      }
+
       const entries: {
         margin: HTMLElement;
         idealY: number;
@@ -136,7 +160,6 @@ function usePreventSidenoteOverlap(
       }[] = [];
 
       for (const row of rows) {
-        const arrows = Array.from(row.querySelectorAll<HTMLElement>(".s-note-arrow"));
         const margins = Array.from(row.querySelectorAll<HTMLElement>(".s-note-margin"));
         if (margins.length === 0) continue;
 
@@ -148,11 +171,14 @@ function usePreventSidenoteOverlap(
           if (height === 0) continue; // hidden (mobile)
 
           const offset = Number(margin.dataset.noteOffset) || 0;
-          const arrow = arrows[i] || null;
+          const noteId = margin.dataset.noteId;
+          const matchedArrow = noteId ? arrowMap.get(noteId) : null;
+
           let idealY: number;
-          if (arrow) {
-            idealY = arrow.getBoundingClientRect().top - sectionRect.top + offset;
+          if (matchedArrow) {
+            idealY = matchedArrow.getBoundingClientRect().top - sectionRect.top + offset;
           } else {
+            // Fallback: align to row top (for notes without a matching arrow)
             idealY = rowTop + offset;
           }
           entries.push({ margin, idealY, height, rowTop });
@@ -175,8 +201,13 @@ function usePreventSidenoteOverlap(
         margin.style.top = `${top}px`;
       }
 
-      // Sidenotes extend past section bottom via absolute positioning.
-      // Both sections share bg-background so they render seamlessly.
+      // ── Phase 5: Pad section so sidenotes don't bleed into next section ──
+      const lastNoteBottom = nextAllowedY; // includes GAP after last note
+      const sectionHeight = el.scrollHeight;
+      const overshoot = lastNoteBottom - sectionHeight;
+      if (overshoot > 0) {
+        el.style.paddingBottom = `${overshoot}px`;
+      }
     };
 
     // Run layout after fonts/images are ready, plus a fallback at 500ms
@@ -275,6 +306,7 @@ export function IntroSection({ stats }: IntroSectionProps) {
     <div ref={sectionRef} className="text-[16px] font-medium leading-[1.65] text-[#333]" style={{ fontFamily: "'Lora', serif" }}>
       {/* ── Paragraph 1 ── */}
       <SidenoteBlock
+        noteIds={[1]}
         note={
           <Sidenote
             num={1}
@@ -301,6 +333,7 @@ export function IntroSection({ stats }: IntroSectionProps) {
 
       {/* ── Paragraph 2 ── */}
       <SidenoteBlock
+        noteIds={[2]}
         noteOffset={-160}
         note={
           <>
@@ -341,63 +374,64 @@ export function IntroSection({ stats }: IntroSectionProps) {
         </p>
       </SidenoteBlock>
 
-      {/* ── Diagram 1: Venn Overlap ── */}
-      <div
-        className="float-left mb-4 mr-6 hidden md:block"
-        style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)" }}
-      >
-        <svg
-          viewBox="0 0 280 200"
-          className="w-full"
-          role="img"
-          aria-label={`Venn diagram: ${stats.dossiers.confirmed} confirmed connections between AD homeowners and Epstein's social network`}
-        >
-          <title>Overlap between AD homeowners and Epstein&apos;s social network</title>
-          <defs>
-            {/* Halftone dot pattern — AD */}
-            <pattern id="intro-dots" x="0" y="0" width="3.5" height="3.5" patternUnits="userSpaceOnUse">
-              <circle cx="1.75" cy="1.75" r="0.8" fill="#333" fillOpacity={0.4} />
-            </pattern>
-            {/* Diagonal line hatching — Epstein */}
-            <pattern id="intro-lines" x="0" y="0" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
-              <line x1="0" y1="0" x2="0" y2="3" stroke="#333" strokeWidth={0.7} strokeOpacity={0.55} />
-            </pattern>
-            {/* Clip paths for each circle */}
-            <clipPath id="intro-clip-ad"><circle cx="108" cy="94" r="62" /></clipPath>
-            <clipPath id="intro-clip-ep"><circle cx="172" cy="94" r="62" /></clipPath>
-          </defs>
-
-          {/* Title */}
-          <text x="140" y="16" textAnchor="middle" style={{ fontSize: 9, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }} fill="#999">The Narrowest Sliver</text>
-
-          {/* AD circle — dots */}
-          <rect x="0" y="0" width="280" height="200" fill="url(#intro-dots)" clipPath="url(#intro-clip-ad)" />
-
-          {/* Epstein circle — diagonal lines */}
-          <rect x="0" y="0" width="280" height="200" fill="url(#intro-lines)" clipPath="url(#intro-clip-ep)" />
-
-          {/* Overlap count */}
-          <text x="140" y="91" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 32, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#333">
-            {stats.dossiers.confirmed}
-          </text>
-
-          {/* AD label — below left */}
-          <text x="68" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">AD HOMEOWNERS</text>
-          <text x="68" y="186" textAnchor="middle" style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#555">
-            {stats.features.uniqueHomeowners.toLocaleString()}
-          </text>
-
-          {/* Epstein label — below right */}
-          <text x="212" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">EPSTEIN NETWORK</text>
-        </svg>
-        <p className="mt-1 text-[11px] italic text-[#aaa]" style={{ fontFamily: "'Lora', serif" }}>
-          Fig. i &mdash; Both institutions draw from the same narrow pool of
-          dominant-class habitus.
-        </p>
-      </div>
-
-      {/* ── Paragraph 3 ── */}
+      {/* ── Block A: Venn diagram + Paras 3–4 ── */}
       <SidenoteBlock
+        noteIds={[3, 4]}
+        float={
+          <div
+            className="float-left mb-4 mr-6 hidden md:block"
+            style={{ width: "calc(2 * (100% - 3 * 24px) / 4 + 24px)" }}
+          >
+            <svg
+              viewBox="0 0 280 200"
+              className="w-full"
+              role="img"
+              aria-label={`Venn diagram: ${stats.dossiers.confirmed} confirmed connections between AD homeowners and Epstein's social network`}
+            >
+              <title>Overlap between AD homeowners and Epstein&apos;s social network</title>
+              <defs>
+                {/* Halftone dot pattern — AD */}
+                <pattern id="intro-dots" x="0" y="0" width="3.5" height="3.5" patternUnits="userSpaceOnUse">
+                  <circle cx="1.75" cy="1.75" r="0.8" fill="#333" fillOpacity={0.4} />
+                </pattern>
+                {/* Diagonal line hatching — Epstein */}
+                <pattern id="intro-lines" x="0" y="0" width="3" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+                  <line x1="0" y1="0" x2="0" y2="3" stroke="#333" strokeWidth={0.7} strokeOpacity={0.55} />
+                </pattern>
+                {/* Clip paths for each circle */}
+                <clipPath id="intro-clip-ad"><circle cx="108" cy="94" r="62" /></clipPath>
+                <clipPath id="intro-clip-ep"><circle cx="172" cy="94" r="62" /></clipPath>
+              </defs>
+
+              {/* Title */}
+              <text x="140" y="16" textAnchor="middle" style={{ fontSize: 9, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" as const }} fill="#999">The Narrowest Sliver</text>
+
+              {/* AD circle — dots */}
+              <rect x="0" y="0" width="280" height="200" fill="url(#intro-dots)" clipPath="url(#intro-clip-ad)" />
+
+              {/* Epstein circle — diagonal lines */}
+              <rect x="0" y="0" width="280" height="200" fill="url(#intro-lines)" clipPath="url(#intro-clip-ep)" />
+
+              {/* Overlap count */}
+              <text x="140" y="91" textAnchor="middle" dominantBaseline="middle" style={{ fontSize: 32, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#333">
+                {stats.dossiers.confirmed}
+              </text>
+
+              {/* AD label — below left */}
+              <text x="68" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">AD HOMEOWNERS</text>
+              <text x="68" y="186" textAnchor="middle" style={{ fontSize: 12, fontFamily: "'DM Mono', monospace", fontWeight: 600 }} fill="#555">
+                {stats.features.uniqueHomeowners.toLocaleString()}
+              </text>
+
+              {/* Epstein label — below right */}
+              <text x="212" y="172" textAnchor="middle" style={{ fontSize: 8.5, fontFamily: "futura-pt, sans-serif", fontWeight: 600, letterSpacing: "0.08em" }} fill="#555">EPSTEIN NETWORK</text>
+            </svg>
+            <p className="mt-1 text-[11px] italic text-[#aaa]" style={{ fontFamily: "'Lora', serif" }}>
+              Fig. i &mdash; Both institutions draw from the same narrow pool of
+              dominant-class habitus.
+            </p>
+          </div>
+        }
         notes={[
           <Sidenote
             key="cultural-intermediaries"
@@ -442,20 +476,6 @@ export function IntroSection({ stats }: IntroSectionProps) {
           predisposed to accept that judgment as authoritative.
           <NoteArrow num={4} />
         </p>
-      </SidenoteBlock>
-
-      {/* ── Paragraph 4 — Habitus ── */}
-      <SidenoteBlock
-        note={
-          <Sidenote num={5} title="Habitus">
-            Bourdieu&rsquo;s concept: the unconscious dispositions that class
-            position instills over a lifetime. Not what you choose to like, but
-            what you&rsquo;re trained to recognize as valuable. It explains why
-            people in the same social stratum independently converge on the same
-            aesthetic preferences. (<em>Distinction</em>, 1984, pp. 170&ndash;175)
-          </Sidenote>
-        }
-      >
         <p className="mb-5">
           The Department of Justice released more than three million files
           related to the investigation into deceased sex offender Jeffrey Epstein
@@ -470,157 +490,163 @@ export function IntroSection({ stats }: IntroSectionProps) {
         </p>
       </SidenoteBlock>
 
-      {/* Clear float from diagram 1 */}
-      <div style={{ clear: "both" }} />
-
-      {/* ── Fig. ii: Meaning Transfer Cascade ── */}
-      <div
-        className="float-left mb-4 mr-6 hidden md:block"
-        style={{ width: "calc(2 * (100% - 5 * 24px) / 6 + 24px)", position: "relative", zIndex: 1 }}
-      >
-        <div ref={cascadeRef} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 24 }}>
-          {/* Step A: AD Feature — left */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div data-step="A" style={{ width: "55%", flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <a href="https://www.architecturaldigest.com/story/how-this-stunning-brooklyn-townhouse-became-a-forever-family-home" target="_blank" rel="noopener noreferrer">
-                <img src="/cascade/ad-feature.png" alt="Camaleonda sofa in AD feature, October 2018" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
-              </a>
-            </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Editorial Origin</p>
-              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
-                <em>Architectural Digest</em>, Oct 2018. Camaleonda by Mario Bellini for B&amp;B Italia.
-              </p>
-              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$25,000+</p>
-            </div>
-          </div>
-
-          {/* Step B: Celebrity Amplification — right */}
-          <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
-            <div data-step="B" style={{ width: "55%", flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <a href="https://www.instagram.com/p/CLC_gXOhW_u/" target="_blank" rel="noopener noreferrer">
-                <img src="/cascade/chrissy-teigen.png" alt="Chrissy Teigen with Camaleonda sofa on Instagram" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
-              </a>
-            </div>
-            <div style={{ flex: 1, textAlign: "right" }}>
-              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Celebrity Amplification</p>
-              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
-                Celebrity, Instagram. 574K likes. Feb 2021.
-              </p>
-              <p style={{ fontFamily: "'Lora', serif", fontSize: 10, fontStyle: "italic", color: "#666", marginTop: 2, lineHeight: 1.4 }}>
-                Commenter: &ldquo;Just got my sofa!!! Love it!&rdquo;
-              </p>
-            </div>
-          </div>
-
-          {/* Step 1: B&B Italia Original — left */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div data-step="1" style={{ width: "55%", flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <a href="https://shop.bebitalia.com/en/us/camaleonda-straight-sofa---olive-green-chenille--chenille-green/E_CAM_0008.html" target="_blank" rel="noopener noreferrer">
-                <img src="/cascade/bb-italia.png" alt="B&B Italia Camaleonda original, $18,921" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
-              </a>
-            </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Original Reissued</p>
-              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
-                B&amp;B Italia Camaleonda. Mario Bellini, 2020 reissue.
-              </p>
-              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$18,921.00</p>
-            </div>
-          </div>
-
-          {/* Step 2: Reproduction — right */}
-          <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
-            <div data-step="2" style={{ width: "55%", flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <a href="https://eternitymodern.com/mario-bellini-sofa-combination-006" target="_blank" rel="noopener noreferrer">
-                <img src="/cascade/eternity-modern.png" alt="Eternity Modern reproduction, $6,285" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
-              </a>
-            </div>
-            <div style={{ flex: 1, textAlign: "right" }}>
-              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Reproduction</p>
-              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
-                Eternity Modern. &ldquo;Mario Bellini Sofa.&rdquo;
-              </p>
-              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$6,285.00</p>
-            </div>
-          </div>
-
-          {/* Step 3: Mass Market — left */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div data-step="3" style={{ width: "55%", flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <a href="https://www.walmart.com/ip/bokifol-104-Modular-Sectional-Sofa-for-Living-Room-Cloud-Couch-3-Seat-Sofa-for-Apartment-Office-Bedroom-Green/16676450426" target="_blank" rel="noopener noreferrer">
-                <img src="/cascade/walmart.png" alt="Walmart Bokifol sectional, $699" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
-              </a>
-            </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Mass Market</p>
-              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
-                Walmart. &ldquo;Bokifol Sectional Sofa.&rdquo;
-              </p>
-              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$698.99</p>
-            </div>
-          </div>
-
-          {/* Step 4: Ultra-cheap knockoff — right */}
-          <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
-            <div data-step="4" style={{ width: "55%", flexShrink: 0 }}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <a href="https://www.temu.com/loveseat-sofa-couch-modern-minimalist-velvet-sofas-suitable-for-christmas-modular-l-sahped-sectional-sofa-free-combination-sofa-for-living-room-office-apartment-lounge-room-reception-room-romantic-furnitureidiy-combination-pet-friendly-g-601103676797003.html" target="_blank" rel="noopener noreferrer">
-                <img src="/cascade/temu.png" alt="Temu knockoff sofa, $403" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
-              </a>
-            </div>
-            <div style={{ flex: 1, textAlign: "right" }}>
-              <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Knockoff</p>
-              <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
-                Temu. &ldquo;Loveseat Sofa Couch, Modern Minimalist Velvet.&rdquo;
-              </p>
-              <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$403.18</p>
-            </div>
-          </div>
-
-          {/* Connector overlay — drawn after measuring image positions */}
-          {cascadeOverlay && cascadeOverlay.connectors.length > 0 && (
-            <svg
-              viewBox={`0 0 ${cascadeOverlay.w} ${cascadeOverlay.h}`}
-              style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 10 }}
-            >
-              {cascadeOverlay.connectors.map((c, i) => {
-                // Path: horizontal from dot to target center-x, then vertical down
-                // Arrowhead points DOWN at target center
-                return (
-                  <g key={i}>
-                    <circle cx={c.sx} cy={c.sy} r={4} fill="#bbb" />
-                    <path
-                      d={`M ${c.sx} ${c.sy} L ${c.ex} ${c.sy} L ${c.ex} ${c.ey - 8}`}
-                      fill="none" stroke="#bbb" strokeWidth={1.5}
-                    />
-                    <polygon
-                      points={`${c.ex - 5},${c.ey - 10} ${c.ex},${c.ey} ${c.ex + 5},${c.ey - 10}`}
-                      fill="#bbb"
-                    />
-                  </g>
-                );
-              })}
-            </svg>
-          )}
-        </div>
-
-        <p className="mt-2 text-[11px] italic text-[#aaa]" style={{ fontFamily: "'Lora', serif" }}>
-          Fig. ii &mdash; McCracken&rsquo;s meaning transfer in action: from an AD
-          feature to your Temu cart in six steps. The sofa loses its provenance
-          at each tier; the silhouette survives.
-        </p>
-      </div>
-
-      {/* ── Paragraph 5 ── */}
+      {/* ── Block B: Cascade diagram + Paras 5–8 ── */}
       <SidenoteBlock
-        note={
+        noteIds={[5, 6, 7, 8, 9, 10, 11, 12]}
+        float={
+          <div
+            className="float-left mb-4 mr-6 hidden md:block"
+            style={{ width: "calc(2 * (100% - 3 * 24px) / 4 + 24px)", position: "relative", zIndex: 1 }}
+          >
+            <div ref={cascadeRef} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 24 }}>
+              {/* Step A: AD Feature — left */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div data-step="A" style={{ width: "55%", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <a href="https://www.architecturaldigest.com/story/how-this-stunning-brooklyn-townhouse-became-a-forever-family-home" target="_blank" rel="noopener noreferrer">
+                    <img src="/cascade/ad-feature.png" alt="Camaleonda sofa in AD feature, October 2018" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+                  </a>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Editorial Origin</p>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                    <em>Architectural Digest</em>, Oct 2018. Camaleonda by Mario Bellini for B&amp;B Italia.
+                  </p>
+                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$25,000+</p>
+                </div>
+              </div>
+
+              {/* Step B: Celebrity Amplification — right */}
+              <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
+                <div data-step="B" style={{ width: "55%", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <a href="https://www.instagram.com/p/CLC_gXOhW_u/" target="_blank" rel="noopener noreferrer">
+                    <img src="/cascade/chrissy-teigen.png" alt="Chrissy Teigen with Camaleonda sofa on Instagram" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+                  </a>
+                </div>
+                <div style={{ flex: 1, textAlign: "right" }}>
+                  <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Celebrity Amplification</p>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                    Celebrity, Instagram. 574K likes. Feb 2021.
+                  </p>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: 10, fontStyle: "italic", color: "#666", marginTop: 2, lineHeight: 1.4 }}>
+                    Commenter: &ldquo;Just got my sofa!!! Love it!&rdquo;
+                  </p>
+                </div>
+              </div>
+
+              {/* Step 1: B&B Italia Original — left */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div data-step="1" style={{ width: "55%", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <a href="https://shop.bebitalia.com/en/us/camaleonda-straight-sofa---olive-green-chenille--chenille-green/E_CAM_0008.html" target="_blank" rel="noopener noreferrer">
+                    <img src="/cascade/bb-italia.png" alt="B&B Italia Camaleonda original, $18,921" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+                  </a>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Original Reissued</p>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                    B&amp;B Italia Camaleonda. Mario Bellini, 2020 reissue.
+                  </p>
+                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$18,921.00</p>
+                </div>
+              </div>
+
+              {/* Step 2: Reproduction — right */}
+              <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
+                <div data-step="2" style={{ width: "55%", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <a href="https://eternitymodern.com/mario-bellini-sofa-combination-006" target="_blank" rel="noopener noreferrer">
+                    <img src="/cascade/eternity-modern.png" alt="Eternity Modern reproduction, $6,285" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+                  </a>
+                </div>
+                <div style={{ flex: 1, textAlign: "right" }}>
+                  <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Reproduction</p>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                    Eternity Modern. &ldquo;Mario Bellini Sofa.&rdquo;
+                  </p>
+                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$6,285.00</p>
+                </div>
+              </div>
+
+              {/* Step 3: Mass Market — left */}
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div data-step="3" style={{ width: "55%", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <a href="https://www.walmart.com/ip/bokifol-104-Modular-Sectional-Sofa-for-Living-Room-Cloud-Couch-3-Seat-Sofa-for-Apartment-Office-Bedroom-Green/16676450426" target="_blank" rel="noopener noreferrer">
+                    <img src="/cascade/walmart.png" alt="Walmart Bokifol sectional, $699" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+                  </a>
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Mass Market</p>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                    Walmart. &ldquo;Bokifol Sectional Sofa.&rdquo;
+                  </p>
+                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$698.99</p>
+                </div>
+              </div>
+
+              {/* Step 4: Ultra-cheap knockoff — right */}
+              <div style={{ display: "flex", flexDirection: "row-reverse", alignItems: "center", gap: 10 }}>
+                <div data-step="4" style={{ width: "55%", flexShrink: 0 }}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <a href="https://www.temu.com/loveseat-sofa-couch-modern-minimalist-velvet-sofas-suitable-for-christmas-modular-l-sahped-sectional-sofa-free-combination-sofa-for-living-room-office-apartment-lounge-room-reception-room-romantic-furnitureidiy-combination-pet-friendly-g-601103676797003.html" target="_blank" rel="noopener noreferrer">
+                    <img src="/cascade/temu.png" alt="Temu knockoff sofa, $403" style={{ width: "100%", display: "block", border: "1px solid #bbb" }} />
+                  </a>
+                </div>
+                <div style={{ flex: 1, textAlign: "right" }}>
+                  <p style={{ fontFamily: "futura-pt, sans-serif", fontSize: 9, fontWeight: 700, textTransform: "uppercase" as const, letterSpacing: "0.1em", color: "#999" }}>Knockoff</p>
+                  <p style={{ fontFamily: "'Lora', serif", fontSize: 11, color: "#333", marginTop: 2, lineHeight: 1.4 }}>
+                    Temu. &ldquo;Loveseat Sofa Couch, Modern Minimalist Velvet.&rdquo;
+                  </p>
+                  <p style={{ fontFamily: "'DM Mono', monospace", fontSize: 11, fontWeight: 600, color: "#333", marginTop: 2 }}>$403.18</p>
+                </div>
+              </div>
+
+              {/* Connector overlay — drawn after measuring image positions */}
+              {cascadeOverlay && cascadeOverlay.connectors.length > 0 && (
+                <svg
+                  viewBox={`0 0 ${cascadeOverlay.w} ${cascadeOverlay.h}`}
+                  style={{ position: "absolute", top: 0, left: 0, width: "100%", height: "100%", pointerEvents: "none", overflow: "visible", zIndex: 10 }}
+                >
+                  {cascadeOverlay.connectors.map((c, i) => {
+                    // Path: horizontal from dot to target center-x, then vertical down
+                    // Arrowhead points DOWN at target center
+                    return (
+                      <g key={i}>
+                        <circle cx={c.sx} cy={c.sy} r={4} fill="#bbb" />
+                        <path
+                          d={`M ${c.sx} ${c.sy} L ${c.ex} ${c.sy} L ${c.ex} ${c.ey - 8}`}
+                          fill="none" stroke="#bbb" strokeWidth={1.5}
+                        />
+                        <polygon
+                          points={`${c.ex - 5},${c.ey - 10} ${c.ex},${c.ey} ${c.ex + 5},${c.ey - 10}`}
+                          fill="#bbb"
+                        />
+                      </g>
+                    );
+                  })}
+                </svg>
+              )}
+            </div>
+
+            <p className="mt-2 text-[11px] italic text-[#aaa]" style={{ fontFamily: "'Lora', serif" }}>
+              Fig. ii &mdash; McCracken&rsquo;s meaning transfer in action: from an AD
+              feature to your Temu cart in six steps. The sofa loses its provenance
+              at each tier; the silhouette survives.
+            </p>
+          </div>
+        }
+        notes={[
+          <Sidenote key="habitus" num={5} title="Habitus">
+            Bourdieu&rsquo;s concept: the unconscious dispositions that class
+            position instills over a lifetime. Not what you choose to like, but
+            what you&rsquo;re trained to recognize as valuable. It explains why
+            people in the same social stratum independently converge on the same
+            aesthetic preferences. (<em>Distinction</em>, 1984, pp. 170&ndash;175)
+          </Sidenote>,
           <Sidenote
+            key="social-media"
             num={6}
             title="Social Media Amplification"
             href="https://doi.org/10.1108/JRIM-09-2019-0145"
@@ -629,36 +655,17 @@ export function IntroSection({ stats }: IntroSectionProps) {
             What magazines once disseminated over months, Instagram and TikTok
             distribute in hours. The &ldquo;Pinterest effect&rdquo; compressed
             the trickle-down cycle from years to weeks.
-          </Sidenote>
-        }
-      >
-        <p className="mb-5">
-          This overlap between AD&rsquo;s editorial territory and
-          Epstein&rsquo;s social network is not incidental. Both
-          institutions&mdash;one cultural, one criminal&mdash;operate within the
-          narrowest sliver of American wealth. What Bourdieu (1984) termed{" "}
-          <em>habitus</em><NoteArrow num={5} />&mdash;the durable, transposable dispositions that
-          class position produces&mdash;generates predictable patterns of taste
-          and affiliation.
-          <NoteArrow num={6} /> AD&rsquo;s editorial staff and Epstein&rsquo;s social
-          network draw from the same habitus. AD didn&rsquo;t set out to
-          document Epstein&rsquo;s social circle. It set out to document the
-          most celebrated homes in the world. Class habitus dictates
-          this as a foregone conclusion, not a conspiracy. The overlap was inevitable.
-        </p>
-      </SidenoteBlock>
-
-      {/* ── Paragraph 6 — Trickle-Down Fashion ── */}
-      <SidenoteBlock
-        note={
+          </Sidenote>,
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
+              key="simmel-img"
               src="/sidenotes/simmel-trickle-down.jpg"
               alt="Trickle-down fashion: Saint Laurent A/W 2013 runway dress replicated by Primark and Zara"
               className="s-note-img"
             />
             <Sidenote
+              key="trickle-down"
               num={7}
               title="Trickle-Down Fashion"
               href="https://doi.org/10.1086/222102"
@@ -670,33 +677,20 @@ export function IntroSection({ stats }: IntroSectionProps) {
               the dominant framework for how aesthetics cascade through social
               strata.
             </Sidenote>
-          </>
-        }
-      >
-        <p className="mb-5">
-          Downstream, that editorially curated vision of &ldquo;taste&rdquo;
-          becomes amplified and accelerated through social media virality.
-          <NoteArrow num={7} /> Interior decoration follows the same cascading pattern Simmel (1904)
-          ascribed to fashion trends: elites adopt a style to differentiate; the
-          middle class imitates; elites abandon it and move on.
-          <NoteArrow /> McCracken&rsquo;s <em>meaning transfer</em> model (1986) describes how cultural
-          meaning moves first from the culturally constituted world to consumer
-          goods (via media like AD) and then from goods to individual consumers
-          through rituals of acquisition and display.
-          <NoteArrow num={8} /> When a celebrity opens their home for an AD feature,
-          meaning transfers from their cultural identity to the objects within
-          it. Then, when a consumer purchases that object, meaning transfers
-          again from the product to the consumer&rsquo;s own sense of self.
-          &ldquo;I am Zooey Deschanel&rsquo;s $5,000 Palmette Cloche
-          Lantern.&rdquo;
-          <NoteArrow num={9} />
-        </p>
-      </SidenoteBlock>
-
-      {/* ── Paragraph 7 — Lantern + Meaning Transfer ── */}
-      <SidenoteBlock
-        noteOffset={-200}
-        notes={[
+          </>,
+          <Sidenote
+            key="meaning-transfer"
+            num={8}
+            title="Meaning Transfer"
+            href="https://doi.org/10.1086/209048"
+            linkText="McCracken (1986, 1989) &mdash; JCR"
+          >
+            Grant McCracken&rsquo;s two-step model: cultural meaning first moves
+            from the world to consumer goods (through media like AD), then from
+            goods to individuals through rituals of possession and display. The
+            celebrity endorsement is the mechanism that accelerates the first
+            transfer.
+          </Sidenote>,
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -718,51 +712,16 @@ export function IntroSection({ stats }: IntroSectionProps) {
               content &rarr; consumer purchase is now a single click.
             </Sidenote>
           </>,
-          <Sidenote
-            key="meaning-transfer"
-            num={8}
-            title="Meaning Transfer"
-            href="https://doi.org/10.1086/209048"
-            linkText="McCracken (1986, 1989) &mdash; JCR"
-          >
-            Grant McCracken&rsquo;s two-step model: cultural meaning first moves
-            from the world to consumer goods (through media like AD), then from
-            goods to individuals through rituals of possession and display. The
-            celebrity endorsement is the mechanism that accelerates the first
-            transfer.
-          </Sidenote>,
-        ]}
-      >
-        <p className="mb-5">
-          Retailers operationalize those demand signals through shoppable
-          content, brand-celebrity collaborations, and look-alike ecosystems
-          across price spectrums.
-          <NoteArrow num={10} /> Celebrities leverage their own AD home tour to sell featured
-          items&mdash;from an $8,000 chandelier through a specialty retailer to
-          mid-market, mass-retail kitchen appliances.
-          <NoteArrow num={11} /> Bertrand and Morse (2016) provide the economic evidence for this
-          cascade: non-rich households allocate demonstrably larger budget shares
-          to &ldquo;visible goods&rdquo;&mdash;a category in which Heffetz
-          (2011) ranks furniture and household items among the most visible
-          consumption categories, more visible even than housing
-          itself&mdash;when exposed to higher top-income consumption levels in
-          their area.
-          <NoteArrow num={12} /> That interior aesthetic AD highlights in a Fifth Avenue
-          penthouse eventually finds its way to your local West Elm.
-        </p>
-      </SidenoteBlock>
-
-      {/* ── Paragraph 8 — Trickle-Round + Shoppable Content ── */}
-      <SidenoteBlock
-        notes={[
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
+              key="dupes-img"
               src="/sidenotes/trickle-round-dupes.jpg"
               alt="Ligne Roset Togo original vs. dupe — the trickle-round in action"
               className="s-note-img"
             />
             <Sidenote
+              key="trickle-round"
               num={10}
               title="Trickle-Round"
               href="https://doi.org/10.1093/jcr/ucz049"
@@ -788,8 +747,70 @@ export function IntroSection({ stats }: IntroSectionProps) {
             on AD&rsquo;s site. The home tour video is the storefront. The
             editorial authority is the sales pitch.
           </Sidenote>,
+          <Sidenote
+            key="visible-goods"
+            num={12}
+            title="Visible Goods"
+            href="https://doi.org/10.1162/REST_a_00613"
+            linkText="Bertrand & Morse (2016) &mdash; RES"
+          >
+            Non-rich households spend more on &ldquo;visible goods&rdquo; when
+            exposed to wealthy consumption levels nearby. Heffetz (2011) ranked
+            furniture and household items among the most socially visible
+            consumption categories&mdash;more visible even than housing itself.
+            The interior is the signal.
+          </Sidenote>,
         ]}
       >
+        <p className="mb-5">
+          This overlap between AD&rsquo;s editorial territory and
+          Epstein&rsquo;s social network is not incidental. Both
+          institutions&mdash;one cultural, one criminal&mdash;operate within the
+          narrowest sliver of American wealth. What Bourdieu (1984) termed{" "}
+          <em>habitus</em><NoteArrow num={5} />&mdash;the durable, transposable dispositions that
+          class position produces&mdash;generates predictable patterns of taste
+          and affiliation.
+          <NoteArrow num={6} /> AD&rsquo;s editorial staff and Epstein&rsquo;s social
+          network draw from the same habitus. AD didn&rsquo;t set out to
+          document Epstein&rsquo;s social circle. It set out to document the
+          most celebrated homes in the world. Class habitus dictates
+          this as a foregone conclusion, not a conspiracy. The overlap was inevitable.
+        </p>
+        <p className="mb-5">
+          Downstream, that editorially curated vision of &ldquo;taste&rdquo;
+          becomes amplified and accelerated through social media virality.
+          <NoteArrow num={7} /> Interior decoration follows the same cascading pattern Simmel (1904)
+          ascribed to fashion trends: elites adopt a style to differentiate; the
+          middle class imitates; elites abandon it and move on.
+          <NoteArrow /> McCracken&rsquo;s <em>meaning transfer</em> model (1986) describes how cultural
+          meaning moves first from the culturally constituted world to consumer
+          goods (via media like AD) and then from goods to individual consumers
+          through rituals of acquisition and display.
+          <NoteArrow num={8} /> When a celebrity opens their home for an AD feature,
+          meaning transfers from their cultural identity to the objects within
+          it. Then, when a consumer purchases that object, meaning transfers
+          again from the product to the consumer&rsquo;s own sense of self.
+          &ldquo;I am Zooey Deschanel&rsquo;s $5,000 Palmette Cloche
+          Lantern.&rdquo;
+          <NoteArrow num={9} />
+        </p>
+        <p className="mb-5">
+          Retailers operationalize those demand signals through shoppable
+          content, brand-celebrity collaborations, and look-alike ecosystems
+          across price spectrums.
+          <NoteArrow num={10} /> Celebrities leverage their own AD home tour to sell featured
+          items&mdash;from an $8,000 chandelier through a specialty retailer to
+          mid-market, mass-retail kitchen appliances.
+          <NoteArrow num={11} /> Bertrand and Morse (2016) provide the economic evidence for this
+          cascade: non-rich households allocate demonstrably larger budget shares
+          to &ldquo;visible goods&rdquo;&mdash;a category in which Heffetz
+          (2011) ranks furniture and household items among the most visible
+          consumption categories, more visible even than housing
+          itself&mdash;when exposed to higher top-income consumption levels in
+          their area.
+          <NoteArrow num={12} /> That interior aesthetic AD highlights in a Fifth Avenue
+          penthouse eventually finds its way to your local West Elm.
+        </p>
         <p className="mb-5">
           Of the{" "}
           <span className="font-mono font-semibold">
@@ -820,26 +841,8 @@ export function IntroSection({ stats }: IntroSectionProps) {
         </p>
       </SidenoteBlock>
 
-      {/* Clear float from diagram 2 */}
-      <div style={{ clear: "both" }} />
-
-      {/* ── Paragraph 9 — Visible Goods ── */}
-      <SidenoteBlock
-        note={
-          <Sidenote
-            num={12}
-            title="Visible Goods"
-            href="https://doi.org/10.1162/REST_a_00613"
-            linkText="Bertrand & Morse (2016) &mdash; RES"
-          >
-            Non-rich households spend more on &ldquo;visible goods&rdquo; when
-            exposed to wealthy consumption levels nearby. Heffetz (2011) ranked
-            furniture and household items among the most socially visible
-            consumption categories&mdash;more visible even than housing itself.
-            The interior is the signal.
-          </Sidenote>
-        }
-      >
+      {/* ── Paragraph 9 — Closing ── */}
+      <SidenoteBlock>
         <p>
           The question is not whether this overlap is statistically
           anomalous&mdash;institutions that select for dominant-class habitus

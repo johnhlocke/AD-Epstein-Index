@@ -155,6 +155,16 @@ export const GROUP_COLORS: Record<string, string> = {
   STAGE: colors.groupStage,
 } as const;
 
+/**
+ * Dark, saturated group colors for dossier/report detail pages.
+ * Designed to pop against all page backgrounds (blue, amber, salmon, red, pink).
+ */
+export const GROUP_COLORS_DARK: Record<string, string> = {
+  SPACE: "#1B4D5C",   // Deep teal
+  STORY: "#5C4A0A",   // Dark gold
+  STAGE: "#4A3060",   // Deep plum
+} as const;
+
 export const verdictConfig = {
   CONFIRMED: { label: "Confirmed", color: colors.confirmed, bg: colors.confirmedBg },
   REJECTED: { label: "Rejected", color: colors.rejected, bg: colors.rejectedBg },

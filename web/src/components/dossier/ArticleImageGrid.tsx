@@ -44,11 +44,11 @@ export function ArticleImageGrid({ images }: ArticleImageGridProps) {
 
   return (
     <div>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "6px", marginTop: "16px" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(6, 1fr)", gap: "8px", marginTop: "16px" }}>
         {visibleImages.map((img, i) => (
           <div
             key={img.id}
-            className="overflow-hidden"
+            className="overflow-hidden transition-shadow hover:shadow-[0_0_0_2px_#000]"
             style={{ cursor: img.public_url ? "pointer" : undefined }}
             onClick={() => img.public_url && setLightboxIdx(i)}
           >

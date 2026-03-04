@@ -234,6 +234,9 @@ This file should be automatically updated when necessary to answer three key que
 | NYT article count backfill (500/2,527 applied) | Phase 2 | In Progress |
 | Profession category classification | Phase 2 | Not Started |
 | Fame pipeline Phase 4: NYT Article Search | Phase 2 | In Progress |
+| Collapsible sections + typography polish (dossier/report) | Phase 3 | Done |
+| Evidence chain active box styling + line fix | Phase 3 | Done |
+| Analysis box page-background fill | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
