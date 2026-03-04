@@ -6,6 +6,23 @@ Format: entries are grouped by date, with the most recent at the top.
 
 ---
 
+## 2026-03-04 (Session 68)
+
+### Changed — Performance & Navigation
+
+- **SSR mosaic rendering** — Removed `useMounted()` guard from `HeroMosaicClient.tsx`. Images now render in SSR HTML so the browser starts downloading immediately instead of waiting for JS hydration. Added `width={123} height={164}` and `fetchPriority="high"` to above-fold tiles
+- **Header nav links** — Replaced Next.js `<Link>` with plain `<a>` tags for same-page hash navigation, eliminating "Rendering..." delay on every nav click. Homepage uses bare `#hash` (instant scroll), subpages use `/#hash` (navigates home + scrolls)
+- **"Where They Live" logo** — Homepage: smooth scroll to top. Subpages: links back to `/`
+- **`getFeatureReport()` parallelized** — Was 7-9 sequential Supabase queries; now 2 parallel batches via `Promise.all` (feature first, then issue + images + dossier + wealth + fame + xref in parallel)
+- **`getDossier()` parallelized** — Same pattern: dossier first, then 5 parallel queries for feature + images + wealth + fame + xref, with issue + name fallbacks in a second parallel batch
+- **`React.cache` deduplication** — Both `getDossier` and `getFeatureReport` wrapped with `React.cache` so `generateMetadata()` + page component share a single query set per request (was running all queries twice)
+
+### Changed — Typography
+
+- **Epigraph font** — Switched from Lora to Cormorant Garamond (italic, weight 400) via `next/font/google`. Warmer color (`#7A756F`), slightly larger (`clamp(17px, 1.5vw, 20px)`). Attribution line with wider tracking (`0.3em`) and warm tone (`#B0A99F`)
+
+---
+
 ## 2026-03-04 (Session 67)
 
 ### Added — Gemini Backfill Script

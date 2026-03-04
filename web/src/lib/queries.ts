@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { getSupabase } from "./supabase";
 import type {
@@ -626,7 +627,9 @@ export const getAestheticRadarData = unstable_cache(
 
 // ── Dossier Detail ──────────────────────────────────────────
 
-export async function getDossier(id: number): Promise<DossierWithContext | null> {
+// React.cache deduplicates within a single request — generateMetadata + page
+// component both call this, but only one Supabase round-trip set actually fires.
+export const getDossier = cache(async function getDossier(id: number): Promise<DossierWithContext | null> {
   const sb = getSupabase();
 
   const { data: dossier } = await sb
@@ -637,97 +640,53 @@ export async function getDossier(id: number): Promise<DossierWithContext | null>
 
   if (!dossier) return null;
 
-  // Fetch related feature
-  const { data: feature } = await sb
-    .from("features")
-    .select("*")
-    .eq("id", dossier.feature_id)
-    .single();
+  const fid = dossier.feature_id;
+  const wealthCols = "forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category";
+  const fameCols = "fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count";
 
-  // Fetch related issue
-  let issue = null;
-  if (feature) {
-    const { data: issueData } = await sb
-      .from("issues")
-      .select("*")
-      .eq("id", feature.issue_id)
-      .single();
-    issue = issueData;
-  }
+  // Fetch feature + everything that depends only on feature_id in parallel
+  const [featureResult, imagesResult, wpResult, fmResult, xrefResult] = await Promise.all([
+    sb.from("features").select("*").eq("id", fid).single(),
+    sb.from("feature_images").select("id, feature_id, page_number, public_url, created_at").eq("feature_id", fid).order("page_number"),
+    sb.from("wealth_profiles").select(wealthCols).eq("feature_id", fid).maybeSingle(),
+    sb.from("fame_metrics").select(fameCols).eq("feature_id", fid).maybeSingle(),
+    sb.from("cross_references").select("black_book_status, doj_status, doj_results, combined_verdict, confidence_score, verdict_rationale").eq("feature_id", fid).maybeSingle(),
+  ]);
 
-  // Fetch article images from feature_images
-  const { data: images } = await sb
-    .from("feature_images")
-    .select("id, feature_id, page_number, public_url, created_at")
-    .eq("feature_id", dossier.feature_id)
-    .order("page_number");
+  const feature = featureResult.data;
 
-  // Fetch wealth profile (try feature_id first, fall back to name for multi-home people)
-  let wealth: WealthProfile | null = null;
-  if (dossier.feature_id) {
-    const { data: wp } = await sb
-      .from("wealth_profiles")
-      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
-      .eq("feature_id", dossier.feature_id)
-      .maybeSingle();
-    wealth = wp as WealthProfile | null;
-  }
-  if (!wealth && dossier.subject_name) {
-    const { data: wp } = await sb
-      .from("wealth_profiles")
-      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
-      .eq("homeowner_name", dossier.subject_name)
-      .maybeSingle();
-    wealth = wp as WealthProfile | null;
-  }
+  // Issue depends on feature.issue_id — but can run in parallel with name fallbacks
+  let wealth = wpResult.data as WealthProfile | null;
+  let fame = fmResult.data as FameMetrics | null;
+  const needsNameFallback = (!wealth || !fame) && dossier.subject_name;
+  const needsIssue = feature?.issue_id;
 
-  // Fetch fame metrics (try feature_id first, fall back to name for multi-home people)
-  let fame: FameMetrics | null = null;
-  if (dossier.feature_id) {
-    const { data: fm } = await sb
-      .from("fame_metrics")
-      .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
-      .eq("feature_id", dossier.feature_id)
-      .maybeSingle();
-    fame = fm as FameMetrics | null;
-  }
-  if (!fame && dossier.subject_name) {
-    const { data: fm } = await sb
-      .from("fame_metrics")
-      .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
-      .eq("homeowner_name", dossier.subject_name)
-      .maybeSingle();
-    fame = fm as FameMetrics | null;
-  }
+  const [issueResult, wpFallback, fmFallback] = await Promise.all([
+    needsIssue ? sb.from("issues").select("*").eq("id", feature!.issue_id).single() : Promise.resolve({ data: null }),
+    needsNameFallback && !wealth ? sb.from("wealth_profiles").select(wealthCols).eq("homeowner_name", dossier.subject_name).maybeSingle() : Promise.resolve({ data: null }),
+    needsNameFallback && !fame ? sb.from("fame_metrics").select(fameCols).eq("homeowner_name", dossier.subject_name).maybeSingle() : Promise.resolve({ data: null }),
+  ]);
 
-  // Fetch cross-reference (Detective's investigation)
-  let crossRef = null;
-  if (dossier.feature_id) {
-    const { data: xref } = await sb
-      .from("cross_references")
-      .select("black_book_status, doj_status, doj_results, combined_verdict, confidence_score, verdict_rationale")
-      .eq("feature_id", dossier.feature_id)
-      .maybeSingle();
-    crossRef = xref as CrossReference | null;
-  }
+  if (!wealth) wealth = wpFallback.data as WealthProfile | null;
+  if (!fame) fame = fmFallback.data as FameMetrics | null;
 
   return {
     ...dossier,
     feature,
-    issue,
-    images: (images ?? []) as FeatureImage[],
+    issue: issueResult.data,
+    images: (imagesResult.data ?? []) as FeatureImage[],
     wealth,
     fame,
-    crossRef,
+    crossRef: xrefResult.data as CrossReference | null,
   } as DossierWithContext;
-}
+});
 
 // ── Feature Report (all features) ──────────────────────────
 
-export async function getFeatureReport(featureId: number): Promise<FeatureReport | null> {
+export const getFeatureReport = cache(async function getFeatureReport(featureId: number): Promise<FeatureReport | null> {
   const sb = getSupabase();
 
-  // Fetch feature
+  // Step 1: fetch feature (needed for issue_id and homeowner_name)
   const { data: feature } = await sb
     .from("features")
     .select("*")
@@ -736,80 +695,43 @@ export async function getFeatureReport(featureId: number): Promise<FeatureReport
 
   if (!feature) return null;
 
-  // Fetch issue
-  let issue = null;
-  if (feature.issue_id) {
-    const { data: issueData } = await sb
-      .from("issues")
-      .select("*")
-      .eq("id", feature.issue_id)
-      .single();
-    issue = issueData;
+  // Step 2: everything else in parallel — no query depends on another
+  const wealthCols = "forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category";
+  const fameCols = "fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count";
+
+  const [issueResult, imagesResult, dossierResult, wpResult, fmResult, xrefResult] = await Promise.all([
+    feature.issue_id
+      ? sb.from("issues").select("*").eq("id", feature.issue_id).single()
+      : Promise.resolve({ data: null }),
+    sb.from("feature_images").select("id, feature_id, page_number, public_url, created_at").eq("feature_id", featureId).order("page_number"),
+    sb.from("dossiers").select("*").eq("feature_id", featureId).maybeSingle(),
+    sb.from("wealth_profiles").select(wealthCols).eq("feature_id", featureId).maybeSingle(),
+    sb.from("fame_metrics").select(fameCols).eq("feature_id", featureId).maybeSingle(),
+    sb.from("cross_references").select("black_book_status, doj_status, doj_results, combined_verdict, confidence_score, verdict_rationale").eq("feature_id", featureId).maybeSingle(),
+  ]);
+
+  // Fallback lookups by name for multi-home people (only if feature_id lookup missed)
+  let wealth = wpResult.data as WealthProfile | null;
+  let fame = fmResult.data as FameMetrics | null;
+  if ((!wealth || !fame) && feature.homeowner_name) {
+    const [wpFallback, fmFallback] = await Promise.all([
+      !wealth ? sb.from("wealth_profiles").select(wealthCols).eq("homeowner_name", feature.homeowner_name).maybeSingle() : Promise.resolve({ data: null }),
+      !fame ? sb.from("fame_metrics").select(fameCols).eq("homeowner_name", feature.homeowner_name).maybeSingle() : Promise.resolve({ data: null }),
+    ]);
+    if (!wealth) wealth = wpFallback.data as WealthProfile | null;
+    if (!fame) fame = fmFallback.data as FameMetrics | null;
   }
-
-  // Fetch article images from feature_images
-  const { data: images } = await sb
-    .from("feature_images")
-    .select("id, feature_id, page_number, public_url, created_at")
-    .eq("feature_id", featureId)
-    .order("page_number");
-
-  // Fetch optional dossier (may not exist)
-  const { data: dossier } = await sb
-    .from("dossiers")
-    .select("*")
-    .eq("feature_id", featureId)
-    .maybeSingle();
-
-  // Fetch wealth profile (try feature_id first, fall back to name for multi-home people)
-  const { data: wp } = await sb
-    .from("wealth_profiles")
-    .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
-    .eq("feature_id", featureId)
-    .maybeSingle();
-  let wealth = wp as WealthProfile | null;
-  if (!wealth && feature.homeowner_name) {
-    const { data: wp2 } = await sb
-      .from("wealth_profiles")
-      .select("forbes_score, forbes_confidence, classification, wealth_source, background, trajectory, rationale, education, museum_boards, elite_boards, generational_wealth, cultural_capital_notes, social_capital_notes, bio_summary, profession_category")
-      .eq("homeowner_name", feature.homeowner_name)
-      .maybeSingle();
-    wealth = wp2 as WealthProfile | null;
-  }
-
-  // Fetch fame metrics (try feature_id first, fall back to name for multi-home people)
-  const { data: fm } = await sb
-    .from("fame_metrics")
-    .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
-    .eq("feature_id", featureId)
-    .maybeSingle();
-  let fame = fm as FameMetrics | null;
-  if (!fame && feature.homeowner_name) {
-    const { data: fm2 } = await sb
-      .from("fame_metrics")
-      .select("fame_score, wikipedia_page, wikipedia_edit_count, wikipedia_pageviews, nyt_article_count")
-      .eq("homeowner_name", feature.homeowner_name)
-      .maybeSingle();
-    fame = fm2 as FameMetrics | null;
-  }
-
-  // Fetch cross-reference (Detective's investigation)
-  const { data: xref } = await sb
-    .from("cross_references")
-    .select("black_book_status, doj_status, doj_results, combined_verdict, confidence_score, verdict_rationale")
-    .eq("feature_id", featureId)
-    .maybeSingle();
 
   return {
     feature: feature as Feature,
-    issue,
-    images: (images ?? []) as FeatureImage[],
-    dossier: dossier as Dossier | null,
+    issue: issueResult.data,
+    images: (imagesResult.data ?? []) as FeatureImage[],
+    dossier: dossierResult.data as Dossier | null,
     wealth,
     fame,
-    crossRef: xref as CrossReference | null,
+    crossRef: xrefResult.data as CrossReference | null,
   };
-}
+});
 
 // ── Category Breakdown Data (Fig. 2 source) ────────────────
 

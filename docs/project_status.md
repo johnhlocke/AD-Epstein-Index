@@ -250,6 +250,11 @@ This file should be automatically updated when necessary to answer three key que
 | L-shaped exit arrow tightening + arrowhead match | Phase 3 | Done |
 | Verdict stamp centered in column 6 | Phase 3 | Done |
 | Header nav links to homepage from subpages | Phase 3 | Done |
+| SSR mosaic rendering (remove useMounted gate) | Phase 3 | Done |
+| Header nav: plain `<a>` tags, no "Rendering..." | Phase 3 | Done |
+| Parallel queries for dossier/report pages (Promise.all) | Phase 3 | Done |
+| React.cache dedup for generateMetadata + page | Phase 3 | Done |
+| Epigraph typography: Cormorant Garamond | Phase 3 | Done |
 
 ## 2. What's Been Accomplished
 
@@ -354,8 +359,10 @@ Built a Next.js visualization website (`web/`) with real-time Supabase data:
 
 **Pages & Routes:**
 - Landing page with streamlined sections: Hero (scrolling mosaic + Thoreau epigraph), Abstract (3-column drop-cap), NASA-style Contents, Introduction (9 paragraphs + 12 Tufte sidenotes + textured Venn diagram), Key Finding, Searchable Index, Confirmed Timeline, Knowledge Graph, Dossier Example, Aesthetic Pivot, Epstein Aesthetic (radar), Aesthetic Analysis, Testing Aesthetic, Conclusion, What's Next, Agent Methodology (cool purple-blue), Aesthetic Methodology (warm dark-cream)
-- Hero mosaic optimized: 3,401 thumbnails generated at 123x164 (JPEG Q60, ~4.4 KB avg), hosted in Supabase Storage `mosaic-thumbnails` bucket. Page load dropped from ~8s to ~2.8s
+- Hero mosaic optimized: 3,401 thumbnails generated at 123x164 (JPEG Q60, ~4.4 KB avg), hosted in Supabase Storage `mosaic-thumbnails` bucket. SSR rendering (no useMounted gate) + fetchPriority="high" for immediate browser download
 - Search index performance rewrite: `getFeatures()` reduced from 4 sequential Supabase queries to 2 (year-sort) or 1 (non-year). `getStats()` parallelized with `Promise.all`. API responses ~119ms. CDN edge caching, client-side page cache, and next-page prefetching added
+- Dossier/report page query parallelization: `getDossier()` and `getFeatureReport()` use `Promise.all` (was 7-9 sequential queries). `React.cache` deduplicates metadata + page component calls
+- Header navigation: plain `<a>` tags for hash links (no Next.js re-renders), homepage/subpage-aware routing
 - Dossier detail pages (`/dossier/[id]`) with evidence sections, verdict badges, article images
 - API routes: `/api/stats`, `/api/features` (paginated + filterable + confirmed-only), `/api/dossiers`, `/api/dossiers/[id]`
 

@@ -113,13 +113,16 @@ export function HeroSection({ stats, mosaic }: HeroSectionProps) {
       >
         {/* ── Epigraph ── */}
         <div className="mb-24 flex flex-col items-center text-center">
-          <blockquote className="max-w-[520px] font-serif text-[14px] italic leading-[1.8] text-[#B7B7B7] md:text-[15px]">
+          <blockquote
+            className="max-w-[540px] italic leading-[1.7] text-[#7A756F] md:text-[20px]"
+            style={{ fontFamily: "var(--font-cormorant), 'Cormorant Garamond', serif", fontWeight: 400, fontSize: "clamp(17px, 1.5vw, 20px)" }}
+          >
             &ldquo;While civilization has been improving our houses, it has not
             equally improved the men who are to inhabit them. It has created
             palaces, but it was not so easy to create noblemen and
             kings.&rdquo;
           </blockquote>
-          <p className="mt-3 text-[10px] uppercase tracking-[0.25em] text-[#999]">
+          <p className="mt-4 text-[10px] uppercase tracking-[0.3em] text-[#B0A99F]">
             Henry David Thoreau
           </p>
         </div>
