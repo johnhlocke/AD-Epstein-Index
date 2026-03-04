@@ -1,6 +1,7 @@
 "use client";
 
-import { useMounted } from "@/lib/use-mounted";
+// REVERT: uncomment this import + the guard block below if SSR images cause issues
+// import { useMounted } from "@/lib/use-mounted";
 import type { MosaicTile } from "@/lib/types";
 
 interface HeroMosaicClientProps {
@@ -40,18 +41,22 @@ function strengthLabel(strength: MosaicTile["strength"]): string {
 }
 
 export function HeroMosaicClient({ tiles }: HeroMosaicClientProps) {
-  const mounted = useMounted();
-
-  if (!mounted) {
-    // SSR placeholder — matches mosaic height to prevent layout shift
-    return (
-      <div
-        className="mosaic-wrap"
-        style={{ height: "clamp(320px, 50vh, 600px)", background: "#222" }}
-        aria-hidden="true"
-      />
-    );
-  }
+  // No useMounted() guard — the mosaic is pure CSS (grid + animation).
+  // Rendering images in SSR HTML lets the browser start downloading
+  // them immediately as the page streams in, instead of waiting for
+  // JS hydration.
+  //
+  // REVERT: uncomment this block to gate rendering behind client hydration:
+  // const mounted = useMounted();
+  // if (!mounted) {
+  //   return (
+  //     <div
+  //       className="mosaic-wrap"
+  //       style={{ height: "clamp(320px, 50vh, 600px)", background: "#222" }}
+  //       aria-hidden="true"
+  //     />
+  //   );
+  // }
 
   // Eager-load first 3 rows (desktop 24 cols = 72 images)
   const eagerCount = EAGER_ROWS * 24;
@@ -66,7 +71,10 @@ export function HeroMosaicClient({ tiles }: HeroMosaicClientProps) {
       <img
         src={tile.url}
         alt=""
+        width={123}
+        height={164}
         loading={index < eagerCount ? "eager" : "lazy"}
+        fetchPriority={index < eagerCount ? "high" : "auto"}
         decoding="async"
       />
       {tile.confirmed && tile.strength && (

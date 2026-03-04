@@ -1,21 +1,17 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
 
 const navItems = [
-  { href: "/#finding-01", num: "1.", label: "Their Names" },
-  { href: "/#finding-02", num: "2.", label: "Their Aesthetic" },
-  { href: "/#finding-03", num: "3.", label: "Conclusion" },
-  { href: "/#agent-methodology", num: "4.", label: "Agent Methodology" },
-  { href: "/#aesthetic-methodology", num: "5.", label: "Aesthetic Methodology" },
-  { href: "/#appendix", num: "6.", label: "Appendix" },
-  { href: "/#contact", num: "7.", label: "Contact" },
+  { href: "#finding-01", num: "1.", label: "Their Names" },
+  { href: "#finding-02", num: "2.", label: "Their Aesthetic" },
+  { href: "#finding-03", num: "3.", label: "Conclusion" },
+  { href: "#agent-methodology", num: "4.", label: "Agent Methodology" },
+  { href: "#aesthetic-methodology", num: "5.", label: "Aesthetic Methodology" },
+  { href: "#appendix", num: "6.", label: "Appendix" },
+  { href: "#contact", num: "7.", label: "Contact" },
 ];
 
 export function Header() {
-  const pathname = usePathname();
-
   return (
     <header className="sticky top-0 z-50 border-b border-border bg-background/95 shadow-[0_1px_3px_rgba(0,0,0,0.08)] backdrop-blur supports-[backdrop-filter]:bg-background/80">
       <div className="mx-auto flex h-14 items-center" style={{ maxWidth: "var(--grid-max-width)", paddingRight: "var(--grid-margin)" }}>
@@ -37,7 +33,9 @@ export function Header() {
           {"Where\nThey\nLive"}
         </a>
 
-        {/* Nav items — fill the content area, two-line centered */}
+        {/* Nav items — plain <a> tags for same-page hash links.
+            Next.js <Link> would trigger a full soft navigation + server
+            component re-render on every click. Native anchors scroll instantly. */}
         <nav
           className="flex flex-1 items-center justify-between font-bold"
           style={{
@@ -48,18 +46,14 @@ export function Header() {
           }}
         >
           {navItems.map((item) => (
-            <Link
+            <a
               key={item.href}
               href={item.href}
-              className={`flex flex-col items-center text-center leading-tight transition-colors hover:text-foreground ${
-                pathname === item.href
-                  ? "text-foreground font-medium"
-                  : "text-muted-foreground"
-              }`}
+              className="flex flex-col items-center text-center leading-tight text-muted-foreground transition-colors hover:text-foreground"
             >
               <span>{item.num}</span>
               <span>{item.label}</span>
-            </Link>
+            </a>
           ))}
         </nav>
       </div>
