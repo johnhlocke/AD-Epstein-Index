@@ -165,8 +165,16 @@ export function SearchableIndex({
     }
   }, [page, buildParams]);
 
+  // Delay the very first fetch so the hero mosaic loads uncontested.
+  // Subsequent fetches (pagination, filter changes) fire immediately.
+  const hasFetched = useRef(false);
   useEffect(() => {
-    fetchData();
+    if (hasFetched.current) {
+      fetchData();
+      return;
+    }
+    const t = setTimeout(() => { hasFetched.current = true; fetchData(); }, 1000);
+    return () => clearTimeout(t);
   }, [fetchData]);
 
   // Pre-fetch next page in background after current page loads
