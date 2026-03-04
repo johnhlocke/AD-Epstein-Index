@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { SectionContainer } from "@/components/layout/SectionContainer";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -37,49 +37,71 @@ interface SearchableIndexProps {
   defaultOrder?: "asc" | "desc";
 }
 
+/** Sync local filter state to the URL via replaceState (no Next.js navigation). */
+function syncUrl(params: URLSearchParams) {
+  const qs = params.toString();
+  const url = qs ? `?${qs}#index` : `${window.location.pathname}#index`;
+  window.history.replaceState(null, "", url);
+}
+
 export function SearchableIndex({
   pageSize = 8,
   defaultConfirmedOnly = true,
   defaultSort = "",
   defaultOrder,
 }: SearchableIndexProps = {}) {
-  const router = useRouter();
-  const searchParams = useSearchParams();
+  // Read initial values from URL on mount — then manage locally
+  const initParams = useSearchParams();
 
   const [data, setData] = useState<PaginatedResponse<FeatureRow> | null>(null);
   const [loading, setLoading] = useState(true);
-  const [searchInput, setSearchInput] = useState(searchParams.get("search") ?? "");
+
+  // All filter state is local — no router.push()
+  const [page, setPage] = useState(Number(initParams.get("page") ?? "1"));
+  const [search, setSearch] = useState(initParams.get("search") ?? "");
+  const [searchInput, setSearchInput] = useState(initParams.get("search") ?? "");
+  const [year, setYear] = useState(initParams.get("year") ?? "");
+  const [category, setCategory] = useState(initParams.get("category") ?? "");
+  const [style, setStyle] = useState(initParams.get("style") ?? "");
+  const [location, setLocation] = useState(initParams.get("location") ?? "");
+  const [sort, setSort] = useState(initParams.get("sort") ?? defaultSort);
+  const [order, setOrder] = useState<"" | "asc" | "desc">((initParams.get("order") ?? defaultOrder ?? "") as "" | "asc" | "desc");
+  const [dossierOnly, setDossierOnly] = useState(initParams.get("dossier") === "true");
+  const [confirmedOnly, setConfirmedOnly] = useState(
+    defaultConfirmedOnly
+      ? initParams.get("confirmed") !== "false"
+      : initParams.get("confirmed") === "true"
+  );
 
   // Client-side page cache — keyed by query string
   const pageCache = useRef(new Map<string, PaginatedResponse<FeatureRow>>());
 
-  const page = Number(searchParams.get("page") ?? "1");
-  const search = searchParams.get("search") ?? "";
-  const year = searchParams.get("year") ?? "";
-  const category = searchParams.get("category") ?? "";
-  const style = searchParams.get("style") ?? "";
-  const location = searchParams.get("location") ?? "";
-  const sort = searchParams.get("sort") ?? defaultSort;
-  const order = (searchParams.get("order") ?? defaultOrder ?? "") as "" | "asc" | "desc";
-  const dossierOnly = searchParams.get("dossier") === "true";
-  const confirmedOnly = defaultConfirmedOnly
-    ? searchParams.get("confirmed") !== "false"
-    : searchParams.get("confirmed") === "true";
+  // Lazy-load: defer first fetch until component is near the viewport
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      ([entry]) => { if (entry.isIntersecting) { setVisible(true); io.disconnect(); } },
+      { rootMargin: "200px" } // start fetching 200px before it scrolls into view
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
 
   function toggleSort(column: string) {
-    const params = new URLSearchParams(searchParams.toString());
+    let newSort = column;
+    let newOrder: "" | "asc" | "desc" = "asc";
     if (sort === column && order === "asc") {
-      params.set("sort", column);
-      params.set("order", "desc");
+      newOrder = "desc";
     } else if (sort === column && order === "desc") {
-      params.delete("sort");
-      params.delete("order");
-    } else {
-      params.set("sort", column);
-      params.set("order", "asc");
+      newSort = "";
+      newOrder = "";
     }
-    params.set("page", "1");
-    router.push(`?${params.toString()}#index`, { scroll: false });
+    setSort(newSort);
+    setOrder(newOrder);
+    setPage(1);
   }
 
   function SortCaret({ column }: { column: string }) {
@@ -108,6 +130,31 @@ export function SearchableIndex({
     return params.toString();
   }, [pageSize, search, year, category, style, location, sort, order, dossierOnly, confirmedOnly]);
 
+  /** Build URL params for browser URL bar (excludes defaults). */
+  const buildUrlParams = useCallback(() => {
+    const params = new URLSearchParams();
+    if (page > 1) params.set("page", String(page));
+    if (search) params.set("search", search);
+    if (year) params.set("year", year);
+    if (category) params.set("category", category);
+    if (style) params.set("style", style);
+    if (location) params.set("location", location);
+    if (sort && sort !== defaultSort) params.set("sort", sort);
+    if (order && order !== (defaultOrder ?? "")) params.set("order", order);
+    if (dossierOnly) params.set("dossier", "true");
+    if (defaultConfirmedOnly) {
+      if (!confirmedOnly) params.set("confirmed", "false");
+    } else {
+      if (confirmedOnly) params.set("confirmed", "true");
+    }
+    return params;
+  }, [page, search, year, category, style, location, sort, order, dossierOnly, confirmedOnly, defaultSort, defaultOrder, defaultConfirmedOnly]);
+
+  // Sync URL whenever filter state changes (replaceState — no navigation)
+  useEffect(() => {
+    syncUrl(buildUrlParams());
+  }, [buildUrlParams]);
+
   const fetchData = useCallback(async () => {
     const qs = buildParams(page);
 
@@ -132,9 +179,10 @@ export function SearchableIndex({
     }
   }, [page, buildParams]);
 
+  // Only fetch once the component is near the viewport (or after first interaction)
   useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    if (visible) fetchData();
+  }, [visible, fetchData]);
 
   // Pre-fetch next page in background after current page loads
   useEffect(() => {
@@ -155,42 +203,46 @@ export function SearchableIndex({
     pageCache.current.clear();
   }, [search, year, category, style, location, sort, order, dossierOnly, confirmedOnly]);
 
-  // Debounced search
+  // Debounced search — update local search state (triggers fetch via effect chain)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (searchInput !== search) {
-        const params = new URLSearchParams(searchParams.toString());
-        if (searchInput) {
-          params.set("search", searchInput);
-        } else {
-          params.delete("search");
-        }
-        params.set("page", "1");
-        router.push(`?${params.toString()}#index`, { scroll: false });
+        setSearch(searchInput);
+        setPage(1);
       }
     }, 400);
     return () => clearTimeout(timer);
-  }, [searchInput, search, searchParams, router]);
+  }, [searchInput, search]);
 
   function updateParam(key: string, value: string) {
-    const params = new URLSearchParams(searchParams.toString());
-    if (value) {
-      params.set(key, value);
-    } else {
-      params.delete(key);
+    const setters: Record<string, (v: string) => void> = {
+      year: setYear,
+      category: setCategory,
+      style: setStyle,
+      location: setLocation,
+    };
+    if (key === "dossier") {
+      setDossierOnly(value === "true");
+    } else if (key === "confirmed") {
+      if (defaultConfirmedOnly) {
+        setConfirmedOnly(value !== "false");
+      } else {
+        setConfirmedOnly(value === "true");
+      }
+    } else if (setters[key]) {
+      setters[key](value);
     }
-    params.set("page", "1");
-    router.push(`?${params.toString()}#index`, { scroll: false });
+    setPage(1);
   }
 
   function goToPage(p: number) {
-    const params = new URLSearchParams(searchParams.toString());
-    params.set("page", String(p));
-    router.push(`?${params.toString()}#index`, { scroll: false });
+    setPage(p);
   }
 
   return (
     <SectionContainer width="wide" className="pt-0 pb-20" id="index">
+      {/* Sentinel for IntersectionObserver — triggers data fetch when near viewport */}
+      <div ref={containerRef} />
       {/* Filters — snapped to 6-column design grid */}
       <div className="mb-6 grid grid-cols-6 gap-x-6 gap-y-3">
         {/* Subhead — major column 1 only */}
@@ -216,27 +268,32 @@ export function SearchableIndex({
                 type="checkbox"
                 checked={confirmedOnly}
                 onChange={(e) => {
-                  if (defaultConfirmedOnly) {
-                    // Default is ON: unchecking sets confirmed=false, checking removes param
-                    updateParam("confirmed", e.target.checked ? "" : "false");
-                  } else {
-                    // Default is OFF: checking sets confirmed=true, unchecking removes param
-                    updateParam("confirmed", e.target.checked ? "true" : "");
-                  }
+                  setConfirmedOnly(e.target.checked);
+                  setPage(1);
                 }}
                 className="h-3.5 w-3.5 rounded border-border accent-[#8B5E2B]"
               />
               Confirmed connections only
             </label>
           </div>
-          {(search || year || category || style || location || sort || dossierOnly || !confirmedOnly) && (
+          {(search || year || category || style || location || (sort && sort !== defaultSort) || dossierOnly || (defaultConfirmedOnly ? !confirmedOnly : confirmedOnly)) && (
             <Button
               variant="ghost"
               size="sm"
               className="ml-auto"
               onClick={() => {
                 setSearchInput("");
-                router.push("?#index", { scroll: false });
+                setSearch("");
+                setYear("");
+                setCategory("");
+                setStyle("");
+                setLocation("");
+                setSort(defaultSort);
+                setOrder((defaultOrder ?? "") as "" | "asc" | "desc");
+                setDossierOnly(false);
+                setConfirmedOnly(defaultConfirmedOnly);
+                setPage(1);
+                pageCache.current.clear();
               }}
             >
               Clear filters
